@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多因子选股系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            margin: 2px 0;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .feature-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .feature-card .card-title {
+            font-weight: 600;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: 500;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .alert {
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4 class="text-white">
+                            <i class="bi bi-graph-up"></i>
+                            多因子选股
+                        </h4>
+                    </div>
+                    
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" data-section="dashboard">
+                                <i class="bi bi-speedometer2"></i>
+                                仪表盘
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="factor-management">
+                                <i class="bi bi-sliders"></i>
+                                因子管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="model-management">
+                                <i class="bi bi-cpu"></i>
+                                模型管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="stock-selection">
+                                <i class="bi bi-search"></i>
+                                股票选择
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="portfolio-optimization">
+                                <i class="bi bi-pie-chart"></i>
+                                组合优化
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="analysis">
+                                <i class="bi bi-bar-chart"></i>
+                                分析报告
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="backtest">
+                                <i class="bi bi-clock-history"></i>
+                                回测验证
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- 主内容区 -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- 顶部导航栏 -->
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2" id="page-title">仪表盘</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshData()">
+                                <i class="bi bi-arrow-clockwise"></i> 刷新
+                            </button>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="showSettings()">
+                                <i class="bi bi-gear"></i> 设置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 仪表盘 -->
+                <div id="dashboard" class="content-section active">
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-sliders fs-1 mb-2"></i>
+                                    <h5 class="card-title">活跃因子</h5>
+                                    <h2 id="active-factors-count">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-cpu fs-1 mb-2"></i>
+                                    <h5 class="card-title">训练模型</h5>
+                                    <h2 id="trained-models-count">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-graph-up fs-1 mb-2"></i>
+                                    <h5 class="card-title">今日选股</h5>
+                                    <h2 id="today-selections-count">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-pie-chart fs-1 mb-2"></i>
+                                    <h5 class="card-title">组合数量</h5>
+                                    <h2 id="portfolios-count">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="card feature-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-lightning"></i>
+                                        快速选股
+                                    </h5>
+                                    <p class="card-text">基于预设因子快速进行股票筛选</p>
+                                    <button class="btn btn-light" onclick="showSection('stock-selection')">
+                                        立即开始
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card feature-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-robot"></i>
+                                        智能建模
+                                    </h5>
+                                    <p class="card-text">使用机器学习算法构建选股模型</p>
+                                    <button class="btn btn-light" onclick="showSection('model-management')">
+                                        创建模型
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">系统状态</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="system-status">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span>数据更新状态</span>
+                                            <span class="badge bg-success">正常</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span>因子计算引擎</span>
+                                            <span class="badge bg-success">运行中</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span>模型服务</span>
+                                            <span class="badge bg-success">就绪</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>最后更新时间</span>
+                                            <span id="last-update-time">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 因子管理 -->
+                <div id="factor-management" class="content-section">
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">因子管理</h5>
+                                    <button class="btn btn-primary" onclick="showCreateFactorModal()">
+                                        <i class="bi bi-plus"></i> 创建因子
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover" id="factors-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>因子ID</th>
+                                                    <th>因子名称</th>
+                                                    <th>类型</th>
+                                                    <th>状态</th>
+                                                    <th>创建时间</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <!-- 动态加载 -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模型管理 -->
+                <div id="model-management" class="content-section">
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">模型管理</h5>
+                                    <button class="btn btn-primary" onclick="showCreateModelModal()">
+                                        <i class="bi bi-plus"></i> 创建模型
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover" id="models-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>模型ID</th>
+                                                    <th>模型名称</th>
+                                                    <th>类型</th>
+                                                    <th>状态</th>
+                                                    <th>创建时间</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <!-- 动态加载 -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 股票选择 -->
+                <div id="stock-selection" class="content-section">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">选股配置</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="selection-form">
+                                        <div class="mb-3">
+                                            <label class="form-label">交易日期</label>
+                                            <input type="date" class="form-control" id="trade-date" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">选股方法</label>
+                                            <select class="form-select" id="selection-method">
+                                                <option value="factor_based">基于因子</option>
+                                                <option value="ml_based">基于模型</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3" id="factor-selection">
+                                            <label class="form-label">选择因子</label>
+                                            <div id="factor-checkboxes">
+                                                <!-- 动态加载 -->
+                                            </div>
+                                        </div>
+                                        <div class="mb-3" id="model-selection" style="display: none;">
+                                            <label class="form-label">选择模型</label>
+                                            <select class="form-select" id="model-ids" multiple>
+                                                <!-- 动态加载 -->
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">选股数量</label>
+                                            <input type="number" class="form-control" id="top-n" value="50" min="1" max="200">
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="bi bi-search"></i> 开始选股
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">选股结果</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="selection-loading" class="loading">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        <p class="mt-2">正在进行股票选择...</p>
+                                    </div>
+                                    <div id="selection-results">
+                                        <p class="text-muted text-center">请配置选股参数并点击"开始选股"</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 组合优化 -->
+                <div id="portfolio-optimization" class="content-section">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">优化配置</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="optimization-form">
+                                        <div class="mb-3">
+                                            <label class="form-label">优化方法</label>
+                                            <select class="form-select" id="optimization-method">
+                                                <option value="equal_weight">等权重</option>
+                                                <option value="mean_variance">均值-方差</option>
+                                                <option value="risk_parity">风险平价</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">最大权重 (%)</label>
+                                            <input type="number" class="form-control" id="max-weight" value="10" min="1" max="50" step="0.1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">风险厌恶系数</label>
+                                            <input type="number" class="form-control" id="risk-aversion" value="1.0" min="0.1" max="10" step="0.1">
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="bi bi-pie-chart"></i> 开始优化
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">优化结果</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="optimization-loading" class="loading">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        <p class="mt-2">正在进行组合优化...</p>
+                                    </div>
+                                    <div id="optimization-results">
+                                        <p class="text-muted text-center">请先进行股票选择，然后配置优化参数</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分析报告 -->
+                <div id="analysis" class="content-section">
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">分析报告</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <button class="btn btn-outline-primary w-100" onclick="generateFactorAnalysis()">
+                                                <i class="bi bi-bar-chart"></i> 因子分析报告
+                                            </button>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <button class="btn btn-outline-primary w-100" onclick="generateSectorAnalysis()">
+                                                <i class="bi bi-pie-chart"></i> 行业分析报告
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="analysis-results">
+                                        <!-- 分析结果将在这里显示 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 回测验证 -->
+                <div id="backtest" class="content-section">
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">回测验证</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">回测功能正在开发中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 模态框 -->
+    <!-- 创建因子模态框 -->
+    <div class="modal fade" id="createFactorModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建自定义因子</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-factor-form">
+                        <div class="mb-3">
+                            <label class="form-label">因子ID</label>
+                            <input type="text" class="form-control" id="factor-id" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">因子名称</label>
+                            <input type="text" class="form-control" id="factor-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">因子类型</label>
+                            <select class="form-select" id="factor-type" required>
+                                <option value="">请选择</option>
+                                <option value="momentum">动量因子</option>
+                                <option value="volatility">波动率因子</option>
+                                <option value="technical">技术因子</option>
+                                <option value="fundamental">基本面因子</option>
+                                <option value="volume">成交量因子</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">因子公式</label>
+                            <textarea class="form-control" id="factor-formula" rows="3" required></textarea>
+                            <div class="form-text">例如: close.pct_change(20)</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <textarea class="form-control" id="factor-description" rows="2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="createFactor()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建模型模态框 -->
+    <div class="modal fade" id="createModelModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建机器学习模型</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-model-form">
+                        <div class="mb-3">
+                            <label class="form-label">模型ID</label>
+                            <input type="text" class="form-control" id="model-id" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模型名称</label>
+                            <input type="text" class="form-control" id="model-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模型类型</label>
+                            <select class="form-select" id="model-type" required>
+                                <option value="">请选择</option>
+                                <option value="random_forest">随机森林</option>
+                                <option value="xgboost">XGBoost</option>
+                                <option value="lightgbm">LightGBM</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">预测目标</label>
+                            <select class="form-select" id="target-type" required>
+                                <option value="">请选择</option>
+                                <option value="return_1d">1日收益率</option>
+                                <option value="return_5d">5日收益率</option>
+                                <option value="return_20d">20日收益率</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">选择因子</label>
+                            <div id="model-factor-checkboxes">
+                                <!-- 动态加载 -->
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="createModel()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/ml_factor.js') }}"></script>
+</body>
+</html> 

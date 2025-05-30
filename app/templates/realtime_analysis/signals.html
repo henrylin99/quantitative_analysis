@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时交易信号 - 多因子模型系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        .signal-card {
+            transition: transform 0.2s;
+        }
+        .signal-card:hover {
+            transform: translateY(-2px);
+        }
+        .signal-strength-bar {
+            height: 20px;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        .signal-buy { background: linear-gradient(90deg, #28a745, #20c997); }
+        .signal-sell { background: linear-gradient(90deg, #dc3545, #fd7e14); }
+        .signal-hold { background: linear-gradient(90deg, #6c757d, #adb5bd); }
+        .strategy-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-graph-up-arrow text-primary"></i>
+                            实时交易信号
+                        </h2>
+                        <p class="text-muted mb-0">基于技术指标和价格行为生成智能交易信号</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary" onclick="window.history.back()">
+                            <i class="bi bi-arrow-left"></i> 返回
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能标签页 -->
+        <ul class="nav nav-tabs mb-4" id="signalTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="generate-tab" data-bs-toggle="tab" data-bs-target="#generate" type="button" role="tab">
+                    <i class="bi bi-lightning"></i> 信号生成
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="fusion-tab" data-bs-toggle="tab" data-bs-target="#fusion" type="button" role="tab">
+                    <i class="bi bi-diagram-3"></i> 信号融合
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="monitor-tab" data-bs-toggle="tab" data-bs-target="#monitor" type="button" role="tab">
+                    <i class="bi bi-eye"></i> 信号监控
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="backtest-tab" data-bs-toggle="tab" data-bs-target="#backtest" type="button" role="tab">
+                    <i class="bi bi-graph-down"></i> 策略回测
+                </button>
+            </li>
+        </ul>
+
+        <!-- 标签页内容 -->
+        <div class="tab-content" id="signalTabsContent">
+            <!-- 信号生成 -->
+            <div class="tab-pane fade show active" id="generate" role="tabpanel">
+                <div class="row">
+                    <!-- 生成配置 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-gear"></i> 信号生成配置
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="generateForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="generateTsCode" placeholder="例如: 000001.SZ" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">时间周期</label>
+                                        <select class="form-select" id="generatePeriod">
+                                            <option value="1min">1分钟</option>
+                                            <option value="5min">5分钟</option>
+                                            <option value="15min">15分钟</option>
+                                            <option value="30min">30分钟</option>
+                                            <option value="60min">60分钟</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">回看天数</label>
+                                        <select class="form-select" id="generateLookback">
+                                            <option value="3">3天</option>
+                                            <option value="5" selected>5天</option>
+                                            <option value="7">7天</option>
+                                            <option value="10">10天</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">选择策略</label>
+                                        <div id="strategyCheckboxes" class="mt-2">
+                                            <!-- 策略复选框将在这里动态生成 -->
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="bi bi-play-circle"></i> 生成信号
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 生成结果 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-list-check"></i> 生成结果
+                                </h5>
+                                <div>
+                                    <span class="badge bg-primary" id="generateCount">0</span> 个信号
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 进度条 -->
+                                <div class="progress mb-3" style="display: none;" id="generateProgress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                </div>
+                                
+                                <!-- 信号列表 -->
+                                <div id="generateResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="bi bi-graph-up display-1"></i>
+                                        <p class="mt-3">请配置参数并点击"生成信号"开始分析</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 信号融合 -->
+            <div class="tab-pane fade" id="fusion" role="tabpanel">
+                <div class="row">
+                    <!-- 融合配置 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-diagram-3"></i> 融合配置
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="fusionForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="fusionTsCode" placeholder="例如: 000001.SZ" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">时间周期</label>
+                                        <select class="form-select" id="fusionPeriod">
+                                            <option value="1min">1分钟</option>
+                                            <option value="5min">5分钟</option>
+                                            <option value="15min">15分钟</option>
+                                            <option value="30min">30分钟</option>
+                                            <option value="60min">60分钟</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">时间窗口</label>
+                                        <select class="form-select" id="fusionWindow">
+                                            <option value="0.5">30分钟</option>
+                                            <option value="1" selected>1小时</option>
+                                            <option value="2">2小时</option>
+                                            <option value="4">4小时</option>
+                                            <option value="8">8小时</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="bi bi-shuffle"></i> 融合信号
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 融合结果 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-bullseye"></i> 融合结果
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="fusionResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="bi bi-diagram-3 display-1"></i>
+                                        <p class="mt-3">请配置参数并点击"融合信号"开始分析</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 信号监控 -->
+            <div class="tab-pane fade" id="monitor" role="tabpanel">
+                <div class="row">
+                    <!-- 监控配置 -->
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-sliders"></i> 监控配置
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="monitorForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="monitorTsCode" placeholder="留空查看所有">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">策略名称</label>
+                                        <select class="form-select" id="monitorStrategy">
+                                            <option value="">所有策略</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">信号状态</label>
+                                        <select class="form-select" id="monitorStatus">
+                                            <option value="ACTIVE">活跃</option>
+                                            <option value="EXECUTED">已执行</option>
+                                            <option value="EXPIRED">已过期</option>
+                                            <option value="CANCELLED">已取消</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-info w-100">
+                                        <i class="bi bi-search"></i> 查询信号
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- 统计信息 -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">
+                                    <i class="bi bi-bar-chart"></i> 统计信息
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="signalStats">
+                                    <div class="text-center text-muted">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        <p class="small mt-2">加载中...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 信号列表 -->
+                    <div class="col-md-9">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-list-ul"></i> 信号列表
+                                </h5>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshSignals()">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="signalsList">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="bi bi-eye display-1"></i>
+                                        <p class="mt-3">请选择查询条件查看信号</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 策略回测 -->
+            <div class="tab-pane fade" id="backtest" role="tabpanel">
+                <div class="row">
+                    <!-- 回测配置 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-calendar-range"></i> 回测配置
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="backtestForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">策略名称</label>
+                                        <select class="form-select" id="backtestStrategy" required>
+                                            <option value="">请选择策略</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="backtestTsCode" placeholder="例如: 000001.SZ" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">开始日期</label>
+                                        <input type="date" class="form-control" id="backtestStartDate" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">结束日期</label>
+                                        <input type="date" class="form-control" id="backtestEndDate" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">时间周期</label>
+                                        <select class="form-select" id="backtestPeriod">
+                                            <option value="1min">1分钟</option>
+                                            <option value="5min">5分钟</option>
+                                            <option value="15min">15分钟</option>
+                                            <option value="30min">30分钟</option>
+                                            <option value="60min">60分钟</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning w-100">
+                                        <i class="bi bi-play"></i> 开始回测
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 回测结果 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-graph-down"></i> 回测结果
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="backtestResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="bi bi-graph-down display-1"></i>
+                                        <p class="mt-3">请配置回测参数并点击"开始回测"</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 日志模态框 -->
+    <div class="modal fade" id="logModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-terminal"></i> 操作日志
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="log-container" id="logContent"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="clearLog()">清空日志</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let supportedStrategies = [];
+        let logModal;
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            logModal = new bootstrap.Modal(document.getElementById('logModal'));
+            loadSupportedStrategies();
+            loadSignalStats();
+            initializeDateInputs();
+        });
+
+        // 初始化日期输入框
+        function initializeDateInputs() {
+            const today = new Date();
+            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            document.getElementById('backtestEndDate').value = today.toISOString().split('T')[0];
+            document.getElementById('backtestStartDate').value = lastWeek.toISOString().split('T')[0];
+        }
+
+        // 加载支持的策略
+        async function loadSupportedStrategies() {
+            try {
+                const response = await fetch('/api/realtime-analysis/signals/strategies');
+                const result = await response.json();
+                
+                if (result.success) {
+                    supportedStrategies = result.data;
+                    renderStrategyCheckboxes();
+                    renderStrategySelects();
+                } else {
+                    showAlert('加载策略列表失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('加载策略列表失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 渲染策略复选框
+        function renderStrategyCheckboxes() {
+            const container = document.getElementById('strategyCheckboxes');
+            container.innerHTML = '';
+            
+            supportedStrategies.forEach(strategy => {
+                const div = document.createElement('div');
+                div.className = 'form-check';
+                div.innerHTML = `
+                    <input class="form-check-input" type="checkbox" value="${strategy.name}" id="strategy_${strategy.name}">
+                    <label class="form-check-label" for="strategy_${strategy.name}">
+                        ${strategy.display_name}
+                        <small class="text-muted d-block">${strategy.description}</small>
+                    </label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // 渲染策略下拉框
+        function renderStrategySelects() {
+            const selects = ['monitorStrategy', 'backtestStrategy'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                // 保留第一个选项
+                const firstOption = select.firstElementChild;
+                select.innerHTML = '';
+                if (firstOption) {
+                    select.appendChild(firstOption);
+                }
+                
+                supportedStrategies.forEach(strategy => {
+                    const option = document.createElement('option');
+                    option.value = strategy.name;
+                    option.textContent = strategy.display_name;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        // 信号生成表单提交
+        document.getElementById('generateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const tsCode = document.getElementById('generateTsCode').value;
+            const periodType = document.getElementById('generatePeriod').value;
+            const lookbackDays = parseInt(document.getElementById('generateLookback').value);
+            
+            // 获取选中的策略
+            const selectedStrategies = [];
+            document.querySelectorAll('#strategyCheckboxes input:checked').forEach(checkbox => {
+                selectedStrategies.push(checkbox.value);
+            });
+            
+            if (selectedStrategies.length === 0) {
+                showAlert('请至少选择一个策略', 'warning');
+                return;
+            }
+            
+            showProgress('generateProgress');
+            addLog('开始生成交易信号...');
+            
+            try {
+                const response = await fetch('/api/realtime-analysis/signals/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ts_code: tsCode,
+                        period_type: periodType,
+                        strategies: selectedStrategies,
+                        lookback_days: lookbackDays
+                    })
+                });
+                
+                const result = await response.json();
+                hideProgress('generateProgress');
+                
+                if (result.success) {
+                    addLog(`成功生成 ${result.data.signals_generated} 个信号`);
+                    renderGenerateResults(result.data);
+                    document.getElementById('generateCount').textContent = result.data.signals_generated;
+                } else {
+                    addLog('生成信号失败: ' + result.message);
+                    showAlert('生成信号失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                hideProgress('generateProgress');
+                addLog('生成信号失败: ' + error.message);
+                showAlert('生成信号失败: ' + error.message, 'danger');
+            }
+        });
+
+        // 渲染生成结果
+        function renderGenerateResults(data) {
+            const container = document.getElementById('generateResults');
+            
+            if (!data.signals || data.signals.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-info-circle display-1"></i>
+                        <p class="mt-3">未生成任何信号</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div class="row">';
+            data.signals.forEach(signal => {
+                const signalClass = signal.signal_type === 'BUY' ? 'success' : 
+                                  signal.signal_type === 'SELL' ? 'danger' : 'secondary';
+                const strengthWidth = Math.abs(signal.signal_strength) * 100;
+                
+                html += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card signal-card border-${signalClass}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0">${signal.strategy_name}</h6>
+                                    <span class="badge bg-${signalClass}">${signal.signal_type}</span>
+                                </div>
+                                <div class="signal-strength-bar signal-${signal.signal_type.toLowerCase()} mb-2" style="width: ${strengthWidth}%"></div>
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <small class="text-muted">强度</small>
+                                        <div class="fw-bold">${signal.signal_strength.toFixed(2)}</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <small class="text-muted">置信度</small>
+                                        <div class="fw-bold">${(signal.confidence * 100).toFixed(1)}%</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <small class="text-muted">触发价</small>
+                                        <div class="fw-bold">¥${signal.trigger_price.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+
+        // 信号融合表单提交
+        document.getElementById('fusionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const tsCode = document.getElementById('fusionTsCode').value;
+            const periodType = document.getElementById('fusionPeriod').value;
+            const timeWindowHours = parseFloat(document.getElementById('fusionWindow').value);
+            
+            addLog('开始融合信号...');
+            
+            try {
+                const response = await fetch('/api/realtime-analysis/signals/fuse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ts_code: tsCode,
+                        period_type: periodType,
+                        time_window_hours: timeWindowHours
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`信号融合完成，融合了 ${result.data.contributing_signals} 个信号`);
+                    renderFusionResults(result.data);
+                } else {
+                    addLog('信号融合失败: ' + result.message);
+                    showAlert('信号融合失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                addLog('信号融合失败: ' + error.message);
+                showAlert('信号融合失败: ' + error.message, 'danger');
+            }
+        });
+
+        // 渲染融合结果
+        function renderFusionResults(data) {
+            const container = document.getElementById('fusionResults');
+            
+            const signalClass = data.fused_signal === 'BUY' ? 'success' : 
+                              data.fused_signal === 'SELL' ? 'danger' : 'secondary';
+            
+            container.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-${signalClass}">
+                            <div class="card-body text-center">
+                                <h3 class="text-${signalClass}">
+                                    <i class="bi bi-${data.fused_signal === 'BUY' ? 'arrow-up-circle' : 
+                                                      data.fused_signal === 'SELL' ? 'arrow-down-circle' : 'dash-circle'}"></i>
+                                    ${data.fused_signal}
+                                </h3>
+                                <p class="text-muted">融合信号</p>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="fw-bold">${data.signal_strength.toFixed(2)}</div>
+                                        <small class="text-muted">信号强度</small>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="fw-bold">${(data.confidence * 100).toFixed(1)}%</div>
+                                        <small class="text-muted">置信度</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">信号统计</h6>
+                                <div class="row">
+                                    <div class="col-4 text-center">
+                                        <div class="fw-bold text-success">${data.buy_signals}</div>
+                                        <small class="text-muted">买入信号</small>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <div class="fw-bold text-danger">${data.sell_signals}</div>
+                                        <small class="text-muted">卖出信号</small>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <div class="fw-bold text-primary">${data.contributing_signals}</div>
+                                        <small class="text-muted">总信号数</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 加载信号统计
+        async function loadSignalStats() {
+            try {
+                const response = await fetch('/api/realtime-analysis/signals/stats');
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderSignalStats(result.data);
+                }
+            } catch (error) {
+                console.error('加载信号统计失败:', error);
+            }
+        }
+
+        // 渲染信号统计
+        function renderSignalStats(stats) {
+            const container = document.getElementById('signalStats');
+            
+            container.innerHTML = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>总信号数</span>
+                        <strong>${stats.total_signals || 0}</strong>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>股票数量</span>
+                        <strong>${stats.total_stocks || 0}</strong>
+                    </div>
+                </div>
+                <hr>
+                <h6 class="mb-2">按状态分布</h6>
+                ${Object.entries(stats.status_stats || {}).map(([status, count]) => `
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small">${status}</span>
+                        <span class="small">${count}</span>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        // 监控表单提交
+        document.getElementById('monitorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const tsCode = document.getElementById('monitorTsCode').value;
+            const strategyName = document.getElementById('monitorStrategy').value;
+            const status = document.getElementById('monitorStatus').value;
+            
+            await loadSignalsList(tsCode, strategyName, status);
+        });
+
+        // 加载信号列表
+        async function loadSignalsList(tsCode = '', strategyName = '', status = 'ACTIVE') {
+            try {
+                let url = '/api/realtime-analysis/signals/active?limit=50';
+                if (tsCode) url += `&ts_code=${tsCode}`;
+                if (strategyName) url += `&strategy_name=${strategyName}`;
+                
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderSignalsList(result.data);
+                } else {
+                    showAlert('加载信号列表失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('加载信号列表失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 渲染信号列表
+        function renderSignalsList(signals) {
+            const container = document.getElementById('signalsList');
+            
+            if (!signals || signals.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-inbox display-1"></i>
+                        <p class="mt-3">没有找到符合条件的信号</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-hover"><thead><tr>';
+            html += '<th>股票代码</th><th>策略</th><th>信号类型</th><th>强度</th><th>置信度</th><th>触发价</th><th>生成时间</th><th>状态</th>';
+            html += '</tr></thead><tbody>';
+            
+            signals.forEach(signal => {
+                const signalClass = signal.signal_type === 'BUY' ? 'success' : 
+                                  signal.signal_type === 'SELL' ? 'danger' : 'secondary';
+                
+                html += `
+                    <tr>
+                        <td><strong>${signal.ts_code}</strong></td>
+                        <td><span class="strategy-badge badge bg-light text-dark">${signal.strategy_name}</span></td>
+                        <td><span class="badge bg-${signalClass}">${signal.signal_type}</span></td>
+                        <td>${signal.signal_strength.toFixed(2)}</td>
+                        <td>${(signal.confidence * 100).toFixed(1)}%</td>
+                        <td>¥${signal.trigger_price.toFixed(2)}</td>
+                        <td>${new Date(signal.datetime).toLocaleString()}</td>
+                        <td><span class="badge bg-secondary">${signal.status}</span></td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        // 策略回测表单提交
+        document.getElementById('backtestForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const strategyName = document.getElementById('backtestStrategy').value;
+            const tsCode = document.getElementById('backtestTsCode').value;
+            const startDate = document.getElementById('backtestStartDate').value;
+            const endDate = document.getElementById('backtestEndDate').value;
+            const periodType = document.getElementById('backtestPeriod').value;
+            
+            addLog('开始策略回测...');
+            
+            try {
+                const response = await fetch('/api/realtime-analysis/signals/backtest', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        strategy_name: strategyName,
+                        ts_code: tsCode,
+                        start_date: startDate,
+                        end_date: endDate,
+                        period_type: periodType
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog('策略回测完成');
+                    renderBacktestResults(result.data);
+                } else {
+                    addLog('策略回测失败: ' + result.message);
+                    showAlert('策略回测失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                addLog('策略回测失败: ' + error.message);
+                showAlert('策略回测失败: ' + error.message, 'danger');
+            }
+        });
+
+        // 渲染回测结果
+        function renderBacktestResults(data) {
+            const container = document.getElementById('backtestResults');
+            
+            const returnClass = data.total_return >= 0 ? 'success' : 'danger';
+            
+            container.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">回测概况</h6>
+                                <div class="mb-2">
+                                    <strong>策略:</strong> ${data.strategy_name}
+                                </div>
+                                <div class="mb-2">
+                                    <strong>股票:</strong> ${data.ts_code}
+                                </div>
+                                <div class="mb-2">
+                                    <strong>期间:</strong> ${data.period}
+                                </div>
+                                <div class="mb-2">
+                                    <strong>数据点:</strong> ${data.data_points}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">回测指标</h6>
+                                <div class="row">
+                                    <div class="col-6 text-center mb-3">
+                                        <div class="fw-bold text-${returnClass}">${data.total_return.toFixed(2)}%</div>
+                                        <small class="text-muted">总收益率</small>
+                                    </div>
+                                    <div class="col-6 text-center mb-3">
+                                        <div class="fw-bold text-warning">${data.max_drawdown.toFixed(2)}%</div>
+                                        <small class="text-muted">最大回撤</small>
+                                    </div>
+                                    <div class="col-6 text-center">
+                                        <div class="fw-bold text-info">${data.volatility.toFixed(2)}%</div>
+                                        <small class="text-muted">年化波动率</small>
+                                    </div>
+                                    <div class="col-6 text-center">
+                                        <div class="fw-bold text-primary">${data.sharpe_ratio.toFixed(2)}</div>
+                                        <small class="text-muted">夏普比率</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 刷新信号列表
+        function refreshSignals() {
+            const form = document.getElementById('monitorForm');
+            form.dispatchEvent(new Event('submit'));
+            loadSignalStats();
+        }
+
+        // 显示进度条
+        function showProgress(progressId) {
+            const progress = document.getElementById(progressId);
+            progress.style.display = 'block';
+            progress.querySelector('.progress-bar').style.width = '100%';
+        }
+
+        // 隐藏进度条
+        function hideProgress(progressId) {
+            const progress = document.getElementById(progressId);
+            progress.style.display = 'none';
+            progress.querySelector('.progress-bar').style.width = '0%';
+        }
+
+        // 添加日志
+        function addLog(message) {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            logContent.innerHTML += `[${timestamp}] ${message}\n`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        // 清空日志
+        function clearLog() {
+            document.getElementById('logContent').innerHTML = '';
+        }
+
+        // 显示提示信息
+        function showAlert(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        // 显示日志模态框
+        function showLogModal() {
+            logModal.show();
+        }
+    </script>
+</body>
+</html> 

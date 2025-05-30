@@ -1,0 +1,365 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 实时交易分析功能列表
+
+## 📋 项目概述
+基于现有多因子模型系统，新增实时交易分析模块，支持1、5、15、30、60分钟级别的股票数据分析，提供实时监控、技术指标计算、交易信号生成和风险预警等功能。
+
+---
+
+## 🎯 核心功能模块
+
+### 1. 实时数据管理模块 (/realtime-analysis)
+**前端页面**: `app/templates/realtime_analysis/index.html`
+**后端API**: `/api/realtime-analysis/data/*`
+
+#### 待办功能
+- [ ] **分钟级数据模型设计**
+  - 数据表: `stock_minute_data` (1分钟K线数据)
+  - 字段: ts_code, datetime, open, high, low, close, volume, amount, period_type
+  - 支持周期: 1min, 5min, 15min, 30min, 60min
+  
+- [ ] **实时数据接入服务**
+  - API: `POST /api/realtime-analysis/data/sync`
+  - 功能: 对接第三方数据源（如tushare、同花顺等）
+  - 支持: WebSocket实时推送、定时批量更新
+  
+- [ ] **数据聚合引擎**
+  - API: `POST /api/realtime-analysis/data/aggregate`
+  - 功能: 1分钟数据聚合为5、15、30、60分钟数据
+  - 算法: OHLCV数据聚合、成交量加权平均
+  
+- [ ] **数据质量监控**
+  - API: `GET /api/realtime-analysis/data/quality`
+  - 功能: 数据完整性检查、异常值检测、延迟监控
+
+---
+
+### 2. 实时技术指标模块 (/realtime-analysis/indicators)
+**前端页面**: `app/templates/realtime_analysis/indicators.html`
+**后端API**: `/api/realtime-analysis/indicators/*`
+
+#### 待办功能
+- [ ] **实时指标计算引擎**
+  - 服务类: `RealtimeIndicatorEngine`
+  - 支持指标: MA、EMA、MACD、RSI、KDJ、BOLL、CCI、WR等
+  - 计算频率: 实时更新（新数据到达时触发）
+  
+- [ ] **多周期指标管理**
+  - API: `GET /api/realtime-analysis/indicators/multi-period`
+  - 功能: 同时计算1、5、15、30、60分钟指标
+  - 展示: 多周期指标对比图表
+  
+- [ ] **自定义指标创建**
+  - API: `POST /api/realtime-analysis/indicators/custom`
+  - 功能: 用户自定义技术指标公式
+  - 支持: 公式编辑器、参数配置、回测验证
+  
+- [ ] **指标预警系统**
+  - API: `POST /api/realtime-analysis/indicators/alerts`
+  - 功能: 指标阈值预警、金叉死叉提醒
+  - 通知: 邮件、短信、WebSocket推送
+
+---
+
+### 3. 实时交易信号模块 (/realtime-analysis/signals)
+**前端页面**: `app/templates/realtime_analysis/signals.html`
+**后端API**: `/api/realtime-analysis/signals/*`
+
+#### 待办功能
+- [ ] **信号生成引擎**
+  - 服务类: `RealtimeTradingSignalEngine`
+  - 策略类型: 趋势跟踪、均值回归、突破策略、量价分析
+  - 信号强度: 强买入、买入、持有、卖出、强卖出
+  
+- [ ] **多策略信号融合**
+  - API: `POST /api/realtime-analysis/signals/fusion`
+  - 功能: 多个策略信号加权融合
+  - 算法: 投票机制、权重分配、置信度计算
+  
+- [ ] **信号回测验证**
+  - API: `POST /api/realtime-analysis/signals/backtest`
+  - 功能: 历史数据验证信号有效性
+  - 指标: 胜率、盈亏比、最大回撤、夏普比率
+  
+- [ ] **实时信号推送**
+  - API: WebSocket `/ws/realtime-signals`
+  - 功能: 实时信号推送到前端
+  - 过滤: 按股票池、信号强度、策略类型筛选
+
+---
+
+### 4. 实时监控面板模块 (/realtime-analysis/monitor)
+**前端页面**: `app/templates/realtime_analysis/monitor.html`
+**后端API**: `/api/realtime-analysis/monitor/*`
+
+#### 待办功能
+- [ ] **实时行情监控**
+  - 功能: 多股票实时价格、涨跌幅、成交量监控
+  - 展示: 实时K线图、分时图、成交量柱状图
+  - 更新频率: 1分钟级别实时更新
+  
+- [ ] **热点板块监控**
+  - API: `GET /api/realtime-analysis/monitor/sectors`
+  - 功能: 实时板块涨跌幅排行、资金流向
+  - 算法: 板块内股票加权平均、资金净流入计算
+  
+- [ ] **异动股票监控**
+  - API: `GET /api/realtime-analysis/monitor/anomalies`
+  - 功能: 急涨急跌、放量突破、价格异动检测
+  - 阈值: 涨跌幅>5%、成交量>平均3倍、价格突破关键位
+  
+- [ ] **市场情绪监控**
+  - API: `GET /api/realtime-analysis/monitor/sentiment`
+  - 功能: 涨跌家数、资金流向、市场强度指标
+  - 指标: 涨跌比、量比、强弱指标
+
+---
+
+### 5. 实时风险管理模块 (/realtime-analysis/risk)
+**前端页面**: `app/templates/realtime_analysis/risk.html`
+**后端API**: `/api/realtime-analysis/risk/*`
+
+#### 待办功能
+- [ ] **实时风险计算**
+  - 服务类: `RealtimeRiskManager`
+  - 指标: VaR、CVaR、波动率、相关性、Beta值
+  - 频率: 实时更新风险指标
+  
+- [ ] **持仓风险监控**
+  - API: `GET /api/realtime-analysis/risk/portfolio`
+  - 功能: 实时计算投资组合风险敞口
+  - 监控: 集中度风险、行业风险、市值风险
+  
+- [ ] **止损止盈管理**
+  - API: `POST /api/realtime-analysis/risk/stop-loss`
+  - 功能: 动态止损位计算、止盈目标设定
+  - 策略: 固定比例、ATR止损、移动止损
+  
+- [ ] **风险预警系统**
+  - API: `POST /api/realtime-analysis/risk/alerts`
+  - 功能: 风险阈值预警、黑天鹅事件检测
+  - 通知: 实时推送风险警报
+
+---
+
+### 6. 实时分析报告模块 (/realtime-analysis/reports)
+**前端页面**: `app/templates/realtime_analysis/reports.html`
+**后端API**: `/api/realtime-analysis/reports/*`
+
+#### 待办功能
+- [ ] **实时分析报告生成**
+  - API: `POST /api/realtime-analysis/reports/generate`
+  - 内容: 市场概况、个股分析、技术指标、交易建议
+  - 格式: PDF、HTML、Excel导出
+  
+- [ ] **定制化报告模板**
+  - API: `POST /api/realtime-analysis/reports/templates`
+  - 功能: 用户自定义报告模板
+  - 组件: 图表、表格、文本、指标卡片
+  
+- [ ] **报告订阅推送**
+  - API: `POST /api/realtime-analysis/reports/subscribe`
+  - 功能: 定时报告推送、事件触发报告
+  - 渠道: 邮件、微信、短信推送
+  
+- [ ] **历史报告管理**
+  - API: `GET /api/realtime-analysis/reports/history`
+  - 功能: 报告历史记录、版本管理、搜索筛选
+
+---
+
+## 🔧 后端服务架构
+
+### 新增核心服务类
+- [ ] **RealtimeDataManager** (`app/services/realtime_data_manager.py`)
+  - 实时数据接入和管理
+  - 数据质量监控和清洗
+  
+- [ ] **RealtimeIndicatorEngine** (`app/services/realtime_indicator_engine.py`)
+  - 实时技术指标计算
+  - 多周期指标管理
+  
+- [ ] **RealtimeTradingSignalEngine** (`app/services/realtime_trading_signal_engine.py`)
+  - 实时交易信号生成
+  - 多策略信号融合
+  
+- [ ] **RealtimeRiskManager** (`app/services/realtime_risk_manager.py`)
+  - 实时风险计算和监控
+  - 风险预警管理
+  
+- [ ] **RealtimeMonitorService** (`app/services/realtime_monitor_service.py`)
+  - 实时监控面板服务
+  - 异动检测和市场情绪分析
+  
+- [ ] **RealtimeReportGenerator** (`app/services/realtime_report_generator.py`)
+  - 实时报告生成
+  - 报告模板管理
+
+### 新增数据模型
+- [ ] **StockMinuteData** (`app/models/stock_minute_data.py`)
+  - 分钟级K线数据模型
+  
+- [ ] **RealtimeIndicator** (`app/models/realtime_indicator.py`)
+  - 实时技术指标数据模型
+  
+- [ ] **TradingSignal** (`app/models/trading_signal.py`)
+  - 交易信号记录模型
+  
+- [ ] **RiskAlert** (`app/models/risk_alert.py`)
+  - 风险预警记录模型
+  
+- [ ] **RealtimeReport** (`app/models/realtime_report.py`)
+  - 实时报告模板和记录模型
+
+---
+
+## 🎨 前端界面设计
+
+### 新增页面路由
+- [ ] `/realtime-analysis/` - 实时分析主页
+- [ ] `/realtime-analysis/monitor` - 实时监控面板
+- [ ] `/realtime-analysis/indicators` - 技术指标分析
+- [ ] `/realtime-analysis/signals` - 交易信号管理
+- [ ] `/realtime-analysis/risk` - 风险管理面板
+- [ ] `/realtime-analysis/reports` - 分析报告中心
+
+### UI组件需求
+- [ ] **实时图表组件**
+  - K线图、分时图、技术指标图
+  - 支持多周期切换、指标叠加
+  
+- [ ] **实时数据表格**
+  - 股票列表、信号列表、风险监控表
+  - 支持实时更新、排序筛选
+  
+- [ ] **监控面板组件**
+  - 仪表盘、进度条、状态指示器
+  - 实时数据展示、预警提示
+  
+- [ ] **WebSocket集成**
+  - 实时数据推送、信号通知
+  - 断线重连、数据缓存
+
+---
+
+## 🧪 测试用例规划
+
+### 数据层测试
+- [ ] **分钟数据模型测试**
+  - 数据插入、查询、聚合功能
+  - 数据完整性和一致性验证
+  
+- [ ] **实时数据接入测试**
+  - 数据源连接稳定性
+  - 数据延迟和准确性测试
+
+### 服务层测试
+- [ ] **技术指标计算测试**
+  - 各种指标计算准确性
+  - 多周期指标一致性验证
+  
+- [ ] **交易信号生成测试**
+  - 信号生成逻辑正确性
+  - 信号回测验证
+  
+- [ ] **风险管理测试**
+  - 风险指标计算准确性
+  - 预警触发机制测试
+
+### 接口层测试
+- [ ] **API接口测试**
+  - 所有API接口功能验证
+  - 性能和并发测试
+  
+- [ ] **WebSocket测试**
+  - 实时推送功能验证
+  - 连接稳定性测试
+
+### 前端测试
+- [ ] **页面功能测试**
+  - 所有页面加载和交互
+  - 实时数据更新验证
+  
+- [ ] **用户体验测试**
+  - 响应速度和界面友好性
+  - 移动端适配测试
+
+---
+
+## 🚀 技术实现要点
+
+### 实时数据处理
+- [ ] **数据流架构**
+  - 使用Redis作为实时数据缓存
+  - WebSocket实现前后端实时通信
+  - 异步任务处理大量数据计算
+  
+- [ ] **性能优化**
+  - 数据库索引优化
+  - 查询结果缓存
+  - 分页和懒加载
+
+### 并发处理
+- [ ] **多线程计算**
+  - 技术指标并行计算
+  - 多股票同时监控
+  
+- [ ] **任务队列**
+  - Celery异步任务处理
+  - 定时任务调度
+
+### 数据存储
+- [ ] **时序数据库**
+  - 考虑使用InfluxDB存储分钟数据
+  - 优化时间序列查询性能
+  
+- [ ] **数据分区**
+  - 按时间分区存储历史数据
+  - 热数据和冷数据分离
+
+---
+
+## 📊 开发优先级
+
+### 第一阶段（核心功能）
+1. **分钟数据模型和接入** - 基础数据支撑
+2. **实时技术指标计算** - 核心分析功能
+3. **基础监控面板** - 用户界面展示
+
+### 第二阶段（增强功能）
+1. **交易信号生成** - 决策支持
+2. **风险管理模块** - 风险控制
+3. **WebSocket实时推送** - 用户体验
+
+### 第三阶段（完善功能）
+1. **分析报告生成** - 综合分析
+2. **预警通知系统** - 主动提醒
+3. **性能优化和测试** - 系统稳定性
+
+---
+
+## 💡 与现有系统集成
+
+### 数据共享
+- [ ] **复用现有数据模型**
+  - 股票基础信息、财务数据
+  - 因子计算结果
+  
+- [ ] **扩展Text2SQL功能**
+  - 支持分钟数据查询
+  - 实时数据自然语言查询
+
+### 功能协同
+- [ ] **多因子模型集成**
+  - 实时因子计算
+  - 模型实时预测
+  
+- [ ] **投资组合实时监控**
+  - 组合实时表现
+  - 动态再平衡建议
+
+这个实时交易分析功能将大大增强您的量化投资系统，提供从数据接入到决策支持的完整实时分析能力。建议按照优先级分阶段开发，确保每个阶段都有可用的功能交付。

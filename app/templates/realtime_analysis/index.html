@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时交易分析 - 多因子模型系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .nav-pills .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-ok { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-error { background-color: #dc3545; }
+        .metric-card {
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .progress-container {
+            display: none;
+        }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2><i class="fas fa-chart-line text-primary"></i> 实时交易分析</h2>
+                <p class="text-muted">实时数据管理、技术指标分析、交易信号生成和风险监控</p>
+            </div>
+        </div>
+
+        <!-- 导航标签 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <ul class="nav nav-pills" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="data-tab" data-bs-toggle="pill" data-bs-target="#data" type="button" role="tab">
+                            <i class="fas fa-database"></i> 数据管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="monitor-tab" data-bs-toggle="pill" data-bs-target="#monitor" type="button" role="tab">
+                            <i class="fas fa-desktop"></i> 实时监控
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="indicators-tab" data-bs-toggle="pill" data-bs-target="#indicators" type="button" role="tab">
+                            <i class="fas fa-chart-bar"></i> 技术指标
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="signals-tab" data-bs-toggle="pill" data-bs-target="#signals" type="button" role="tab">
+                            <i class="fas fa-signal"></i> 交易信号
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="risk-tab" data-bs-toggle="pill" data-bs-target="#risk" type="button" role="tab">
+                            <i class="fas fa-shield-alt"></i> 风险管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="websocket-tab" data-bs-toggle="pill" data-bs-target="#websocket" type="button" role="tab">
+                            <i class="fas fa-broadcast-tower"></i> WebSocket推送
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 标签内容 -->
+        <div class="tab-content" id="mainTabsContent">
+            <!-- 数据管理标签 -->
+            <div class="tab-pane fade show active" id="data" role="tabpanel">
+                <!-- 数据统计概览 -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-primary">总股票数</h5>
+                                <h3 id="totalStocks">-</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-success">总记录数</h5>
+                                <h3 id="totalRecords">-</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-info">最新时间</h5>
+                                <h6 id="latestTime">-</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-warning">数据状态</h5>
+                                <h6 id="dataStatus"><span class="status-indicator status-ok"></span>正常</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据操作面板 -->
+                <div class="row">
+                    <!-- 数据同步 -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-sync"></i> 数据同步</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="syncForm">
+                                    <div class="mb-3">
+                                        <label for="syncStockCode" class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="syncStockCode" placeholder="例如: 000001.SZ" required>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="syncPeriodType" class="form-label">周期类型</label>
+                                            <select class="form-select" id="syncPeriodType">
+                                                <option value="1min">1分钟</option>
+                                                <option value="5min">5分钟</option>
+                                                <option value="15min">15分钟</option>
+                                                <option value="30min">30分钟</option>
+                                                <option value="60min">60分钟</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="syncDataSource" class="form-label">数据源</label>
+                                            <select class="form-select" id="syncDataSource">
+                                                <option value="baostock">Baostock (推荐)</option>
+                                                <option value="tushare">Tushare</option>
+                                                <option value="mock">模拟数据</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="syncStartDate" class="form-label">开始日期</label>
+                                            <input type="date" class="form-control" id="syncStartDate">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="syncEndDate" class="form-label">结束日期</label>
+                                            <input type="date" class="form-control" id="syncEndDate">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="syncAllPeriods">
+                                            <label class="form-check-label" for="syncAllPeriods">
+                                                同步所有周期数据 (1min, 5min, 15min, 30min, 60min)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="d-grid gap-2 d-md-flex">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-download"></i> 同步数据
+                                        </button>
+                                        <button type="button" class="btn btn-info" onclick="showBatchSyncModal()">
+                                            <i class="fas fa-layer-group"></i> 批量同步
+                                        </button>
+                                        <button type="button" class="btn btn-success" onclick="checkSyncStatus()">
+                                            <i class="fas fa-info-circle"></i> 同步状态
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" onclick="loadStockList()">
+                                            <i class="fas fa-list"></i> 股票列表
+                                        </button>
+                                    </div>
+                                </form>
+                                
+                                <!-- 进度条 -->
+                                <div class="progress-container mt-3">
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">同步进度: <span id="syncProgress">0%</span></small>
+                                    </div>
+                                </div>
+                                
+                                <!-- 日志输出 -->
+                                <div class="log-container mt-3" id="syncLogs" style="display: none;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong>同步日志:</strong>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">
+                                            <i class="fas fa-trash"></i> 清空
+                                        </button>
+                                    </div>
+                                    <div id="logContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 数据聚合 -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-layer-group"></i> 数据聚合</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="aggregateForm">
+                                    <div class="mb-3">
+                                        <label for="aggStockCode" class="form-label">股票代码</label>
+                                        <input type="text" class="form-control" id="aggStockCode" placeholder="例如: 000001.SZ" required>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="sourcePeriod" class="form-label">源周期</label>
+                                            <select class="form-select" id="sourcePeriod">
+                                                <option value="1min">1分钟</option>
+                                                <option value="5min">5分钟</option>
+                                                <option value="15min">15分钟</option>
+                                                <option value="30min">30分钟</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="targetPeriod" class="form-label">目标周期</label>
+                                            <select class="form-select" id="targetPeriod">
+                                                <option value="5min">5分钟</option>
+                                                <option value="15min">15分钟</option>
+                                                <option value="30min">30分钟</option>
+                                                <option value="60min">60分钟</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-compress-arrows-alt"></i> 执行聚合
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据质量检查 -->
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-search"></i> 数据质量检查</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="qualityForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="qualityStockCode" class="form-label">股票代码</label>
+                                            <input type="text" class="form-control" id="qualityStockCode" placeholder="例如: 000001.SZ" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="qualityPeriod" class="form-label">周期</label>
+                                            <select class="form-select" id="qualityPeriod">
+                                                <option value="1min">1分钟</option>
+                                                <option value="5min">5分钟</option>
+                                                <option value="15min">15分钟</option>
+                                                <option value="30min">30分钟</option>
+                                                <option value="60min">60分钟</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="qualityHours" class="form-label">检查时长(小时)</label>
+                                            <input type="number" class="form-control" id="qualityHours" value="24" min="1" max="168">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-info">
+                                            <i class="fas fa-check-circle"></i> 检查质量
+                                        </button>
+                                    </div>
+                                </form>
+                                
+                                <!-- 质量检查结果 -->
+                                <div id="qualityResult" class="mt-3" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <h6><i class="fas fa-info-circle"></i> 检查结果</h6>
+                                        <div id="qualityDetails"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 周期数据统计 -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-pie"></i> 周期数据统计</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="periodStats">
+                                    <div class="text-center">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        <p class="mt-2">正在加载统计数据...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 实时监控标签 -->
+            <div class="tab-pane fade" id="monitor" role="tabpanel">
+                <div class="row">
+                    <!-- 功能介绍 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0"><i class="fas fa-desktop"></i> 实时监控面板</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="lead">全方位的实时市场监控系统，提供实时行情、板块表现、异动检测和市场情绪分析。</p>
+                                
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-chart-line text-primary"></i> 核心功能</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 实时行情监控</li>
+                                            <li><i class="fas fa-check text-success"></i> 热点板块分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 异动股票检测</li>
+                                            <li><i class="fas fa-check text-success"></i> 市场情绪指标</li>
+                                            <li><i class="fas fa-check text-success"></i> 涨跌幅排行榜</li>
+                                            <li><i class="fas fa-check text-success"></i> 价格预警系统</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-cogs text-info"></i> 监控特性</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 30秒自动刷新</li>
+                                            <li><i class="fas fa-check text-success"></i> 多周期数据支持</li>
+                                            <li><i class="fas fa-check text-success"></i> 可视化图表展示</li>
+                                            <li><i class="fas fa-check text-success"></i> 智能异动评分</li>
+                                            <li><i class="fas fa-check text-success"></i> 板块热力图</li>
+                                            <li><i class="fas fa-check text-success"></i> 市场情绪仪表盘</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <a href="/realtime-analysis/monitor" class="btn btn-success btn-lg">
+                                        <i class="fas fa-tv me-2"></i>进入实时监控面板
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i class="fas fa-info-circle"></i> 监控模块</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <h6>📊 实时行情</h6>
+                                    <p class="small text-muted">监控股票实时价格、涨跌幅、成交量等关键指标</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>🔥 板块表现</h6>
+                                    <p class="small text-muted">分析各行业板块的整体表现和资金流向</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>⚡ 异动检测</h6>
+                                    <p class="small text-muted">智能识别价格和成交量异常变动的股票</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>💭 市场情绪</h6>
+                                    <p class="small text-muted">综合分析市场整体情绪和投资者信心</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0"><i class="fas fa-lightbulb"></i> 使用提示</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="small mb-2">🔄 支持自动刷新，实时更新数据</p>
+                                <p class="small mb-2">📈 可切换不同时间周期查看</p>
+                                <p class="small mb-2">🎯 异动阈值可自定义调整</p>
+                                <p class="small mb-0">📱 响应式设计，支持移动端</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 技术指标标签 -->
+            <div class="tab-pane fade" id="indicators" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> 实时技术指标分析</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="lead">强大的技术指标计算和分析引擎，支持多种经典技术指标的实时计算。</p>
+                                
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-calculator text-primary"></i> 支持的指标</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 移动平均线 (MA/EMA)</li>
+                                            <li><i class="fas fa-check text-success"></i> MACD 指标</li>
+                                            <li><i class="fas fa-check text-success"></i> RSI 相对强弱指标</li>
+                                            <li><i class="fas fa-check text-success"></i> KDJ 随机指标</li>
+                                            <li><i class="fas fa-check text-success"></i> 布林带 (BOLL)</li>
+                                            <li><i class="fas fa-check text-success"></i> CCI 顺势指标</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-layer-group text-info"></i> 核心功能</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 多周期指标计算</li>
+                                            <li><i class="fas fa-check text-success"></i> 实时指标更新</li>
+                                            <li><i class="fas fa-check text-success"></i> 指标对比分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 历史数据回测</li>
+                                            <li><i class="fas fa-check text-success"></i> 可视化图表展示</li>
+                                            <li><i class="fas fa-check text-success"></i> 统计分析报告</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <a href="/realtime-analysis/indicators" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-chart-line me-2"></i>进入技术指标分析
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i class="fas fa-info-circle"></i> 使用说明</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <h6>1. 指标计算</h6>
+                                    <p class="small text-muted">选择股票和指标类型，系统自动计算并存储结果</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>2. 多周期分析</h6>
+                                    <p class="small text-muted">同时分析多个时间周期的指标变化趋势</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>3. 指标对比</h6>
+                                    <p class="small text-muted">对比不同股票的同一指标表现</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>4. 统计分析</h6>
+                                    <p class="small text-muted">查看指标数据的统计分布和历史趋势</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0"><i class="fas fa-lightbulb"></i> 提示</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="small mb-2">💡 建议先同步股票数据，再进行指标计算</p>
+                                <p class="small mb-2">📊 支持1分钟到60分钟的多种周期</p>
+                                <p class="small mb-0">⚡ 计算结果实时更新并持久化存储</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 交易信号标签 -->
+            <div class="tab-pane fade" id="signals" role="tabpanel">
+                <div class="row">
+                    <!-- 功能介绍 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-signal"></i> 实时交易信号</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-4">基于技术指标和价格行为生成智能交易信号，支持多策略融合和实时监控。</p>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="feature-item">
+                                            <h6><i class="fas fa-lightning text-warning"></i> 信号生成引擎</h6>
+                                            <p class="small text-muted">支持8种经典交易策略，包括移动平均线交叉、RSI背离、MACD信号、布林带突破等</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="feature-item">
+                                            <h6><i class="fas fa-diagram-3 text-info"></i> 多策略融合</h6>
+                                            <p class="small text-muted">智能融合多个策略信号，通过加权计算生成最终交易建议</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="feature-item">
+                                            <h6><i class="fas fa-eye text-success"></i> 实时监控</h6>
+                                            <p class="small text-muted">实时监控活跃信号状态，支持信号过期管理和执行跟踪</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="feature-item">
+                                            <h6><i class="fas fa-chart-line text-primary"></i> 策略回测</h6>
+                                            <p class="small text-muted">历史数据验证策略有效性，计算胜率、收益率和风险指标</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center mt-4">
+                                    <a href="/realtime-analysis/signals" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-rocket"></i> 进入交易信号分析
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 支持的策略 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6><i class="fas fa-list"></i> 支持的交易策略</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="strategy-list">
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-primary">MA交叉</span>
+                                        <small class="text-muted d-block">移动平均线金叉死叉</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-success">RSI背离</span>
+                                        <small class="text-muted d-block">相对强弱指标超买超卖</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-info">MACD信号</span>
+                                        <small class="text-muted d-block">MACD指标趋势信号</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-warning">布林带突破</span>
+                                        <small class="text-muted d-block">布林带上下轨突破</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-danger">量价趋势</span>
+                                        <small class="text-muted d-block">成交量价格配合分析</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-secondary">动量反转</span>
+                                        <small class="text-muted d-block">价格动量反转信号</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-dark">支撑阻力</span>
+                                        <small class="text-muted d-block">关键位突破信号</small>
+                                    </div>
+                                    <div class="strategy-item mb-2">
+                                        <span class="badge bg-light text-dark">趋势跟踪</span>
+                                        <small class="text-muted d-block">EMA趋势跟踪策略</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 风险管理标签 -->
+            <div class="tab-pane fade" id="risk" role="tabpanel">
+                <div class="row">
+                    <!-- 功能介绍 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header bg-danger text-white">
+                                <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 实时风险管理</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="lead">全面的投资组合风险管理系统，提供实时风险计算、持仓监控、预警管理和止损止盈控制。</p>
+                                
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-calculator text-primary"></i> 核心功能</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 投资组合风险计算</li>
+                                            <li><i class="fas fa-check text-success"></i> 持仓风险监控</li>
+                                            <li><i class="fas fa-check text-success"></i> VaR和CVaR分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 相关性分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 止损止盈管理</li>
+                                            <li><i class="fas fa-check text-success"></i> 风险预警系统</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-tools text-info"></i> 风险工具</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 压力测试</li>
+                                            <li><i class="fas fa-check text-success"></i> 行业集中度分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 最大回撤监控</li>
+                                            <li><i class="fas fa-check text-success"></i> Beta值计算</li>
+                                            <li><i class="fas fa-check text-success"></i> 波动率分析</li>
+                                            <li><i class="fas fa-check text-success"></i> 风险阈值管理</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <a href="/realtime-analysis/risk-management" class="btn btn-danger btn-lg">
+                                        <i class="fas fa-shield-alt me-2"></i>进入风险管理系统
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 风险指标</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <h6>📊 VaR分析</h6>
+                                    <p class="small text-muted">计算95%和99%置信水平下的风险价值</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>🔗 相关性分析</h6>
+                                    <p class="small text-muted">分析持仓股票间的相关性和集中度风险</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>📉 最大回撤</h6>
+                                    <p class="small text-muted">监控组合历史最大回撤和当前回撤水平</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>⚠️ 风险预警</h6>
+                                    <p class="small text-muted">实时监控风险阈值，及时发出预警信号</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i class="fas fa-hand-paper"></i> 止损止盈</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="small mb-2">📈 支持百分比、ATR和固定金额三种方式</p>
+                                <p class="small mb-2">🎯 自动计算止损止盈价格</p>
+                                <p class="small mb-2">⚡ 实时监控触发条件</p>
+                                <p class="small mb-0">📋 生成触发订单记录</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebSocket推送标签 -->
+            <div class="tab-pane fade" id="websocket" role="tabpanel">
+                <div class="row">
+                    <!-- 功能介绍 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-broadcast-tower"></i> WebSocket实时推送</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="lead">高性能的实时数据推送系统，提供WebSocket连接管理、数据订阅、推送配置和连接监控功能。</p>
+                                
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-wifi text-primary"></i> 核心功能</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> WebSocket连接管理</li>
+                                            <li><i class="fas fa-check text-success"></i> 实时数据推送</li>
+                                            <li><i class="fas fa-check text-success"></i> 多类型数据订阅</li>
+                                            <li><i class="fas fa-check text-success"></i> 推送配置管理</li>
+                                            <li><i class="fas fa-check text-success"></i> 连接状态监控</li>
+                                            <li><i class="fas fa-check text-success"></i> 消息日志记录</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-stream text-info"></i> 推送类型</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success"></i> 市场数据推送</li>
+                                            <li><i class="fas fa-check text-success"></i> 技术指标更新</li>
+                                            <li><i class="fas fa-check text-success"></i> 交易信号通知</li>
+                                            <li><i class="fas fa-check text-success"></i> 风险预警推送</li>
+                                            <li><i class="fas fa-check text-success"></i> 投资组合更新</li>
+                                            <li><i class="fas fa-check text-success"></i> 新闻资讯推送</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <a href="/realtime-analysis/websocket-management" class="btn btn-info btn-lg">
+                                        <i class="fas fa-broadcast-tower me-2"></i>进入WebSocket管理
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="fas fa-cogs"></i> 推送特性</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <h6>⚡ 实时性</h6>
+                                    <p class="small text-muted">毫秒级数据推送，确保信息实时性</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>🎯 精准订阅</h6>
+                                    <p class="small text-muted">支持按股票代码和数据类型精准订阅</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>🔧 灵活配置</h6>
+                                    <p class="small text-muted">可自定义推送间隔和数据类型</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>📊 连接监控</h6>
+                                    <p class="small text-muted">实时监控连接状态和推送统计</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="fas fa-rocket"></i> 性能优势</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="small mb-2">🚀 支持数千并发连接</p>
+                                <p class="small mb-2">💾 智能数据缓存机制</p>
+                                <p class="small mb-2">🔄 自动重连和故障恢复</p>
+                                <p class="small mb-0">📱 跨平台兼容性</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDataStats();
+            
+            // 设置默认日期
+            const today = new Date();
+            const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            const todayStr = today.toISOString().split('T')[0];
+            const weekAgoStr = weekAgo.toISOString().split('T')[0];
+            
+            // 设置同步表单的默认日期
+            document.getElementById('syncStartDate').value = weekAgoStr;
+            document.getElementById('syncEndDate').value = todayStr;
+            
+            // 设置批量同步表单的默认日期
+            document.getElementById('batchStartDate').value = weekAgoStr;
+            document.getElementById('batchEndDate').value = todayStr;
+        });
+
+        // 加载数据统计
+        function loadDataStats() {
+            fetch('/api/realtime-analysis/data/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const stats = data.data;
+                        document.getElementById('totalStocks').textContent = stats.total_stocks;
+                        document.getElementById('totalRecords').textContent = stats.total_records.toLocaleString();
+                        document.getElementById('latestTime').textContent = stats.latest_time ? 
+                            new Date(stats.latest_time).toLocaleString() : '无数据';
+                        
+                        // 更新周期统计
+                        updatePeriodStats(stats.period_stats);
+                    }
+                })
+                .catch(error => {
+                    console.error('加载统计数据失败:', error);
+                    showAlert('加载统计数据失败', 'danger');
+                });
+        }
+
+        // 更新周期统计
+        function updatePeriodStats(periodStats) {
+            const container = document.getElementById('periodStats');
+            let html = '';
+            
+            const periods = ['1min', '5min', '15min', '30min', '60min'];
+            const periodNames = {
+                '1min': '1分钟',
+                '5min': '5分钟',
+                '15min': '15分钟',
+                '30min': '30分钟',
+                '60min': '60分钟'
+            };
+            
+            periods.forEach(period => {
+                const count = periodStats[period] || 0;
+                html += `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>${periodNames[period]}:</span>
+                        <span class="badge bg-primary">${count.toLocaleString()}</span>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // 数据同步表单提交
+        document.getElementById('syncForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const stockCode = document.getElementById('syncStockCode').value;
+            const periodType = document.getElementById('syncPeriodType').value;
+            const dataSource = document.getElementById('syncDataSource').value;
+            const startDate = document.getElementById('syncStartDate').value;
+            const endDate = document.getElementById('syncEndDate').value;
+            const syncAllPeriods = document.getElementById('syncAllPeriods').checked;
+            
+            if (!stockCode) {
+                showAlert('请输入股票代码', 'warning');
+                return;
+            }
+            
+            syncData(stockCode, periodType, dataSource, startDate, endDate, syncAllPeriods);
+        });
+
+        // 同步数据
+        function syncData(stockCode, periodType, dataSource, startDate, endDate, syncAllPeriods) {
+            showProgress(true);
+            addLog(`开始同步 ${stockCode} 的${periodType}数据...`);
+            
+            const data = {
+                ts_code: stockCode,
+                period_type: periodType,
+                start_date: startDate,
+                end_date: endDate,
+                use_baostock: dataSource === 'baostock'
+            };
+
+            // 如果选择同步所有周期，使用专门的API
+            const apiUrl = syncAllPeriods 
+                ? '/api/realtime-analysis/data/sync-all-periods'
+                : '/api/realtime-analysis/data/sync';
+            
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                showProgress(false);
+                
+                if (result.success) {
+                    if (syncAllPeriods) {
+                        // 处理多周期同步结果
+                        const periods = Object.keys(result.data);
+                        const successPeriods = periods.filter(p => result.data[p].success);
+                        addLog(`✅ 多周期同步完成: 成功${successPeriods.length}个周期，失败${periods.length - successPeriods.length}个周期`);
+                        showAlert(`多周期同步完成: 成功${successPeriods.length}个周期`, 'success');
+                    } else {
+                        addLog(`✅ 同步成功: ${result.message}`);
+                        showAlert(`同步成功: ${result.message}`, 'success');
+                    }
+                    loadDataStats();
+                } else {
+                    addLog(`❌ 同步失败: ${result.message}`);
+                    showAlert(`同步失败: ${result.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                showProgress(false);
+                addLog(`❌ 同步异常: ${error.message}`);
+                showAlert('同步过程中发生错误', 'danger');
+                console.error('同步数据失败:', error);
+            });
+        }
+
+        // 数据聚合表单提交
+        document.getElementById('aggregateForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const stockCode = document.getElementById('aggStockCode').value;
+            const sourcePeriod = document.getElementById('sourcePeriod').value;
+            const targetPeriod = document.getElementById('targetPeriod').value;
+            
+            if (!stockCode) {
+                showAlert('请输入股票代码', 'warning');
+                return;
+            }
+            
+            aggregateData(stockCode, sourcePeriod, targetPeriod);
+        });
+
+        // 聚合数据
+        function aggregateData(stockCode, sourcePeriod, targetPeriod) {
+            const data = {
+                ts_code: stockCode,
+                source_period: sourcePeriod,
+                target_period: targetPeriod
+            };
+            
+            fetch('/api/realtime-analysis/data/aggregate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(`聚合成功: ${result.message}`, 'success');
+                    loadDataStats(); // 重新加载统计数据
+                } else {
+                    showAlert(`聚合失败: ${result.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('聚合过程中发生错误', 'danger');
+                console.error('聚合数据失败:', error);
+            });
+        }
+
+        // 数据质量检查表单提交
+        document.getElementById('qualityForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const stockCode = document.getElementById('qualityStockCode').value;
+            const period = document.getElementById('qualityPeriod').value;
+            const hours = document.getElementById('qualityHours').value;
+            
+            if (!stockCode) {
+                showAlert('请输入股票代码', 'warning');
+                return;
+            }
+            
+            checkDataQuality(stockCode, period, hours);
+        });
+
+        // 检查数据质量
+        function checkDataQuality(stockCode, period, hours) {
+            const params = new URLSearchParams({
+                ts_code: stockCode,
+                period_type: period,
+                hours: hours
+            });
+            
+            fetch(`/api/realtime-analysis/data/quality?${params}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showQualityResult(result.data);
+                    } else {
+                        showAlert(`质量检查失败: ${result.message}`, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showAlert('质量检查过程中发生错误', 'danger');
+                    console.error('质量检查失败:', error);
+                });
+        }
+
+        // 显示质量检查结果
+        function showQualityResult(data) {
+            const container = document.getElementById('qualityResult');
+            const details = document.getElementById('qualityDetails');
+            
+            let statusClass = 'alert-info';
+            if (data.status === 'ok') statusClass = 'alert-success';
+            else if (data.status === 'incomplete') statusClass = 'alert-warning';
+            else if (data.status === 'error') statusClass = 'alert-danger';
+            
+            container.className = `alert ${statusClass} mt-3`;
+            
+            details.innerHTML = `
+                <p><strong>状态:</strong> ${data.message}</p>
+                <p><strong>数据条数:</strong> ${data.data_count}</p>
+                <p><strong>缺失条数:</strong> ${data.missing_count}</p>
+                <p><strong>完整性:</strong> ${data.completeness.toFixed(1)}%</p>
+                ${data.latest_time ? `<p><strong>最新时间:</strong> ${new Date(data.latest_time).toLocaleString()}</p>` : ''}
+                ${data.earliest_time ? `<p><strong>最早时间:</strong> ${new Date(data.earliest_time).toLocaleString()}</p>` : ''}
+            `;
+            
+            container.style.display = 'block';
+        }
+
+        // 显示/隐藏进度条
+        function showProgress(show) {
+            const container = document.querySelector('.progress-container');
+            if (show) {
+                container.style.display = 'block';
+                // 模拟进度更新
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 20;
+                    if (progress >= 100) {
+                        progress = 100;
+                        clearInterval(interval);
+                    }
+                    updateProgress(progress);
+                }, 500);
+            } else {
+                container.style.display = 'none';
+                updateProgress(0);
+            }
+        }
+
+        // 更新进度条
+        function updateProgress(percent) {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.getElementById('syncProgress');
+            
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${Math.round(percent)}%`;
+        }
+
+        // 添加日志
+        function addLog(message) {
+            const logContainer = document.getElementById('syncLogs');
+            const logContent = document.getElementById('logContent');
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${message}`;
+            
+            logContent.appendChild(logEntry);
+            logContainer.style.display = 'block';
+            
+            // 滚动到底部
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // 清空日志
+        function clearLogs() {
+            document.getElementById('logContent').innerHTML = '';
+            document.getElementById('syncLogs').style.display = 'none';
+        }
+
+        // 显示提示信息
+        function showAlert(message, type = 'info') {
+            // 创建提示框
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 3000);
+        }
+
+        // 显示批量同步模态框
+        function showBatchSyncModal() {
+            const modal = new bootstrap.Modal(document.getElementById('batchSyncModal'));
+            modal.show();
+        }
+
+        // 批量同步
+        function batchSync() {
+            const stockListText = document.getElementById('batchStockList').value;
+            const periodType = document.getElementById('batchPeriodType').value;
+            const dataSource = document.getElementById('batchDataSource').value;
+            const startDate = document.getElementById('batchStartDate').value;
+            const endDate = document.getElementById('batchEndDate').value;
+            const batchSize = parseInt(document.getElementById('batchSize').value) || 10;
+
+            if (!stockListText.trim()) {
+                showAlert('请输入股票代码列表', 'warning');
+                return;
+            }
+
+            const stockList = stockListText.split(/[,\n]/).map(code => code.trim()).filter(code => code);
+            if (stockList.length === 0) {
+                showAlert('请输入有效的股票代码', 'warning');
+                return;
+            }
+
+            showProgress(true);
+            addLog(`开始批量同步 ${stockList.length} 只股票的${periodType}数据...`);
+
+            const data = {
+                stock_list: stockList,
+                period_type: periodType,
+                start_date: startDate,
+                end_date: endDate,
+                batch_size: batchSize,
+                use_baostock: dataSource === 'baostock'
+            };
+
+            fetch('/api/realtime-analysis/data/sync-multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                showProgress(false);
+                
+                if (result.success) {
+                    addLog(`✅ 批量同步完成: 成功${result.success_stocks}只，失败${result.failed_stocks}只，总数据量${result.total_data_count}条`);
+                    showAlert(`批量同步完成: 成功${result.success_stocks}只，失败${result.failed_stocks}只`, 'success');
+                    loadDataStats();
+                    
+                    // 关闭模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('batchSyncModal'));
+                    modal.hide();
+                } else {
+                    addLog(`❌ 批量同步失败: ${result.message}`);
+                    showAlert(`批量同步失败: ${result.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                showProgress(false);
+                addLog(`❌ 批量同步异常: ${error.message}`);
+                showAlert('批量同步过程中发生错误', 'danger');
+                console.error('批量同步失败:', error);
+            });
+        }
+
+        // 检查同步状态
+        function checkSyncStatus() {
+            const stockCode = document.getElementById('syncStockCode').value;
+            const periodType = document.getElementById('syncPeriodType').value;
+
+            if (!stockCode) {
+                showAlert('请先输入股票代码', 'warning');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                ts_code: stockCode,
+                period_type: periodType
+            });
+
+            fetch(`/api/realtime-analysis/data/sync-status?${params}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        const data = result.data;
+                        const statusMessage = data.has_data 
+                            ? `${stockCode} 的 ${periodType} 数据: 共${data.data_count}条记录，最新时间: ${new Date(data.latest_time).toLocaleString()}`
+                            : `${stockCode} 的 ${periodType} 数据: 暂无数据`;
+                        
+                        showAlert(statusMessage, data.has_data ? 'info' : 'warning');
+                        addLog(`📊 同步状态: ${statusMessage}`);
+                    } else {
+                        showAlert(`获取同步状态失败: ${result.message}`, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showAlert('获取同步状态过程中发生错误', 'danger');
+                    console.error('获取同步状态失败:', error);
+                });
+        }
+
+        // 加载股票列表
+        function loadStockList() {
+            fetch('/api/realtime-analysis/data/stock-list')
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        const stockList = result.data;
+                        const listText = stockList.slice(0, 20).join(', '); // 显示前20只股票
+                        showAlert(`数据库中共有${result.count}只股票，前20只: ${listText}`, 'info');
+                        addLog(`📋 股票列表: 共${result.count}只股票`);
+                        
+                        // 将前10只股票填入批量同步框
+                        document.getElementById('batchStockList').value = stockList.slice(0, 10).join('\n');
+                    } else {
+                        showAlert(`获取股票列表失败: ${result.message}`, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showAlert('获取股票列表过程中发生错误', 'danger');
+                    console.error('获取股票列表失败:', error);
+                });
+        }
+    </script>
+
+    <!-- 批量同步模态框 -->
+    <div class="modal fade" id="batchSyncModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-layer-group"></i> 批量同步设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="batchSyncForm">
+                        <div class="mb-3">
+                            <label for="batchStockList" class="form-label">股票代码列表</label>
+                            <textarea class="form-control" id="batchStockList" rows="6" 
+                                placeholder="请输入股票代码，每行一个或用逗号分隔&#10;例如:&#10;000001.SZ&#10;000002.SZ&#10;600000.SH"></textarea>
+                            <div class="form-text">支持每行一个代码或用逗号分隔</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="batchPeriodType" class="form-label">周期类型</label>
+                                <select class="form-select" id="batchPeriodType">
+                                    <option value="1min">1分钟</option>
+                                    <option value="5min">5分钟</option>
+                                    <option value="15min">15分钟</option>
+                                    <option value="30min">30分钟</option>
+                                    <option value="60min">60分钟</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="batchDataSource" class="form-label">数据源</label>
+                                <select class="form-select" id="batchDataSource">
+                                    <option value="baostock">Baostock (推荐)</option>
+                                    <option value="tushare">Tushare</option>
+                                    <option value="mock">模拟数据</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="batchStartDate" class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="batchStartDate">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="batchEndDate" class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="batchEndDate">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="batchSize" class="form-label">批处理大小</label>
+                                <input type="number" class="form-control" id="batchSize" value="10" min="1" max="50">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="batchSync()">
+                        <i class="fas fa-download"></i> 开始批量同步
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

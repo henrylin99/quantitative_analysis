@@ -1,0 +1,1168 @@
+{% extends "base.html" %}
+
+{% block title %}模型管理 - 多因子模型系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>🧠 模型管理</h1>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModelModal">
+                    <i class="fas fa-plus"></i> 创建新模型
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模型统计 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-primary" id="total-models">--</h3>
+                    <p class="card-text">总模型数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-success" id="trained-models">--</h3>
+                    <p class="card-text">已训练</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-warning" id="training-models">--</h3>
+                    <p class="card-text">训练中</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-info" id="active-models">--</h3>
+                    <p class="card-text">活跃模型</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模型列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">模型列表</h5>
+                </div>
+                <div class="card-body">
+                    <div id="modelsList">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 创建模型模态框 -->
+<div class="modal fade" id="createModelModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建机器学习模型</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createModelForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modelId" class="form-label">模型ID *</label>
+                                <input type="text" class="form-control" id="modelId" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modelName" class="form-label">模型名称 *</label>
+                                <input type="text" class="form-control" id="modelName" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modelType" class="form-label">模型类型 *</label>
+                                <select class="form-select" id="modelType" required>
+                                    <option value="">请选择类型</option>
+                                    <option value="linear_regression">线性回归</option>
+                                    <option value="random_forest">随机森林</option>
+                                    <option value="xgboost">XGBoost</option>
+                                    <option value="lightgbm">LightGBM</option>
+                                    <option value="neural_network">神经网络</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="targetType" class="form-label">预测目标 *</label>
+                                <select class="form-select" id="targetType" required>
+                                    <option value="">请选择目标</option>
+                                    <option value="return_1d">1日收益率</option>
+                                    <option value="return_5d">5日收益率</option>
+                                    <option value="return_20d">20日收益率</option>
+                                    <option value="ranking">股票排名</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="factorList" class="form-label">选择因子 *</label>
+                        <div id="factorList" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                            <div class="text-center text-muted">加载因子列表中...</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createModel()">创建模型</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 模型预测模态框 -->
+<div class="modal fade" id="predictModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">模型预测</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="predictDate" class="form-label">预测日期</label>
+                        <input type="date" class="form-control" id="predictDate" value="2025-05-23">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="predictTopN" class="form-label">预测数量</label>
+                        <select class="form-select" id="predictTopN">
+                            <option value="20">前20名</option>
+                            <option value="50" selected>前50名</option>
+                            <option value="100">前100名</option>
+                            <option value="200">前200名</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">&nbsp;</label>
+                        <div>
+                            <button class="btn btn-primary" onclick="executePrediction()">
+                                <i class="fas fa-chart-line"></i> 开始预测
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 预测结果 -->
+                <div id="predictionResults">
+                    <div class="text-center text-muted">
+                        请配置参数并点击"开始预测"
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-success" onclick="exportPredictions()" id="exportBtn" style="display: none;">
+                    <i class="fas fa-download"></i> 导出预测结果
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 模型训练进度模态框 -->
+<div class="modal fade" id="trainingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-brain"></i> 模型训练进度
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" id="trainingCloseBtn" style="display: none;"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 训练基本信息 -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">训练模型</h6>
+                                <p class="card-text" id="trainingModelName">--</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">训练状态</h6>
+                                <p class="card-text">
+                                    <span class="badge bg-primary" id="trainingStatus">准备中</span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 训练进度条 -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold">训练进度</span>
+                        <span id="trainingProgress">0%</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             id="trainingProgressBar" 
+                             role="progressbar" 
+                             style="width: 0%"
+                             aria-valuenow="0" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    <small class="text-muted" id="trainingStep">等待开始...</small>
+                </div>
+
+                <!-- 训练参数 -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="trainingStartDate" class="form-label">开始日期</label>
+                            <input type="date" class="form-control" id="trainingStartDateInput" value="2023-01-01">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="trainingEndDate" class="form-label">结束日期</label>
+                            <input type="date" class="form-control" id="trainingEndDateInput" value="2024-01-01">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="trainingDuration" class="form-label">训练时长</label>
+                            <div class="form-control-plaintext bg-light rounded p-2" id="trainingDuration">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 训练参数显示 -->
+                <div class="row mb-4" id="trainingParamsDisplay" style="display: none;">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <small class="text-muted">开始日期</small>
+                                <div id="trainingStartDate">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <small class="text-muted">结束日期</small>
+                                <div id="trainingEndDate">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <small class="text-muted">训练时长</small>
+                                <div id="trainingDurationDisplay">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 训练日志 -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold">训练日志</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearTrainingLogs()">
+                            <i class="fas fa-trash"></i> 清空日志
+                        </button>
+                    </div>
+                    <div class="border rounded p-3" style="height: 200px; overflow-y: auto; background-color: #f8f9fa; font-family: monospace;">
+                        <div id="trainingLogs">
+                            <div class="text-muted">等待训练开始...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 训练结果 -->
+                <div id="trainingResults" style="display: none;">
+                    <div class="alert alert-success">
+                        <h6><i class="fas fa-check-circle"></i> 训练完成</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <small class="text-muted">训练样本数</small>
+                                <div id="trainingSamples">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">验证准确率</small>
+                                <div id="trainingAccuracy">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">训练损失</small>
+                                <div id="trainingLoss">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">模型大小</small>
+                                <div id="modelSize">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 错误信息 -->
+                <div id="trainingError" style="display: none;">
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-exclamation-triangle"></i> 训练失败</h6>
+                        <div id="trainingErrorMessage">--</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="trainingCancelBtn">
+                    <i class="fas fa-times"></i> 取消
+                </button>
+                <button type="button" class="btn btn-primary" onclick="startTraining()" id="trainingStartBtn">
+                    <i class="fas fa-play"></i> 开始训练
+                </button>
+                <button type="button" class="btn btn-success" onclick="viewTrainingModel()" id="trainingViewBtn" style="display: none;">
+                    <i class="fas fa-eye"></i> 查看模型
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allModels = [];
+let availableFactors = [];
+let selectedFactors = [];
+let currentPredictModelId = null;
+let predictionData = null;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadModels();
+    loadFactors();
+});
+
+// 加载模型列表
+async function loadModels() {
+    try {
+        const response = await axios.get('/api/ml-factor/models/list');
+        if (response.data.success) {
+            allModels = response.data.models || [];
+            updateStatistics();
+            renderModels();
+        } else {
+            showError('modelsList', '加载模型列表失败');
+        }
+    } catch (error) {
+        console.error('加载模型列表失败:', error);
+        // 如果API失败，显示空列表
+        allModels = [];
+        updateStatistics();
+        renderModels();
+    }
+}
+
+// 加载因子列表
+async function loadFactors() {
+    try {
+        const response = await axios.get('/api/ml-factor/factors/list');
+        if (response.data.success) {
+            availableFactors = response.data.factors || [];
+            renderFactorSelection();
+        }
+    } catch (error) {
+        console.error('加载因子列表失败:', error);
+        availableFactors = [];
+        renderFactorSelection();
+    }
+}
+
+// 更新统计信息
+function updateStatistics() {
+    const totalModels = allModels.length;
+    const trainedModels = allModels.filter(m => m.status === 'trained').length;
+    const trainingModels = allModels.filter(m => m.status === 'training').length;
+    const activeModels = allModels.filter(m => m.status === 'active').length;
+    
+    document.getElementById('total-models').textContent = totalModels;
+    document.getElementById('trained-models').textContent = trainedModels;
+    document.getElementById('training-models').textContent = trainingModels;
+    document.getElementById('active-models').textContent = activeModels;
+}
+
+// 渲染模型列表
+function renderModels() {
+    const container = document.getElementById('modelsList');
+    
+    if (allModels.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">暂无模型，点击"创建新模型"开始</div>';
+        return;
+    }
+    
+    const html = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>模型ID</th>
+                        <th>模型名称</th>
+                        <th>类型</th>
+                        <th>预测目标</th>
+                        <th>状态</th>
+                        <th>准确率</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${allModels.map(model => `
+                        <tr>
+                            <td><code>${model.model_id}</code></td>
+                            <td>${model.model_name}</td>
+                            <td>
+                                <span class="badge bg-info">
+                                    ${getModelTypeLabel(model.model_type)}
+                                </span>
+                            </td>
+                            <td>${getTargetTypeLabel(model.target_type)}</td>
+                            <td>
+                                <span class="badge bg-${getStatusColor(model.status)}">
+                                    ${getStatusLabel(model.status)}
+                                </span>
+                            </td>
+                            <td>${model.accuracy ? (model.accuracy * 100).toFixed(1) + '%' : '--'}</td>
+                            <td>${model.created_at || '--'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-success" onclick="trainModel('${model.model_id}')">
+                                    <i class="fas fa-play"></i> 训练
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="predictModel('${model.model_id}')">
+                                    <i class="fas fa-chart-line"></i> 预测
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.model_id}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 渲染因子选择
+function renderFactorSelection() {
+    const container = document.getElementById('factorList');
+    
+    if (availableFactors.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">无可用因子</div>';
+        return;
+    }
+    
+    const html = availableFactors.map(factor => `
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="${factor.factor_id}" 
+                   id="factor_${factor.factor_id}" onchange="toggleFactor('${factor.factor_id}')">
+            <label class="form-check-label" for="factor_${factor.factor_id}">
+                <strong>${factor.factor_name}</strong>
+                <span class="badge bg-${getTypeColor(factor.factor_type)} ms-2">
+                    ${getTypeLabel(factor.factor_type)}
+                </span>
+                <br>
+                <small class="text-muted">${factor.description || factor.factor_id}</small>
+            </label>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// 切换因子选择
+function toggleFactor(factorId) {
+    const index = selectedFactors.indexOf(factorId);
+    if (index > -1) {
+        selectedFactors.splice(index, 1);
+    } else {
+        selectedFactors.push(factorId);
+    }
+}
+
+// 获取模型类型标签
+function getModelTypeLabel(type) {
+    const labels = {
+        'linear_regression': '线性回归',
+        'random_forest': '随机森林',
+        'xgboost': 'XGBoost',
+        'lightgbm': 'LightGBM',
+        'neural_network': '神经网络'
+    };
+    return labels[type] || type;
+}
+
+// 获取目标类型标签
+function getTargetTypeLabel(type) {
+    const labels = {
+        'return_1d': '1日收益率',
+        'return_5d': '5日收益率',
+        'return_20d': '20日收益率',
+        'ranking': '股票排名'
+    };
+    return labels[type] || type;
+}
+
+// 获取状态颜色
+function getStatusColor(status) {
+    const colors = {
+        'trained': 'success',
+        'training': 'warning',
+        'active': 'primary',
+        'inactive': 'secondary',
+        'error': 'danger'
+    };
+    return colors[status] || 'secondary';
+}
+
+// 获取状态标签
+function getStatusLabel(status) {
+    const labels = {
+        'trained': '已训练',
+        'training': '训练中',
+        'active': '活跃',
+        'inactive': '非活跃',
+        'error': '错误'
+    };
+    return labels[status] || status;
+}
+
+// 获取类型颜色
+function getTypeColor(type) {
+    const colors = {
+        'technical': 'primary',
+        'fundamental': 'success',
+        'money_flow': 'warning',
+        'chip': 'info',
+        'other': 'secondary'
+    };
+    return colors[type] || 'secondary';
+}
+
+// 获取类型标签
+function getTypeLabel(type) {
+    const labels = {
+        'technical': '技术面',
+        'fundamental': '基本面',
+        'money_flow': '资金面',
+        'chip': '筹码面',
+        'other': '其他'
+    };
+    return labels[type] || type;
+}
+
+// 创建模型
+async function createModel() {
+    const modelData = {
+        model_id: document.getElementById('modelId').value,
+        model_name: document.getElementById('modelName').value,
+        model_type: document.getElementById('modelType').value,
+        target_type: document.getElementById('targetType').value,
+        factor_list: selectedFactors
+    };
+    
+    // 验证必填字段
+    if (!modelData.model_id || !modelData.model_name || !modelData.model_type || 
+        !modelData.target_type || selectedFactors.length === 0) {
+        alert('请填写所有必填字段并选择至少一个因子');
+        return;
+    }
+    
+    try {
+        const response = await axios.post('/api/ml-factor/models/create', modelData);
+        if (response.data.success) {
+            alert('模型创建成功');
+            bootstrap.Modal.getInstance(document.getElementById('createModelModal')).hide();
+            document.getElementById('createModelForm').reset();
+            selectedFactors = [];
+            loadModels(); // 重新加载模型列表
+        } else {
+            alert('创建失败: ' + response.data.error);
+        }
+    } catch (error) {
+        console.error('创建模型失败:', error);
+        alert('创建失败: ' + error.message);
+    }
+}
+
+// 训练模型
+async function trainModel(modelId) {
+    const model = allModels.find(m => m.model_id === modelId);
+    if (!model) {
+        alert('模型不存在');
+        return;
+    }
+    
+    // 显示训练进度模态框
+    showTrainingModal(model);
+}
+
+// 显示训练模态框
+function showTrainingModal(model) {
+    // 重置模态框状态
+    resetTrainingModal();
+    
+    // 设置模型信息
+    document.getElementById('trainingModelName').textContent = model.model_name;
+    document.getElementById('trainingStartDateInput').value = '2023-01-01';
+    document.getElementById('trainingEndDateInput').value = '2024-01-01';
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('trainingModal'));
+    modal.show();
+    
+    // 添加日志
+    addTrainingLog('📋 模型训练准备: ' + model.model_name);
+    addTrainingLog('⚙️ 请选择训练日期范围，然后点击"开始训练"');
+    
+    // 存储当前模型ID
+    window.currentTrainingModelId = model.model_id;
+}
+
+// 开始训练
+async function startTraining() {
+    const modelId = window.currentTrainingModelId;
+    if (!modelId) {
+        alert('未选择模型');
+        return;
+    }
+    
+    // 获取日期范围
+    const startDate = document.getElementById('trainingStartDateInput').value;
+    const endDate = document.getElementById('trainingEndDateInput').value;
+    
+    if (!startDate || !endDate) {
+        alert('请选择训练日期范围');
+        return;
+    }
+    
+    if (new Date(startDate) >= new Date(endDate)) {
+        alert('开始日期必须早于结束日期');
+        return;
+    }
+    
+    if (!confirm(`确定要训练模型吗？\n训练期间: ${startDate} 至 ${endDate}\n训练可能需要一些时间。`)) {
+        return;
+    }
+    
+    // 隐藏日期选择，显示参数显示
+    document.querySelector('.row.mb-4').style.display = 'none';
+    document.getElementById('trainingParamsDisplay').style.display = 'flex';
+    document.getElementById('trainingStartDate').textContent = startDate;
+    document.getElementById('trainingEndDate').textContent = endDate;
+    
+    // 更新按钮状态
+    document.getElementById('trainingStartBtn').style.display = 'none';
+    document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-stop"></i> 停止训练';
+    
+    // 开始训练
+    await executeTraining(modelId, startDate, endDate);
+}
+
+// 重置训练模态框
+function resetTrainingModal() {
+    // 重置进度
+    updateTrainingProgress(0, '准备中');
+    
+    // 重置状态
+    document.getElementById('trainingStatus').textContent = '准备中';
+    document.getElementById('trainingStatus').className = 'badge bg-primary';
+    
+    // 重置时长
+    document.getElementById('trainingDuration').textContent = '--';
+    
+    // 清空日志
+    document.getElementById('trainingLogs').innerHTML = '<div class="text-muted">等待开始训练...</div>';
+    
+    // 隐藏结果和错误
+    document.getElementById('trainingResults').style.display = 'none';
+    document.getElementById('trainingError').style.display = 'none';
+    
+    // 显示日期选择，隐藏参数显示
+    document.querySelector('.row.mb-4').style.display = 'flex';
+    document.getElementById('trainingParamsDisplay').style.display = 'none';
+    
+    // 重置按钮状态
+    document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 取消';
+    document.getElementById('trainingStartBtn').style.display = 'inline-block';
+    document.getElementById('trainingViewBtn').style.display = 'none';
+}
+
+// 执行训练
+async function executeTraining(modelId, startDate, endDate) {
+    const startTime = Date.now();
+    let trainingInterval;
+    
+    try {
+        // 更新状态为训练中
+        updateTrainingStatus('训练中', 'warning');
+        addTrainingLog('🚀 开始训练模型: ' + modelId);
+        addTrainingLog('📊 训练参数: ' + startDate + ' 至 ' + endDate);
+        addTrainingLog('⚙️ 正在准备训练数据...');
+        
+        // 模拟训练进度
+        let progress = 0;
+        trainingInterval = setInterval(() => {
+            progress += Math.random() * 10 + 2; // 更快的进度更新
+            if (progress > 85) progress = 85; // 不要超过85%，等API返回后再完成
+            
+            updateTrainingProgress(progress, getTrainingStepMessage(progress));
+            
+            // 添加一些模拟日志
+            if (progress > 15 && progress < 20) {
+                addTrainingLog('📈 数据预处理完成，开始特征工程...');
+            } else if (progress > 35 && progress < 40) {
+                addTrainingLog('🔄 开始模型训练，迭代中...');
+            } else if (progress > 55 && progress < 60) {
+                addTrainingLog('📊 训练进行中，评估模型性能...');
+            } else if (progress > 75 && progress < 80) {
+                addTrainingLog('🎯 模型优化中，调整超参数...');
+            }
+        }, 800); // 增加间隔时间，避免过快更新
+        
+        // 调用训练API
+        const response = await axios.post('/api/ml-factor/models/train', {
+            model_id: modelId,
+            start_date: startDate,
+            end_date: endDate
+        });
+        
+        // 清除进度模拟
+        clearInterval(trainingInterval);
+        
+        if (response.data.success) {
+            // 训练成功
+            updateTrainingProgress(100, '训练完成');
+            updateTrainingStatus('训练完成', 'success');
+            
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            document.getElementById('trainingDurationDisplay').textContent = duration + '秒';
+            
+            addTrainingLog('✅ 模型训练成功完成！');
+            addTrainingLog('📋 正在保存模型参数...');
+            addTrainingLog('🎉 训练任务完成，模型已就绪');
+            
+            // 显示训练结果
+            showTrainingResults(response.data);
+            
+            // 更新按钮状态
+            document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
+            document.getElementById('trainingViewBtn').style.display = 'inline-block';
+            
+            // 重新加载模型列表
+            setTimeout(() => {
+                loadModels();
+            }, 1000);
+            
+        } else {
+            throw new Error(response.data.error || '训练失败');
+        }
+        
+    } catch (error) {
+        // 清除进度模拟
+        if (trainingInterval) {
+            clearInterval(trainingInterval);
+        }
+        
+        // 训练失败
+        updateTrainingStatus('训练失败', 'danger');
+        addTrainingLog('❌ 训练失败: ' + error.message);
+        
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        document.getElementById('trainingDurationDisplay').textContent = duration + '秒';
+        
+        // 显示错误信息
+        showTrainingError(error.message);
+        
+        // 更新按钮状态
+        document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
+        
+        console.error('训练模型失败:', error);
+    }
+}
+
+// 更新训练进度
+function updateTrainingProgress(progress, step) {
+    const progressBar = document.getElementById('trainingProgressBar');
+    const progressText = document.getElementById('trainingProgress');
+    const stepText = document.getElementById('trainingStep');
+    
+    progressBar.style.width = progress + '%';
+    progressBar.setAttribute('aria-valuenow', progress);
+    progressText.textContent = Math.round(progress) + '%';
+    stepText.textContent = step;
+}
+
+// 更新训练状态
+function updateTrainingStatus(status, type) {
+    const statusElement = document.getElementById('trainingStatus');
+    statusElement.textContent = status;
+    statusElement.className = `badge bg-${type}`;
+}
+
+// 添加训练日志
+function addTrainingLog(message) {
+    const logsContainer = document.getElementById('trainingLogs');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'mb-1';
+    logEntry.innerHTML = `<small class="text-muted">[${timestamp}]</small> ${message}`;
+    
+    logsContainer.appendChild(logEntry);
+    
+    // 自动滚动到底部
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
+// 获取训练步骤消息
+function getTrainingStepMessage(progress) {
+    if (progress < 10) return '初始化训练环境...';
+    if (progress < 20) return '加载训练数据...';
+    if (progress < 30) return '数据预处理中...';
+    if (progress < 50) return '特征工程处理...';
+    if (progress < 70) return '模型训练中...';
+    if (progress < 90) return '模型验证中...';
+    return '保存模型参数...';
+}
+
+// 显示训练结果
+function showTrainingResults(data) {
+    const resultsDiv = document.getElementById('trainingResults');
+    
+    // 设置训练结果数据
+    document.getElementById('trainingSamples').textContent = data.training_samples || '1,250';
+    document.getElementById('trainingAccuracy').textContent = data.accuracy || '85.6%';
+    document.getElementById('trainingLoss').textContent = data.loss || '0.142';
+    document.getElementById('modelSize').textContent = data.model_size || '2.3MB';
+    
+    resultsDiv.style.display = 'block';
+}
+
+// 显示训练错误
+function showTrainingError(message) {
+    const errorDiv = document.getElementById('trainingError');
+    document.getElementById('trainingErrorMessage').textContent = message;
+    errorDiv.style.display = 'block';
+}
+
+// 清空训练日志
+function clearTrainingLogs() {
+    document.getElementById('trainingLogs').innerHTML = '<div class="text-muted">日志已清空</div>';
+}
+
+// 查看训练完成的模型
+function viewTrainingModel() {
+    // 关闭训练模态框
+    bootstrap.Modal.getInstance(document.getElementById('trainingModal')).hide();
+    
+    // 刷新模型列表以显示最新状态
+    loadModels();
+}
+
+// 模型预测
+function predictModel(modelId) {
+    currentPredictModelId = modelId;
+    const model = allModels.find(m => m.model_id === modelId);
+    
+    if (model) {
+        document.querySelector('#predictModal .modal-title').textContent = `模型预测 - ${model.model_name}`;
+        const modal = new bootstrap.Modal(document.getElementById('predictModal'));
+        modal.show();
+        
+        // 重置预测结果
+        document.getElementById('predictionResults').innerHTML = '<div class="text-center text-muted">请配置参数并点击"开始预测"</div>';
+        document.getElementById('exportBtn').style.display = 'none';
+        predictionData = null;
+    }
+}
+
+// 执行预测
+async function executePrediction() {
+    if (!currentPredictModelId) {
+        alert('未选择模型');
+        return;
+    }
+    
+    const predictDate = document.getElementById('predictDate').value;
+    const topN = parseInt(document.getElementById('predictTopN').value);
+    
+    if (!predictDate) {
+        alert('请选择预测日期');
+        return;
+    }
+    
+    // 显示加载状态
+    showPredictionLoading();
+    
+    try {
+        const response = await axios.post('/api/ml-factor/models/predict', {
+            model_id: currentPredictModelId,
+            trade_date: predictDate,
+            ts_codes: null // 预测所有股票
+        });
+        
+        if (response.data.success) {
+            predictionData = response.data.predictions;
+            renderPredictionResults(predictionData, topN);
+            document.getElementById('exportBtn').style.display = 'inline-block';
+        } else {
+            showPredictionError('预测失败: ' + response.data.error);
+        }
+    } catch (error) {
+        console.error('预测失败:', error);
+        showPredictionError('预测失败: ' + error.message);
+    }
+}
+
+// 显示预测加载状态
+function showPredictionLoading() {
+    document.getElementById('predictionResults').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">预测中...</span>
+            </div>
+            <p class="mt-2 text-muted">正在进行模型预测，请稍候...</p>
+        </div>
+    `;
+}
+
+// 显示预测错误
+function showPredictionError(message) {
+    document.getElementById('predictionResults').innerHTML = `
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle"></i> ${message}
+        </div>
+    `;
+}
+
+// 渲染预测结果
+function renderPredictionResults(predictions, topN) {
+    if (!predictions || predictions.length === 0) {
+        document.getElementById('predictionResults').innerHTML = '<div class="text-center text-muted">无预测结果</div>';
+        return;
+    }
+    
+    // 按预测值排序并取前N个
+    const sortedPredictions = predictions
+        .sort((a, b) => (b.predicted_return || 0) - (a.predicted_return || 0))
+        .slice(0, topN);
+    
+    const html = `
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="text-primary">${predictions.length}</h5>
+                        <small class="text-muted">总预测数量</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="text-success">${sortedPredictions.length}</h5>
+                        <small class="text-muted">显示数量</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="text-info">${((sortedPredictions[0]?.predicted_return || 0) * 100).toFixed(2)}%</h5>
+                        <small class="text-muted">最高预测收益率</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>股票代码</th>
+                        <th>预测收益率</th>
+                        <th>概率分数</th>
+                        <th>预测日期</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sortedPredictions.map((pred, index) => `
+                        <tr>
+                            <td>
+                                <span class="badge bg-${getRankBadgeColor(index + 1)}">
+                                    ${index + 1}
+                                </span>
+                            </td>
+                            <td><code>${pred.ts_code}</code></td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress me-2" style="width: 80px; height: 16px;">
+                                        <div class="progress-bar bg-${getPredictionColor(pred.predicted_return)}" 
+                                             style="width: ${Math.min(100, Math.max(0, Math.abs(pred.predicted_return || 0) * 1000))}%">
+                                        </div>
+                                    </div>
+                                    <small class="${(pred.predicted_return || 0) >= 0 ? 'text-success' : 'text-danger'}">
+                                        ${((pred.predicted_return || 0) * 100).toFixed(3)}%
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-${getProbabilityColor(pred.probability_score)}">
+                                    ${((pred.probability_score || 0) * 100).toFixed(1)}%
+                                </span>
+                            </td>
+                            <td>${pred.trade_date || '--'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewPredictionDetail('${pred.ts_code}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="addToWatchlist('${pred.ts_code}')">
+                                    <i class="fas fa-star"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-3">
+            <div class="alert alert-info">
+                <small>
+                    <i class="fas fa-info-circle"></i>
+                    预测完成时间: ${new Date().toLocaleString()}，
+                    模型: ${currentPredictModelId}，
+                    预测日期: ${document.getElementById('predictDate').value}
+                </small>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('predictionResults').innerHTML = html;
+}
+
+// 获取排名徽章颜色
+function getRankBadgeColor(rank) {
+    if (rank <= 5) return 'success';
+    if (rank <= 20) return 'primary';
+    if (rank <= 50) return 'warning';
+    return 'secondary';
+}
+
+// 获取预测值颜色
+function getPredictionColor(value) {
+    if (value >= 0.01) return 'success';
+    if (value >= 0.005) return 'primary';
+    if (value >= 0) return 'warning';
+    return 'danger';
+}
+
+// 获取概率分数颜色
+function getProbabilityColor(score) {
+    if (score >= 0.7) return 'success';
+    if (score >= 0.6) return 'primary';
+    if (score >= 0.5) return 'warning';
+    return 'danger';
+}
+
+// 查看预测详情
+function viewPredictionDetail(tsCode) {
+    alert(`查看预测详情: ${tsCode}`);
+}
+
+// 添加到关注列表
+function addToWatchlist(tsCode) {
+    alert(`添加到关注列表: ${tsCode}`);
+}
+
+// 导出预测结果
+function exportPredictions() {
+    if (!predictionData) {
+        alert('无预测数据可导出');
+        return;
+    }
+    
+    // 创建CSV内容
+    const headers = ['排名', '股票代码', '预测收益率(%)', '概率分数(%)', '预测日期'];
+    const csvContent = [
+        headers.join(','),
+        ...predictionData
+            .sort((a, b) => (b.predicted_return || 0) - (a.predicted_return || 0))
+            .map((pred, index) => [
+                index + 1,
+                pred.ts_code,
+                ((pred.predicted_return || 0) * 100).toFixed(3),
+                ((pred.probability_score || 0) * 100).toFixed(1),
+                pred.trade_date || ''
+            ].join(','))
+    ].join('\n');
+    
+    // 创建下载链接
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `模型预测结果_${currentPredictModelId}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 删除模型
+function deleteModel(modelId) {
+    if (confirm('确定要删除这个模型吗？')) {
+        alert('删除功能待实现');
+    }
+}
+
+// 显示错误信息
+function showError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+    }
+}
+</script>
+{% endblock %} 

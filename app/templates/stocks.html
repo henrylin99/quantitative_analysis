@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}股票列表 - 股票分析系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h2">📋 股票列表</h1>
+            <p class="text-muted">浏览所有股票信息，支持按行业、地域筛选</p>
+        </div>
+    </div>
+
+    <!-- 筛选条件 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form id="filter-form" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="industry-select" class="form-label">行业</label>
+                            <select class="form-select" id="industry-select">
+                                <option value="">全部行业</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="area-select" class="form-label">地域</label>
+                            <select class="form-select" id="area-select">
+                                <option value="">全部地域</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="search-input" class="form-label">搜索</label>
+                            <input type="text" class="form-control" id="search-input" placeholder="股票代码或名称">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">筛选</button>
+                            <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 股票列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">股票列表</h5>
+                    <span class="badge bg-primary" id="total-count">0</span>
+                </div>
+                <div class="card-body">
+                    <div id="stocks-container">
+                        <!-- 股票列表将在这里动态加载 -->
+                    </div>
+                    
+                    <!-- 分页 -->
+                    <nav aria-label="股票列表分页" class="mt-4">
+                        <ul class="pagination justify-content-center" id="pagination">
+                            <!-- 分页按钮将在这里动态生成 -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let currentFilters = {};
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadIndustries();
+    loadAreas();
+    loadStocks();
+    
+    // 绑定事件
+    document.getElementById('filter-form').addEventListener('submit', handleFilter);
+    document.getElementById('reset-btn').addEventListener('click', resetFilters);
+});
+
+// 加载行业列表
+async function loadIndustries() {
+    try {
+        const response = await apiRequest('/industries');
+        if (response.code === 200) {
+            const select = document.getElementById('industry-select');
+            response.data.forEach(industry => {
+                const option = document.createElement('option');
+                option.value = industry;
+                option.textContent = industry;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('加载行业列表失败:', error);
+    }
+}
+
+// 加载地域列表
+async function loadAreas() {
+    try {
+        const response = await apiRequest('/areas');
+        if (response.code === 200) {
+            const select = document.getElementById('area-select');
+            response.data.forEach(area => {
+                const option = document.createElement('option');
+                option.value = area;
+                option.textContent = area;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('加载地域列表失败:', error);
+    }
+}
+
+// 加载股票列表
+async function loadStocks(page = 1) {
+    showLoading('stocks-container');
+    
+    try {
+        const params = new URLSearchParams({
+            page: page,
+            page_size: 20,
+            ...currentFilters
+        });
+        
+        const response = await apiRequest(`/stocks?${params}`);
+        if (response.code === 200) {
+            renderStocks(response.data.stocks);
+            renderPagination(response.data);
+            document.getElementById('total-count').textContent = response.data.total;
+            currentPage = page;
+        }
+    } catch (error) {
+        showError('stocks-container', '加载股票列表失败');
+        console.error('加载股票列表失败:', error);
+    }
+}
+
+// 渲染股票列表
+function renderStocks(stocks) {
+    const container = document.getElementById('stocks-container');
+    
+    if (stocks.length === 0) {
+        container.innerHTML = '<div class="text-center py-4"><p class="text-muted">暂无数据</p></div>';
+        return;
+    }
+    
+    const html = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>股票代码</th>
+                        <th>股票名称</th>
+                        <th>行业</th>
+                        <th>地域</th>
+                        <th>上市日期</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${stocks.map(stock => `
+                        <tr>
+                            <td><code>${stock.symbol}</code></td>
+                            <td><strong>${stock.name}</strong></td>
+                            <td><span class="badge bg-secondary">${stock.industry || '--'}</span></td>
+                            <td>${stock.area || '--'}</td>
+                            <td>${stock.list_date || '--'}</td>
+                            <td>
+                                <a href="/stock/${stock.ts_code}" class="btn btn-sm btn-primary">详情</a>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 渲染分页
+function renderPagination(data) {
+    const pagination = document.getElementById('pagination');
+    const { page, total_pages } = data;
+    
+    if (total_pages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // 上一页
+    html += `
+        <li class="page-item ${page <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadStocks(${page - 1}); return false;">上一页</a>
+        </li>
+    `;
+    
+    // 页码
+    const startPage = Math.max(1, page - 2);
+    const endPage = Math.min(total_pages, page + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `
+            <li class="page-item ${i === page ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadStocks(${i}); return false;">${i}</a>
+            </li>
+        `;
+    }
+    
+    // 下一页
+    html += `
+        <li class="page-item ${page >= total_pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadStocks(${page + 1}); return false;">下一页</a>
+        </li>
+    `;
+    
+    pagination.innerHTML = html;
+}
+
+// 处理筛选
+function handleFilter(event) {
+    event.preventDefault();
+    
+    currentFilters = {};
+    
+    const industry = document.getElementById('industry-select').value;
+    const area = document.getElementById('area-select').value;
+    const search = document.getElementById('search-input').value;
+    
+    if (industry) currentFilters.industry = industry;
+    if (area) currentFilters.area = area;
+    if (search) currentFilters.search = search;
+    
+    loadStocks(1);
+}
+
+// 重置筛选
+function resetFilters() {
+    document.getElementById('industry-select').value = '';
+    document.getElementById('area-select').value = '';
+    document.getElementById('search-input').value = '';
+    currentFilters = {};
+    loadStocks(1);
+}
+</script>
+{% endblock %} 

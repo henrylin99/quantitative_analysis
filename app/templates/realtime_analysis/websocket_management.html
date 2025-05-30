@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket推送管理 - 实时交易分析系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-connected { background-color: #28a745; }
+        .status-disconnected { background-color: #dc3545; }
+        .status-connecting { background-color: #ffc107; }
+        
+        .message-log {
+            height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .message-item {
+            margin-bottom: 5px;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
+        .message-info { background-color: #d1ecf1; }
+        .message-success { background-color: #d4edda; }
+        .message-warning { background-color: #fff3cd; }
+        .message-error { background-color: #f8d7da; }
+        
+        .config-card {
+            transition: all 0.3s ease;
+        }
+        
+        .config-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .real-time-data {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2><i class="bi bi-broadcast"></i> WebSocket推送管理</h2>
+                        <p class="text-muted mb-0">实时数据推送服务管理和监控</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary" onclick="window.history.back()">
+                            <i class="bi bi-arrow-left"></i> 返回
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 连接状态面板 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-wifi"></i> 连接状态</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span id="connectionStatus" class="status-indicator status-disconnected"></span>
+                                    <span id="connectionText">未连接</span>
+                                </div>
+                                <button id="connectBtn" class="btn btn-primary btn-sm me-2">连接</button>
+                                <button id="disconnectBtn" class="btn btn-secondary btn-sm" disabled>断开</button>
+                            </div>
+                            <div class="col-md-9">
+                                <div class="row text-center">
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-3">
+                                            <h4 id="totalClients" class="text-primary mb-1">0</h4>
+                                            <small class="text-muted">在线客户端</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-3">
+                                            <h4 id="totalRooms" class="text-info mb-1">0</h4>
+                                            <small class="text-muted">活跃房间</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-3">
+                                            <h4 id="pushStatus" class="text-success mb-1">停止</h4>
+                                            <small class="text-muted">推送状态</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-3">
+                                            <h4 id="messageCount" class="text-warning mb-1">0</h4>
+                                            <small class="text-muted">消息计数</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要功能区域 -->
+        <div class="row">
+            <!-- 推送配置 -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-gear"></i> 推送配置</h5>
+                        <div>
+                            <button class="btn btn-success btn-sm" onclick="startPushService()">
+                                <i class="bi bi-play"></i> 启动推送
+                            </button>
+                            <button class="btn btn-warning btn-sm" onclick="stopPushService()">
+                                <i class="bi bi-stop"></i> 停止推送
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="pushConfigContainer">
+                            <!-- 推送配置将在这里动态加载 -->
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-primary" onclick="updatePushConfig()">
+                                <i class="bi bi-save"></i> 保存配置
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="loadPushConfig()">
+                                <i class="bi bi-arrow-clockwise"></i> 重新加载
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 订阅管理 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-bell"></i> 订阅管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <select id="subscriptionType" class="form-select">
+                                    <option value="">选择订阅类型</option>
+                                    <option value="market_data">市场数据</option>
+                                    <option value="indicators">技术指标</option>
+                                    <option value="signals">交易信号</option>
+                                    <option value="monitor">实时监控</option>
+                                    <option value="risk_alerts">风险预警</option>
+                                    <option value="portfolio">投资组合</option>
+                                    <option value="news">新闻资讯</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <input type="text" id="subscriptionSymbol" class="form-control" placeholder="股票代码(可选)">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success btn-sm" onclick="subscribe()">
+                                <i class="bi bi-plus"></i> 订阅
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="unsubscribe()">
+                                <i class="bi bi-dash"></i> 取消订阅
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="testConnection()">
+                                <i class="bi bi-check-circle"></i> 测试连接
+                            </button>
+                        </div>
+                        <div class="mt-3">
+                            <h6>当前订阅:</h6>
+                            <div id="currentSubscriptions" class="small text-muted">
+                                暂无订阅
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 实时数据和消息日志 -->
+            <div class="col-md-6">
+                <!-- 实时数据展示 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> 实时数据</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="real-time-data" id="realTimeData">
+                            <div class="text-center text-muted">
+                                <i class="bi bi-hourglass-split"></i>
+                                等待实时数据...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 消息日志 -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-journal-text"></i> 消息日志</h5>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearMessageLog()">
+                            <i class="bi bi-trash"></i> 清空
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="message-log" id="messageLog">
+                            <!-- 消息日志将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // WebSocket连接管理
+        let socket = null;
+        let messageCount = 0;
+        let currentSubscriptions = new Set();
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPushConfig();
+            loadConnectionStats();
+            
+            // 定期更新连接统计
+            setInterval(loadConnectionStats, 10000);
+        });
+
+        // 连接WebSocket
+        function connectWebSocket() {
+            if (socket && socket.connected) {
+                addMessage('warning', '已经连接到WebSocket服务器');
+                return;
+            }
+
+            try {
+                socket = io('http://127.0.0.1:5001', {
+                    transports: ['websocket', 'polling']
+                });
+
+                socket.on('connect', function() {
+                    updateConnectionStatus(true);
+                    addMessage('success', '成功连接到WebSocket服务器');
+                });
+
+                socket.on('disconnect', function() {
+                    updateConnectionStatus(false);
+                    addMessage('error', '与WebSocket服务器断开连接');
+                });
+
+                socket.on('connected', function(data) {
+                    addMessage('info', `服务器确认连接: ${data.message}`);
+                });
+
+                socket.on('subscribed', function(data) {
+                    addMessage('success', `订阅成功: ${data.type} - ${data.params.symbol || 'all'}`);
+                    currentSubscriptions.add(`${data.type}_${data.params.symbol || 'all'}`);
+                    updateSubscriptionDisplay();
+                });
+
+                socket.on('unsubscribed', function(data) {
+                    addMessage('info', `取消订阅: ${data.type} - ${data.params.symbol || 'all'}`);
+                    currentSubscriptions.delete(`${data.type}_${data.params.symbol || 'all'}`);
+                    updateSubscriptionDisplay();
+                });
+
+                socket.on('market_data_update', function(data) {
+                    addMessage('info', `市场数据更新: ${data.symbol}`);
+                    updateRealTimeData('market_data', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('indicators_update', function(data) {
+                    addMessage('info', `技术指标更新: ${data.symbol}`);
+                    updateRealTimeData('indicators', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('signals_update', function(data) {
+                    addMessage('info', `交易信号更新: ${data.symbol}`);
+                    updateRealTimeData('signals', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('monitor_update', function(data) {
+                    addMessage('info', '监控数据更新');
+                    updateRealTimeData('monitor', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('risk_alert', function(data) {
+                    addMessage('warning', `风险预警: ${data.alert.message}`);
+                    updateRealTimeData('risk_alert', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('portfolio_update', function(data) {
+                    addMessage('info', `投资组合更新: ${data.portfolio_id}`);
+                    updateRealTimeData('portfolio', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('news_update', function(data) {
+                    addMessage('info', '新闻资讯更新');
+                    updateRealTimeData('news', data);
+                    messageCount++;
+                    updateMessageCount();
+                });
+
+                socket.on('error', function(data) {
+                    addMessage('error', `错误: ${data.message}`);
+                });
+
+                socket.on('pong', function(data) {
+                    addMessage('info', `心跳响应: ${data.timestamp}`);
+                });
+
+            } catch (error) {
+                addMessage('error', `连接失败: ${error.message}`);
+            }
+        }
+
+        // 断开WebSocket连接
+        function disconnectWebSocket() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                updateConnectionStatus(false);
+                addMessage('info', '主动断开WebSocket连接');
+            }
+        }
+
+        // 更新连接状态
+        function updateConnectionStatus(connected) {
+            const statusIndicator = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('connectionText');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            if (connected) {
+                statusIndicator.className = 'status-indicator status-connected';
+                statusText.textContent = '已连接';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                statusIndicator.className = 'status-indicator status-disconnected';
+                statusText.textContent = '未连接';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        // 订阅数据
+        function subscribe() {
+            if (!socket || !socket.connected) {
+                addMessage('error', '请先连接WebSocket服务器');
+                return;
+            }
+
+            const type = document.getElementById('subscriptionType').value;
+            const symbol = document.getElementById('subscriptionSymbol').value;
+
+            if (!type) {
+                addMessage('error', '请选择订阅类型');
+                return;
+            }
+
+            const params = {};
+            if (symbol) {
+                params.symbol = symbol;
+            }
+
+            socket.emit('subscribe', {
+                type: type,
+                params: params
+            });
+
+            addMessage('info', `发送订阅请求: ${type} - ${symbol || 'all'}`);
+        }
+
+        // 取消订阅
+        function unsubscribe() {
+            if (!socket || !socket.connected) {
+                addMessage('error', '请先连接WebSocket服务器');
+                return;
+            }
+
+            const type = document.getElementById('subscriptionType').value;
+            const symbol = document.getElementById('subscriptionSymbol').value;
+
+            if (!type) {
+                addMessage('error', '请选择订阅类型');
+                return;
+            }
+
+            const params = {};
+            if (symbol) {
+                params.symbol = symbol;
+            }
+
+            socket.emit('unsubscribe', {
+                type: type,
+                params: params
+            });
+
+            addMessage('info', `发送取消订阅请求: ${type} - ${symbol || 'all'}`);
+        }
+
+        // 测试连接
+        function testConnection() {
+            if (!socket || !socket.connected) {
+                addMessage('error', '请先连接WebSocket服务器');
+                return;
+            }
+
+            socket.emit('ping');
+            addMessage('info', '发送心跳测试');
+
+            // 同时调用API测试
+            fetch('/api/websocket/test-connection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage('success', 'API测试连接成功');
+                } else {
+                    addMessage('error', `API测试失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                addMessage('error', `API测试错误: ${error.message}`);
+            });
+        }
+
+        // 加载推送配置
+        function loadPushConfig() {
+            fetch('/api/websocket/push-config')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayPushConfig(data.data);
+                } else {
+                    addMessage('error', `加载推送配置失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                addMessage('error', `加载推送配置错误: ${error.message}`);
+            });
+        }
+
+        // 显示推送配置
+        function displayPushConfig(config) {
+            const container = document.getElementById('pushConfigContainer');
+            container.innerHTML = '';
+
+            for (const [type, settings] of Object.entries(config)) {
+                const configCard = document.createElement('div');
+                configCard.className = 'config-card border rounded p-3 mb-3';
+                configCard.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">${getTypeName(type)}</h6>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="enable_${type}" 
+                                   ${settings.enabled ? 'checked' : ''}>
+                            <label class="form-check-label" for="enable_${type}">启用</label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label small">推送间隔(秒)</label>
+                            <input type="number" class="form-control form-control-sm" 
+                                   id="interval_${type}" value="${settings.interval}" min="10" max="3600">
+                        </div>
+                    </div>
+                `;
+                container.appendChild(configCard);
+            }
+        }
+
+        // 获取类型名称
+        function getTypeName(type) {
+            const names = {
+                'market_data': '市场数据',
+                'indicators': '技术指标',
+                'signals': '交易信号',
+                'monitor': '实时监控',
+                'risk_alerts': '风险预警',
+                'portfolio': '投资组合',
+                'news': '新闻资讯'
+            };
+            return names[type] || type;
+        }
+
+        // 更新推送配置
+        function updatePushConfig() {
+            const config = {};
+            const container = document.getElementById('pushConfigContainer');
+            
+            container.querySelectorAll('.config-card').forEach(card => {
+                const type = card.querySelector('input[type="checkbox"]').id.replace('enable_', '');
+                const enabled = card.querySelector('input[type="checkbox"]').checked;
+                const interval = parseInt(card.querySelector('input[type="number"]').value);
+                
+                config[type] = {
+                    enabled: enabled,
+                    interval: interval
+                };
+            });
+
+            fetch('/api/websocket/push-config', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage('success', '推送配置更新成功');
+                } else {
+                    addMessage('error', `推送配置更新失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                addMessage('error', `推送配置更新错误: ${error.message}`);
+            });
+        }
+
+        // 启动推送服务
+        function startPushService() {
+            fetch('/api/websocket/start', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage('success', '推送服务启动成功');
+                    document.getElementById('pushStatus').textContent = '运行中';
+                    document.getElementById('pushStatus').className = 'text-success mb-1';
+                } else {
+                    addMessage('error', `推送服务启动失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                addMessage('error', `推送服务启动错误: ${error.message}`);
+            });
+        }
+
+        // 停止推送服务
+        function stopPushService() {
+            fetch('/api/websocket/stop', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage('success', '推送服务停止成功');
+                    document.getElementById('pushStatus').textContent = '已停止';
+                    document.getElementById('pushStatus').className = 'text-secondary mb-1';
+                } else {
+                    addMessage('error', `推送服务停止失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                addMessage('error', `推送服务停止错误: ${error.message}`);
+            });
+        }
+
+        // 加载连接统计
+        function loadConnectionStats() {
+            fetch('/api/websocket/connections')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('totalClients').textContent = data.data.total_clients;
+                    document.getElementById('totalRooms').textContent = data.data.total_rooms;
+                }
+            })
+            .catch(error => {
+                console.error('加载连接统计失败:', error);
+            });
+
+            // 加载推送状态
+            fetch('/api/websocket/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const isRunning = data.data.is_running;
+                    document.getElementById('pushStatus').textContent = isRunning ? '运行中' : '已停止';
+                    document.getElementById('pushStatus').className = isRunning ? 'text-success mb-1' : 'text-secondary mb-1';
+                }
+            })
+            .catch(error => {
+                console.error('加载推送状态失败:', error);
+            });
+        }
+
+        // 更新订阅显示
+        function updateSubscriptionDisplay() {
+            const container = document.getElementById('currentSubscriptions');
+            if (currentSubscriptions.size === 0) {
+                container.textContent = '暂无订阅';
+                container.className = 'small text-muted';
+            } else {
+                container.innerHTML = Array.from(currentSubscriptions).map(sub => 
+                    `<span class="badge bg-primary me-1">${sub}</span>`
+                ).join('');
+                container.className = 'small';
+            }
+        }
+
+        // 更新实时数据显示
+        function updateRealTimeData(type, data) {
+            const container = document.getElementById('realTimeData');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const dataItem = document.createElement('div');
+            dataItem.className = 'border-bottom pb-2 mb-2';
+            dataItem.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <strong>${getTypeName(type)}</strong>
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+                <div class="small text-muted">
+                    ${JSON.stringify(data, null, 2).substring(0, 200)}...
+                </div>
+            `;
+            
+            container.insertBefore(dataItem, container.firstChild);
+            
+            // 限制显示数量
+            while (container.children.length > 10) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // 更新消息计数
+        function updateMessageCount() {
+            document.getElementById('messageCount').textContent = messageCount;
+        }
+
+        // 添加消息到日志
+        function addMessage(type, message) {
+            const messageLog = document.getElementById('messageLog');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const messageItem = document.createElement('div');
+            messageItem.className = `message-item message-${type}`;
+            messageItem.innerHTML = `[${timestamp}] ${message}`;
+            
+            messageLog.appendChild(messageItem);
+            messageLog.scrollTop = messageLog.scrollHeight;
+            
+            // 限制消息数量
+            while (messageLog.children.length > 100) {
+                messageLog.removeChild(messageLog.firstChild);
+            }
+        }
+
+        // 清空消息日志
+        function clearMessageLog() {
+            document.getElementById('messageLog').innerHTML = '';
+            messageCount = 0;
+            updateMessageCount();
+        }
+
+        // 绑定按钮事件
+        document.getElementById('connectBtn').onclick = connectWebSocket;
+        document.getElementById('disconnectBtn').onclick = disconnectWebSocket;
+    </script>
+</body>
+</html> 

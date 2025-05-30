@@ -1,0 +1,61 @@
+# Web框架
+Flask>=2.3.0
+Flask-RESTful>=0.3.10
+Flask-CORS>=4.0.0
+
+# 数据库相关
+SQLAlchemy>=2.0.0
+PyMySQL>=1.1.0
+Flask-SQLAlchemy>=3.0.0
+
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+# TA-Lib==0.4.28  # 暂时注释，有兼容性问题
+
+# 可视化
+matplotlib>=3.7.0
+mplfinance==0.12.10b0
+plotly>=5.17.0
+
+# 定时任务
+APScheduler>=3.10.0
+
+# 缓存
+redis>=5.0.0
+
+# 配置管理
+python-dotenv>=1.0.0
+
+# 日志
+loguru>=0.7.0
+
+# 工具库
+requests>=2.31.0
+python-dateutil>=2.8.0
+
+# 自然语言处理
+jieba>=0.42.1
+
+# 机器学习相关
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+lightgbm>=4.0.0
+
+# 因子计算
+# empyrical>=0.5.5  # 暂时注释，有兼容性问题
+quantlib-python>=1.32  # 替代方案
+
+# 数值计算增强
+scipy>=1.11.0
+statsmodels>=0.14.0
+
+# 表达式解析
+sympy>=1.12
+# numexpr>=2.8.0  # 暂时注释，简化依赖
+
+# 并行计算
+joblib>=1.3.0
+
+# 组合优化
+cvxpy>=1.4.0 

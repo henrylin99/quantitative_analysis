@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}因子管理 - 多因子模型系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>🧠 因子管理</h1>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="calculateAllFactors()">
+                        <i class="fas fa-calculator"></i> 计算因子
+                    </button>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createFactorModal">
+                        <i class="fas fa-plus"></i> 创建自定义因子
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 因子统计 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-primary" id="total-factors">--</h3>
+                    <p class="card-text">总因子数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-success" id="builtin-factors">--</h3>
+                    <p class="card-text">内置因子</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-warning" id="custom-factors">--</h3>
+                    <p class="card-text">自定义因子</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-info" id="active-factors">--</h3>
+                    <p class="card-text">活跃因子</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 因子筛选 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="factorTypeFilter" class="form-label">因子类型</label>
+                            <select class="form-select" id="factorTypeFilter">
+                                <option value="">全部类型</option>
+                                <option value="technical">技术面</option>
+                                <option value="fundamental">基本面</option>
+                                <option value="money_flow">资金面</option>
+                                <option value="chip">筹码面</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="factorSourceFilter" class="form-label">因子来源</label>
+                            <select class="form-select" id="factorSourceFilter">
+                                <option value="">全部来源</option>
+                                <option value="builtin">内置因子</option>
+                                <option value="custom">自定义因子</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="factorStatusFilter" class="form-label">状态</label>
+                            <select class="form-select" id="factorStatusFilter">
+                                <option value="">全部状态</option>
+                                <option value="active">活跃</option>
+                                <option value="inactive">非活跃</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="searchInput" class="form-label">搜索</label>
+                            <input type="text" class="form-control" id="searchInput" placeholder="搜索因子名称或ID">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 因子列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">因子列表</h5>
+                </div>
+                <div class="card-body">
+                    <div id="factorsList">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 创建因子模态框 -->
+<div class="modal fade" id="createFactorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建自定义因子</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createFactorForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="factorId" class="form-label">因子ID *</label>
+                                <input type="text" class="form-control" id="factorId" required>
+                                <div class="form-text">唯一标识符，只能包含字母、数字和下划线</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="factorName" class="form-label">因子名称 *</label>
+                                <input type="text" class="form-control" id="factorName" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="factorType" class="form-label">因子类型 *</label>
+                                <select class="form-select" id="factorType" required>
+                                    <option value="">请选择类型</option>
+                                    <option value="technical">技术面</option>
+                                    <option value="fundamental">基本面</option>
+                                    <option value="money_flow">资金面</option>
+                                    <option value="chip">筹码面</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="factorFormula" class="form-label">因子公式 *</label>
+                                <input type="text" class="form-control" id="factorFormula" required>
+                                <div class="form-text">例如: (close - ma20) / ma20</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="factorDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="factorDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createFactor()">创建因子</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allFactors = [];
+let filteredFactors = [];
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadFactors();
+    
+    // 绑定筛选事件
+    document.getElementById('factorTypeFilter').addEventListener('change', filterFactors);
+    document.getElementById('factorSourceFilter').addEventListener('change', filterFactors);
+    document.getElementById('factorStatusFilter').addEventListener('change', filterFactors);
+    document.getElementById('searchInput').addEventListener('input', filterFactors);
+});
+
+// 加载因子列表
+async function loadFactors() {
+    try {
+        const response = await axios.get('/api/ml-factor/factors/list');
+        if (response.data.success) {
+            // 处理真实数据，添加is_builtin字段
+            allFactors = response.data.factors.map(factor => ({
+                ...factor,
+                is_builtin: true, // 目前都是内置因子
+                is_active: factor.is_active !== false
+            }));
+            filteredFactors = [...allFactors];
+            updateStatistics();
+            renderFactors();
+        } else {
+            showError('factorsList', '加载因子列表失败');
+        }
+    } catch (error) {
+        console.error('加载因子列表失败:', error);
+        // 如果API失败，显示错误信息
+        showError('factorsList', '加载因子列表失败，请检查服务器连接: ' + error.message);
+    }
+}
+
+// 更新统计信息
+function updateStatistics() {
+    const totalFactors = allFactors.length;
+    const builtinFactors = allFactors.filter(f => f.is_builtin).length;
+    const customFactors = allFactors.filter(f => !f.is_builtin).length;
+    const activeFactors = allFactors.filter(f => f.is_active).length;
+    
+    document.getElementById('total-factors').textContent = totalFactors;
+    document.getElementById('builtin-factors').textContent = builtinFactors;
+    document.getElementById('custom-factors').textContent = customFactors;
+    document.getElementById('active-factors').textContent = activeFactors;
+}
+
+// 筛选因子
+function filterFactors() {
+    const typeFilter = document.getElementById('factorTypeFilter').value;
+    const sourceFilter = document.getElementById('factorSourceFilter').value;
+    const statusFilter = document.getElementById('factorStatusFilter').value;
+    const searchText = document.getElementById('searchInput').value.toLowerCase();
+    
+    filteredFactors = allFactors.filter(factor => {
+        // 类型筛选
+        if (typeFilter && factor.factor_type !== typeFilter) return false;
+        
+        // 来源筛选
+        if (sourceFilter === 'builtin' && !factor.is_builtin) return false;
+        if (sourceFilter === 'custom' && factor.is_builtin) return false;
+        
+        // 状态筛选
+        if (statusFilter === 'active' && !factor.is_active) return false;
+        if (statusFilter === 'inactive' && factor.is_active) return false;
+        
+        // 搜索筛选
+        if (searchText && 
+            !factor.factor_id.toLowerCase().includes(searchText) &&
+            !factor.factor_name.toLowerCase().includes(searchText)) return false;
+        
+        return true;
+    });
+    
+    renderFactors();
+}
+
+// 渲染因子列表
+function renderFactors() {
+    const container = document.getElementById('factorsList');
+    
+    if (filteredFactors.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">没有找到匹配的因子</div>';
+        return;
+    }
+    
+    const html = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>因子ID</th>
+                        <th>因子名称</th>
+                        <th>类型</th>
+                        <th>来源</th>
+                        <th>状态</th>
+                        <th>描述</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filteredFactors.map(factor => `
+                        <tr>
+                            <td><code>${factor.factor_id}</code></td>
+                            <td>${factor.factor_name}</td>
+                            <td>
+                                <span class="badge bg-${getTypeColor(factor.factor_type)}">
+                                    ${getTypeLabel(factor.factor_type)}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-${factor.is_builtin ? 'primary' : 'secondary'}">
+                                    ${factor.is_builtin ? '内置' : '自定义'}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-${factor.is_active ? 'success' : 'danger'}">
+                                    ${factor.is_active ? '活跃' : '非活跃'}
+                                </span>
+                            </td>
+                            <td>${factor.description || '--'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewFactor('${factor.factor_id}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                ${!factor.is_builtin ? `
+                                    <button class="btn btn-sm btn-outline-warning" onclick="editFactor('${factor.factor_id}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteFactor('${factor.factor_id}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 获取类型颜色
+function getTypeColor(type) {
+    const colors = {
+        'technical': 'primary',
+        'fundamental': 'success',
+        'money_flow': 'warning',
+        'chip': 'info',
+        'other': 'secondary'
+    };
+    return colors[type] || 'secondary';
+}
+
+// 获取类型标签
+function getTypeLabel(type) {
+    const labels = {
+        'technical': '技术面',
+        'fundamental': '基本面',
+        'money_flow': '资金面',
+        'chip': '筹码面',
+        'other': '其他'
+    };
+    return labels[type] || type;
+}
+
+// 创建因子
+async function createFactor() {
+    const form = document.getElementById('createFactorForm');
+    const formData = new FormData(form);
+    
+    const factorData = {
+        factor_id: document.getElementById('factorId').value,
+        factor_name: document.getElementById('factorName').value,
+        factor_type: document.getElementById('factorType').value,
+        factor_formula: document.getElementById('factorFormula').value,
+        description: document.getElementById('factorDescription').value
+    };
+    
+    // 验证必填字段
+    if (!factorData.factor_id || !factorData.factor_name || !factorData.factor_type || !factorData.factor_formula) {
+        alert('请填写所有必填字段');
+        return;
+    }
+    
+    try {
+        const response = await axios.post('/api/ml-factor/factors/custom', factorData);
+        if (response.data.success) {
+            alert('因子创建成功');
+            bootstrap.Modal.getInstance(document.getElementById('createFactorModal')).hide();
+            form.reset();
+            loadFactors(); // 重新加载因子列表
+        } else {
+            alert('创建失败: ' + response.data.error);
+        }
+    } catch (error) {
+        console.error('创建因子失败:', error);
+        alert('创建失败: ' + error.message);
+    }
+}
+
+// 查看因子详情
+function viewFactor(factorId) {
+    const factor = allFactors.find(f => f.factor_id === factorId);
+    if (factor) {
+        alert(`因子详情:\n\nID: ${factor.factor_id}\n名称: ${factor.factor_name}\n类型: ${getTypeLabel(factor.factor_type)}\n描述: ${factor.description || '无'}\n${factor.formula ? '公式: ' + factor.formula : ''}`);
+    }
+}
+
+// 编辑因子
+function editFactor(factorId) {
+    alert('编辑功能待实现');
+}
+
+// 删除因子
+function deleteFactor(factorId) {
+    if (confirm('确定要删除这个因子吗？')) {
+        alert('删除功能待实现');
+    }
+}
+
+// 计算所有因子
+async function calculateAllFactors() {
+    if (!confirm('确定要计算所有因子吗？这可能需要一些时间。')) {
+        return;
+    }
+    
+    try {
+        // 获取最新交易日期
+        const today = new Date().toISOString().split('T')[0];
+        
+        const response = await axios.post('/api/ml-factor/factors/calculate', {
+            trade_date: today,
+            factor_ids: [], // 空数组表示计算所有因子
+            ts_codes: [] // 空数组表示计算所有股票
+        });
+        
+        if (response.data.success) {
+            alert(`因子计算完成！\n交易日期: ${response.data.trade_date}\n计算结果: ${JSON.stringify(response.data.results, null, 2)}`);
+        } else {
+            alert('因子计算失败: ' + response.data.error);
+        }
+    } catch (error) {
+        console.error('计算因子失败:', error);
+        alert('计算因子失败: ' + error.message);
+    }
+}
+
+// 显示错误信息
+function showError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+    }
+}
+</script>
+{% endblock %} 

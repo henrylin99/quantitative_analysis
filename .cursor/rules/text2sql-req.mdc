@@ -1,0 +1,596 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Text2SQL功能开发计划
+
+## 📋 项目概述
+在现有多因子模型系统基础上，集成text2sql功能，让用户通过自然语言查询股票数据和因子信息，实现智能化的数据分析和投资决策支持。
+
+## 🎯 功能点分析
+
+### 1. 核心功能模块
+
+#### 1.1 自然语言理解模块 (NLU)
+- [x] **意图识别** - 识别用户查询意图（股票筛选、因子分析、技术指标查询等）
+- [x] **实体抽取** - 提取股票代码、日期、数值范围、技术指标名称等
+- [x] **语义解析** - 理解复杂的查询条件和逻辑关系
+- [x] **上下文管理** - 支持多轮对话和上下文相关查询
+
+#### 1.2 SQL生成模块
+- [x] **模板匹配** - 基于预定义模板生成SQL
+- [x] **动态SQL构建** - 根据解析结果动态构建复杂查询
+- [x] **多表关联** - 支持跨表查询和复杂JOIN操作
+- [x] **查询优化** - SQL性能优化和执行计划分析
+
+#### 1.3 结果处理模块
+- [x] **数据格式化** - 将查询结果转换为用户友好的格式
+- [x] **图表生成** - 自动生成相关的可视化图表
+- [x] **结果解释** - 提供查询结果的业务解释
+- [x] **导出功能** - 支持多种格式的数据导出
+
+### 2. 数据集成模块
+
+#### 2.1 数据源整合
+- [x] **股票基础数据** - 整合stock_basic、stock_daily_history等表
+- [x] **技术指标数据** - 整合stock_factor、stock_ma_data等技术面数据
+- [x] **基本面数据** - 整合财务报表数据（利润表、资产负债表、现金流量表）
+- [x] **资金流向数据** - 整合stock_moneyflow、stock_moneyflow_ths等资金面数据
+- [x] **因子数据** - 整合factor_values、factor_definition等ML因子数据
+
+#### 2.2 数据映射和元数据管理
+- [x] **字段映射表** - 建立自然语言到数据库字段的映射关系
+- [x] **业务词典** - 维护股票、指标、行业等业务术语词典
+- [x] **数据血缘** - 追踪数据来源和计算逻辑
+- [x] **数据质量监控** - 监控数据完整性和准确性
+
+## 🚀 开发计划
+
+### 第一阶段：基础架构搭建 (1-2周)
+
+#### 1.1 Text2SQL服务架构设计
+```python
+# app/services/text2sql_engine.py
+class Text2SQLEngine:
+    """Text2SQL引擎"""
+    
+    def __init__(self):
+        self.nlp_processor = NLPProcessor()
+        self.sql_generator = SQLGenerator()
+        self.query_executor = QueryExecutor()
+        self.result_formatter = ResultFormatter()
+    
+    def process_query(self, user_query: str) -> Dict[str, Any]:
+        """处理用户查询"""
+        # 1. 自然语言理解
+        intent_result = self.nlp_processor.parse_intent(user_query)
+        
+        # 2. SQL生成
+        sql_query = self.sql_generator.generate_sql(intent_result)
+        
+        # 3. 执行查询
+        query_result = self.query_executor.execute(sql_query)
+        
+        # 4. 结果格式化
+        formatted_result = self.result_formatter.format(query_result)
+        
+        return formatted_result
+```
+
+#### 1.2 数据库元数据管理
+```python
+# app/models/text2sql_metadata.py
+class TableMetadata(db.Model):
+    """表元数据"""
+    __tablename__ = 'table_metadata'
+    
+    table_name = db.Column(db.String(100), primary_key=True)
+    table_alias = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    business_domain = db.Column(db.String(50))  # 技术面、基本面、资金面等
+
+class FieldMetadata(db.Model):
+    """字段元数据"""
+    __tablename__ = 'field_metadata'
+    
+    table_name = db.Column(db.String(100), primary_key=True)
+    field_name = db.Column(db.String(100), primary_key=True)
+    field_alias = db.Column(db.String(100))
+    field_type = db.Column(db.String(50))
+    description = db.Column(db.Text)
+    business_meaning = db.Column(db.Text)
+    synonyms = db.Column(db.JSON)  # 同义词列表
+
+class QueryTemplate(db.Model):
+    """查询模板"""
+    __tablename__ = 'query_template'
+    
+    template_id = db.Column(db.String(50), primary_key=True)
+    template_name = db.Column(db.String(100))
+    intent_pattern = db.Column(db.Text)  # 意图匹配模式
+    sql_template = db.Column(db.Text)    # SQL模板
+    parameters = db.Column(db.JSON)      # 参数定义
+```
+
+### 第二阶段：自然语言处理 (2-3周)
+
+#### 2.1 意图识别和实体抽取
+```python
+# app/services/nlp_processor.py
+class NLPProcessor:
+    """自然语言处理器"""
+    
+    def __init__(self):
+        self.intent_classifier = IntentClassifier()
+        self.entity_extractor = EntityExtractor()
+        self.business_dict = BusinessDictionary()
+    
+    def parse_intent(self, user_query: str) -> Dict[str, Any]:
+        """解析用户意图"""
+        # 1. 预处理
+        cleaned_query = self._preprocess(user_query)
+        
+        # 2. 意图分类
+        intent = self.intent_classifier.classify(cleaned_query)
+        
+        # 3. 实体抽取
+        entities = self.entity_extractor.extract(cleaned_query)
+        
+        # 4. 业务术语标准化
+        normalized_entities = self.business_dict.normalize(entities)
+        
+        return {
+            'original_query': user_query,
+            'cleaned_query': cleaned_query,
+            'intent': intent,
+            'entities': normalized_entities,
+            'confidence': intent.get('confidence', 0.0)
+        }
+
+class IntentClassifier:
+    """意图分类器"""
+    
+    INTENT_PATTERNS = {
+        'stock_screening': [
+            r'筛选.*股票', r'找.*股票', r'哪些股票', r'股票.*条件',
+            r'涨幅.*股票', r'跌幅.*股票', r'成交量.*股票'
+        ],
+        'factor_analysis': [
+            r'因子.*分析', r'.*因子.*排名', r'因子.*分布',
+            r'技术指标.*分析', r'基本面.*分析'
+        ],
+        'technical_indicator': [
+            r'MACD.*', r'KDJ.*', r'RSI.*', r'布林带.*',
+            r'均线.*', r'成交量.*', r'换手率.*'
+        ],
+        'fundamental_analysis': [
+            r'PE.*', r'PB.*', r'ROE.*', r'营收.*', r'利润.*',
+            r'市盈率.*', r'市净率.*', r'财务.*'
+        ],
+        'money_flow': [
+            r'资金流.*', r'大单.*', r'主力.*', r'机构.*',
+            r'净流入.*', r'净流出.*'
+        ]
+    }
+```
+
+#### 2.2 业务词典和同义词管理
+```python
+# app/services/business_dictionary.py
+class BusinessDictionary:
+    """业务词典"""
+    
+    def __init__(self):
+        self.stock_synonyms = {
+            '股票代码': ['代码', '证券代码', 'ts_code', '股票'],
+            '收盘价': ['收盘', '收价', 'close', '价格'],
+            '涨跌幅': ['涨幅', '跌幅', '涨跌', 'pct_change', '涨跌率'],
+            '成交量': ['量', 'vol', 'volume', '交易量'],
+            '成交额': ['额', 'amount', '交易额', '成交金额'],
+            '市盈率': ['PE', 'pe_ttm', 'P/E'],
+            '市净率': ['PB', 'pb', 'P/B'],
+            '换手率': ['turnover_rate', '换手'],
+            'MACD': ['macd', 'MACD指标', 'macd_dif', 'macd_dea'],
+            'RSI': ['rsi', 'RSI指标', 'rsi_6', 'rsi_12', 'rsi_24'],
+            '均线': ['MA', 'ma', '移动平均线', 'ma5', 'ma10', 'ma20']
+        }
+        
+        self.condition_synonyms = {
+            '大于': ['>', '超过', '高于', '大于等于', '>='],
+            '小于': ['<', '低于', '少于', '小于等于', '<='],
+            '等于': ['=', '等于', '是', '为'],
+            '排序': ['排名', '排序', '排列', 'order by'],
+            '前': ['前', 'top', '最高', '最大'],
+            '后': ['后', 'bottom', '最低', '最小']
+        }
+```
+
+### 第三阶段：SQL生成引擎 (2-3周)
+
+#### 3.1 SQL模板系统
+```python
+# app/services/sql_generator.py
+class SQLGenerator:
+    """SQL生成器"""
+    
+    def __init__(self):
+        self.template_manager = TemplateManager()
+        self.query_builder = QueryBuilder()
+    
+    def generate_sql(self, intent_result: Dict[str, Any]) -> str:
+        """生成SQL查询"""
+        intent = intent_result['intent']['name']
+        entities = intent_result['entities']
+        
+        # 1. 选择合适的模板
+        template = self.template_manager.get_template(intent, entities)
+        
+        # 2. 构建SQL
+        if template:
+            sql = self._build_from_template(template, entities)
+        else:
+            sql = self.query_builder.build_dynamic_sql(intent, entities)
+        
+        # 3. SQL优化
+        optimized_sql = self._optimize_sql(sql)
+        
+        return optimized_sql
+
+class TemplateManager:
+    """模板管理器"""
+    
+    TEMPLATES = {
+        'stock_screening_by_price': {
+            'pattern': r'收盘价.*大于.*的股票',
+            'sql': '''
+                SELECT ts_code, stock_name, close, pct_change, vol
+                FROM stock_business 
+                WHERE close > {price_threshold}
+                ORDER BY close DESC
+                LIMIT {limit}
+            ''',
+            'parameters': ['price_threshold', 'limit']
+        },
+        
+        'stock_screening_by_pct_change': {
+            'pattern': r'涨幅.*大于.*的股票',
+            'sql': '''
+                SELECT ts_code, stock_name, daily_close, factor_pct_change, vol
+                FROM stock_business 
+                WHERE factor_pct_change > {pct_threshold}
+                ORDER BY factor_pct_change DESC
+                LIMIT {limit}
+            ''',
+            'parameters': ['pct_threshold', 'limit']
+        },
+        
+        'technical_indicator_analysis': {
+            'pattern': r'MACD.*金叉.*股票',
+            'sql': '''
+                SELECT sb.ts_code, sb.stock_name, sf.macd_dif, sf.macd_dea, sf.macd
+                FROM stock_business sb
+                JOIN stock_factor sf ON sb.ts_code = sf.ts_code
+                WHERE sf.macd_dif > sf.macd_dea 
+                AND sf.trade_date = (
+                    SELECT MAX(trade_date) FROM stock_factor WHERE ts_code = sb.ts_code
+                )
+                ORDER BY sf.macd DESC
+                LIMIT {limit}
+            ''',
+            'parameters': ['limit']
+        }
+    }
+```
+
+#### 3.2 动态SQL构建器
+```python
+# app/services/query_builder.py
+class QueryBuilder:
+    """动态查询构建器"""
+    
+    def build_dynamic_sql(self, intent: str, entities: Dict[str, Any]) -> str:
+        """动态构建SQL"""
+        
+        # 1. 确定主表
+        main_table = self._determine_main_table(intent, entities)
+        
+        # 2. 构建SELECT子句
+        select_clause = self._build_select_clause(entities)
+        
+        # 3. 构建FROM子句（包含JOIN）
+        from_clause = self._build_from_clause(main_table, entities)
+        
+        # 4. 构建WHERE子句
+        where_clause = self._build_where_clause(entities)
+        
+        # 5. 构建ORDER BY子句
+        order_clause = self._build_order_clause(entities)
+        
+        # 6. 构建LIMIT子句
+        limit_clause = self._build_limit_clause(entities)
+        
+        sql = f"""
+            {select_clause}
+            {from_clause}
+            {where_clause}
+            {order_clause}
+            {limit_clause}
+        """
+        
+        return sql.strip()
+    
+    def _determine_main_table(self, intent: str, entities: Dict[str, Any]) -> str:
+        """确定主表"""
+        if intent in ['stock_screening', 'fundamental_analysis']:
+            return 'stock_business'
+        elif intent == 'technical_indicator':
+            return 'stock_factor'
+        elif intent == 'money_flow':
+            return 'stock_moneyflow'
+        elif intent == 'factor_analysis':
+            return 'factor_values'
+        else:
+            return 'stock_business'  # 默认主表
+```
+
+### 第四阶段：Web界面集成 (1-2周)
+
+#### 4.1 Text2SQL页面
+```html
+<!-- app/templates/ml_factor/text2sql.html -->
+<div class="container-fluid">
+    <div class="row">
+        <!-- 查询输入区域 -->
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-comments"></i> 智能查询助手</h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="queryInput" 
+                               placeholder="请输入您的查询，例如：找出涨幅大于5%的股票">
+                        <button class="btn btn-primary" type="button" id="queryBtn">
+                            <i class="fas fa-search"></i> 查询
+                        </button>
+                    </div>
+                    
+                    <!-- 查询建议 -->
+                    <div class="query-suggestions">
+                        <small class="text-muted">查询示例：</small>
+                        <div class="mt-2">
+                            <span class="badge bg-light text-dark me-2 query-example">找出收盘价大于100元的股票</span>
+                            <span class="badge bg-light text-dark me-2 query-example">MACD金叉的股票有哪些</span>
+                            <span class="badge bg-light text-dark me-2 query-example">PE小于20的股票排名</span>
+                            <span class="badge bg-light text-dark me-2 query-example">资金净流入最多的10只股票</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 查询结果区域 -->
+    <div class="row mt-4" id="resultArea" style="display: none;">
+        <!-- SQL解析结果 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6><i class="fas fa-code"></i> 查询解析</h6>
+                </div>
+                <div class="card-body">
+                    <div id="intentResult"></div>
+                    <div id="sqlResult"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 数据结果 -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <h6><i class="fas fa-table"></i> 查询结果</h6>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary" id="exportBtn">
+                            <i class="fas fa-download"></i> 导出
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" id="chartBtn">
+                            <i class="fas fa-chart-bar"></i> 图表
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="dataTable"></div>
+                    <div id="chartContainer" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+#### 4.2 API接口
+```python
+# app/api/text2sql_api.py
+@text2sql_bp.route('/query', methods=['POST'])
+def process_query():
+    """处理自然语言查询"""
+    try:
+        data = request.get_json()
+        user_query = data.get('query', '').strip()
+        
+        if not user_query:
+            return jsonify({'error': '查询内容不能为空'}), 400
+        
+        # 处理查询
+        result = get_text2sql_engine().process_query(user_query)
+        
+        return jsonify({
+            'success': True,
+            'query': user_query,
+            'intent': result['intent'],
+            'sql': result['sql'],
+            'data': result['data'],
+            'chart_config': result.get('chart_config'),
+            'explanation': result.get('explanation')
+        })
+        
+    except Exception as e:
+        logger.error(f"处理查询失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@text2sql_bp.route('/suggestions', methods=['GET'])
+def get_query_suggestions():
+    """获取查询建议"""
+    try:
+        suggestions = get_text2sql_engine().get_query_suggestions()
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+```
+
+### 第五阶段：测试和优化 (1-2周)
+
+#### 5.1 测试用例设计
+```python
+# tests/test_text2sql.py
+class TestText2SQL:
+    """Text2SQL功能测试"""
+    
+    def test_stock_screening_queries(self):
+        """测试股票筛选查询"""
+        test_cases = [
+            {
+                'query': '找出收盘价大于100元的股票',
+                'expected_intent': 'stock_screening',
+                'expected_entities': {'price_threshold': 100, 'field': 'close'}
+            },
+            {
+                'query': '涨幅超过5%的股票有哪些',
+                'expected_intent': 'stock_screening',
+                'expected_entities': {'pct_threshold': 5, 'field': 'pct_change'}
+            }
+        ]
+        
+        for case in test_cases:
+            result = self.text2sql_engine.process_query(case['query'])
+            assert result['intent']['name'] == case['expected_intent']
+    
+    def test_technical_indicator_queries(self):
+        """测试技术指标查询"""
+        test_cases = [
+            'MACD金叉的股票',
+            'RSI超买的股票',
+            '布林带突破的股票',
+            '均线多头排列的股票'
+        ]
+        
+        for query in test_cases:
+            result = self.text2sql_engine.process_query(query)
+            assert result['intent']['name'] == 'technical_indicator'
+            assert len(result['data']) > 0
+```
+
+## 📊 数据表设计
+
+### Text2SQL元数据表
+```sql
+-- 表元数据
+CREATE TABLE `table_metadata` (
+  `table_name` varchar(100) NOT NULL COMMENT '表名',
+  `table_alias` varchar(100) COMMENT '表别名',
+  `description` text COMMENT '表描述',
+  `business_domain` varchar(50) COMMENT '业务域',
+  `is_active` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`table_name`)
+) COMMENT='表元数据';
+
+-- 字段元数据
+CREATE TABLE `field_metadata` (
+  `table_name` varchar(100) NOT NULL,
+  `field_name` varchar(100) NOT NULL,
+  `field_alias` varchar(100) COMMENT '字段别名',
+  `field_type` varchar(50) COMMENT '字段类型',
+  `description` text COMMENT '字段描述',
+  `business_meaning` text COMMENT '业务含义',
+  `synonyms` json COMMENT '同义词',
+  `is_active` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`table_name`, `field_name`)
+) COMMENT='字段元数据';
+
+-- 查询模板
+CREATE TABLE `query_template` (
+  `template_id` varchar(50) NOT NULL,
+  `template_name` varchar(100) NOT NULL,
+  `intent_pattern` text COMMENT '意图匹配模式',
+  `sql_template` text COMMENT 'SQL模板',
+  `parameters` json COMMENT '参数定义',
+  `usage_count` int DEFAULT 0 COMMENT '使用次数',
+  `is_active` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`template_id`)
+) COMMENT='查询模板';
+
+-- 查询历史
+CREATE TABLE `query_history` (
+  `id` bigint AUTO_INCREMENT,
+  `user_query` text NOT NULL COMMENT '用户查询',
+  `intent` varchar(50) COMMENT '识别意图',
+  `generated_sql` text COMMENT '生成的SQL',
+  `execution_time` decimal(10,3) COMMENT '执行时间(秒)',
+  `result_count` int COMMENT '结果数量',
+  `is_successful` tinyint(1) COMMENT '是否成功',
+  `error_message` text COMMENT '错误信息',
+  `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) COMMENT='查询历史';
+```
+
+## 🎯 功能特性
+
+### 支持的查询类型
+
+#### 1. 股票筛选查询
+- "找出涨幅大于5%的股票"
+- "收盘价在50-100元之间的股票"
+- "成交量前20名的股票"
+- "市盈率小于20的股票"
+
+#### 2. 技术指标查询
+- "MACD金叉的股票有哪些"
+- "RSI超买的股票"
+- "布林带上轨突破的股票"
+- "5日均线上穿20日均线的股票"
+
+#### 3. 基本面分析
+- "ROE大于15%的股票"
+- "营收增长率最高的10只股票"
+- "负债率最低的股票"
+- "现金流最好的股票"
+
+#### 4. 资金流向分析
+- "主力资金净流入最多的股票"
+- "大单买入比例最高的股票"
+- "连续3天资金净流入的股票"
+
+#### 5. 因子分析
+- "动量因子排名前50的股票"
+- "价值因子得分最高的股票"
+- "质量因子表现最好的行业"
+
+## 📈 预期效果
+
+### 用户体验提升
+- **查询效率提升80%** - 从复杂SQL编写到自然语言输入
+- **学习成本降低90%** - 无需掌握SQL语法和数据库结构
+- **查询准确性提升** - 智能纠错和建议功能
+
+### 系统能力增强
+- **查询覆盖率95%** - 支持绝大多数常见查询场景
+- **响应时间<2秒** - 快速的意图识别和SQL生成
+- **扩展性强** - 易于添加新的查询模板和业务规则
+
+这个开发计划将Text2SQL功能与现有的多因子模型系统深度集成，为用户提供强大的智能查询能力，大大提升系统的易用性和实用性。

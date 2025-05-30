@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+
+{% block title %}策略回测 - 股票分析系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h2">📊 策略回测</h1>
+            <p class="text-muted">基于历史数据验证投资策略的表现</p>
+        </div>
+    </div>
+
+    <!-- 策略配置 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">回测配置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="backtest-form">
+                        <div class="row g-3">
+                            <!-- 股票选择 -->
+                            <div class="col-md-6">
+                                <label for="stock-select" class="form-label">选择股票 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="stock-select" required>
+                                    <option value="">请选择要回测的股票</option>
+                                </select>
+                            </div>
+                            
+                            <!-- 策略类型 -->
+                            <div class="col-md-6">
+                                <label for="strategy-type" class="form-label">策略类型 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="strategy-type" required>
+                                    <option value="">选择策略类型</option>
+                                    <option value="ma_cross">均线交叉策略</option>
+                                    <option value="macd">MACD策略</option>
+                                    <option value="kdj">KDJ策略</option>
+                                    <option value="rsi">RSI策略</option>
+                                    <option value="bollinger">布林带策略</option>
+                                </select>
+                            </div>
+
+                            <!-- 时间范围 -->
+                            <div class="col-md-6">
+                                <label for="start-date" class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="start-date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="end-date" class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="end-date" required>
+                            </div>
+
+                            <!-- 资金配置 -->
+                            <div class="col-md-6">
+                                <label for="initial-capital" class="form-label">初始资金(元)</label>
+                                <input type="number" class="form-control" id="initial-capital" value="100000" min="10000" step="1000">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="commission-rate" class="form-label">手续费率(%)</label>
+                                <input type="number" class="form-control" id="commission-rate" value="0.1" step="0.01" min="0" max="1">
+                            </div>
+
+                            <!-- 策略参数 -->
+                            <div class="col-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">策略参数</h6>
+                                        <div id="strategy-params">
+                                            <p class="text-muted">请先选择策略类型</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 操作按钮 -->
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="fas fa-play"></i> 开始回测
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="reset-backtest">
+                                    <i class="fas fa-redo"></i> 重置配置
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回测结果 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">回测结果</h5>
+                    <div id="backtest-status" class="badge bg-secondary">等待回测</div>
+                </div>
+                <div class="card-body">
+                    <div id="backtest-results">
+                        <div class="text-center py-5">
+                            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">请配置回测参数并点击"开始回测"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentStock = null;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('回测页面初始化...');
+    
+    initializeDates();
+    loadStockOptions();
+    
+    // 绑定事件
+    document.getElementById('backtest-form').addEventListener('submit', handleBacktest);
+    document.getElementById('reset-backtest').addEventListener('click', resetBacktest);
+    document.getElementById('strategy-type').addEventListener('change', updateStrategyParams);
+    document.getElementById('stock-select').addEventListener('change', handleStockChange);
+});
+
+// 初始化日期
+function initializeDates() {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(endDate.getFullYear() - 1); // 默认回测1年
+    
+    document.getElementById('end-date').value = endDate.toISOString().split('T')[0];
+    document.getElementById('start-date').value = startDate.toISOString().split('T')[0];
+}
+
+// 加载股票选项
+async function loadStockOptions() {
+    try {
+        console.log('加载股票选项...');
+        const response = await apiRequest('/stocks?page_size=100');
+        if (response.code === 200) {
+            const select = document.getElementById('stock-select');
+            select.innerHTML = '<option value="">请选择要回测的股票</option>';
+            
+            response.data.stocks.forEach(stock => {
+                const option = document.createElement('option');
+                option.value = stock.ts_code;
+                option.textContent = `${stock.symbol} - ${stock.name}`;
+                select.appendChild(option);
+            });
+            console.log('股票选项加载完成');
+        }
+    } catch (error) {
+        console.error('加载股票选项失败:', error);
+    }
+}
+
+// 处理股票选择变化
+function handleStockChange(event) {
+    currentStock = event.target.value;
+    console.log('选择股票:', currentStock);
+}
+
+// 更新策略参数
+function updateStrategyParams() {
+    const strategyType = document.getElementById('strategy-type').value;
+    const paramsContainer = document.getElementById('strategy-params');
+    
+    let paramsHtml = '';
+    
+    switch (strategyType) {
+        case 'ma_cross':
+            paramsHtml = `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">短期均线周期</label>
+                        <input type="number" class="form-control" id="ma-short" value="5" min="1" max="30">
+                        <div class="form-text">建议: 5-10天</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">长期均线周期</label>
+                        <input type="number" class="form-control" id="ma-long" value="20" min="10" max="100">
+                        <div class="form-text">建议: 20-60天</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <strong>策略说明:</strong> 当短期均线上穿长期均线时买入，下穿时卖出
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+        case 'macd':
+            paramsHtml = `
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">快线周期</label>
+                        <input type="number" class="form-control" id="macd-fast" value="12" min="5" max="30">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">慢线周期</label>
+                        <input type="number" class="form-control" id="macd-slow" value="26" min="15" max="50">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">信号线周期</label>
+                        <input type="number" class="form-control" id="macd-signal" value="9" min="5" max="20">
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <strong>策略说明:</strong> 当MACD线上穿信号线时买入，下穿时卖出
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+        case 'kdj':
+            paramsHtml = `
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">K值周期</label>
+                        <input type="number" class="form-control" id="kdj-period" value="9" min="5" max="20">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">超买阈值</label>
+                        <input type="number" class="form-control" id="kdj-overbought" value="80" min="70" max="90">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">超卖阈值</label>
+                        <input type="number" class="form-control" id="kdj-oversold" value="20" min="10" max="30">
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <strong>策略说明:</strong> 当KDJ从超卖区域向上突破时买入，从超买区域向下突破时卖出
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+        case 'rsi':
+            paramsHtml = `
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">RSI周期</label>
+                        <input type="number" class="form-control" id="rsi-period" value="14" min="6" max="30">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">超买阈值</label>
+                        <input type="number" class="form-control" id="rsi-overbought" value="70" min="60" max="80">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">超卖阈值</label>
+                        <input type="number" class="form-control" id="rsi-oversold" value="30" min="20" max="40">
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <strong>策略说明:</strong> 当RSI从超卖区域向上突破时买入，从超买区域向下突破时卖出
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+        case 'bollinger':
+            paramsHtml = `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">均线周期</label>
+                        <input type="number" class="form-control" id="boll-period" value="20" min="10" max="50">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">标准差倍数</label>
+                        <input type="number" class="form-control" id="boll-std" value="2" min="1" max="3" step="0.1">
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <strong>策略说明:</strong> 当价格触及下轨时买入，触及上轨时卖出
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
+        default:
+            paramsHtml = '<p class="text-muted">请先选择策略类型</p>';
+    }
+    
+    paramsContainer.innerHTML = paramsHtml;
+}
+
+// 处理回测
+async function handleBacktest(event) {
+    event.preventDefault();
+    
+    const tsCode = document.getElementById('stock-select').value;
+    const strategyType = document.getElementById('strategy-type').value;
+    
+    if (!tsCode) {
+        alert('请选择要回测的股票');
+        return;
+    }
+    
+    if (!strategyType) {
+        alert('请选择策略类型');
+        return;
+    }
+    
+    // 收集回测参数
+    const config = {
+        ts_code: tsCode,
+        strategy_type: strategyType,
+        start_date: document.getElementById('start-date').value,
+        end_date: document.getElementById('end-date').value,
+        initial_capital: parseFloat(document.getElementById('initial-capital').value),
+        commission_rate: parseFloat(document.getElementById('commission-rate').value) / 100,
+        params: collectStrategyParams(strategyType)
+    };
+    
+    console.log('开始回测，配置:', config);
+    await performBacktest(config);
+}
+
+// 收集策略参数
+function collectStrategyParams(strategyType) {
+    const params = {};
+    
+    switch (strategyType) {
+        case 'ma_cross':
+            params.ma_short = parseInt(document.getElementById('ma-short').value);
+            params.ma_long = parseInt(document.getElementById('ma-long').value);
+            break;
+        case 'macd':
+            params.fast = parseInt(document.getElementById('macd-fast').value);
+            params.slow = parseInt(document.getElementById('macd-slow').value);
+            params.signal = parseInt(document.getElementById('macd-signal').value);
+            break;
+        case 'kdj':
+            params.period = parseInt(document.getElementById('kdj-period').value);
+            params.overbought = parseInt(document.getElementById('kdj-overbought').value);
+            params.oversold = parseInt(document.getElementById('kdj-oversold').value);
+            break;
+        case 'rsi':
+            params.period = parseInt(document.getElementById('rsi-period').value);
+            params.overbought = parseInt(document.getElementById('rsi-overbought').value);
+            params.oversold = parseInt(document.getElementById('rsi-oversold').value);
+            break;
+        case 'bollinger':
+            params.period = parseInt(document.getElementById('boll-period').value);
+            params.std_dev = parseFloat(document.getElementById('boll-std').value);
+            break;
+    }
+    
+    return params;
+}
+
+// 执行回测
+async function performBacktest(config) {
+    const statusBadge = document.getElementById('backtest-status');
+    const resultsContainer = document.getElementById('backtest-results');
+    
+    // 显示加载状态
+    statusBadge.className = 'badge bg-warning';
+    statusBadge.textContent = '回测中...';
+    
+    resultsContainer.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">回测中...</span>
+            </div>
+            <p class="mt-3 text-muted">正在基于历史数据进行策略回测，请稍候...</p>
+        </div>
+    `;
+    
+    try {
+        console.log('调用回测API...');
+        const response = await apiRequest('/analysis/backtest', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: config
+        });
+        
+        if (response.code === 200) {
+            console.log('回测成功，结果:', response.data);
+            statusBadge.className = 'badge bg-success';
+            statusBadge.textContent = '回测完成';
+            renderBacktestResults(response.data, config);
+        } else {
+            throw new Error(response.message || '回测失败');
+        }
+    } catch (error) {
+        console.error('回测失败:', error);
+        statusBadge.className = 'badge bg-danger';
+        statusBadge.textContent = '回测失败';
+        
+        resultsContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <h6 class="alert-heading">回测失败</h6>
+                <p class="mb-0">错误信息: ${error.message}</p>
+                <hr>
+                <p class="mb-0">请检查网络连接或稍后重试</p>
+            </div>
+        `;
+    }
+}
+
+// 渲染回测结果
+function renderBacktestResults(results, config) {
+    const container = document.getElementById('backtest-results');
+    const perf = results.performance;
+    
+    // 获取股票信息
+    const stockSelect = document.getElementById('stock-select');
+    const stockName = stockSelect.options[stockSelect.selectedIndex].text;
+    
+    const html = `
+        <div class="row g-4">
+            <!-- 策略信息 -->
+            <div class="col-md-6">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-info-circle"></i> 策略信息</h6>
+                        <p class="mb-1"><strong>回测股票:</strong> ${stockName}</p>
+                        <p class="mb-1"><strong>策略类型:</strong> ${getStrategyTypeName(config.strategy_type)}</p>
+                        <p class="mb-1"><strong>回测期间:</strong> ${config.start_date} 至 ${config.end_date}</p>
+                        <p class="mb-0"><strong>初始资金:</strong> ¥${formatNumber(config.initial_capital, 0)}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 收益指标 -->
+            <div class="col-md-6">
+                <div class="card ${perf.total_return >= 0 ? 'bg-success' : 'bg-danger'} text-white">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-chart-line"></i> 收益指标</h6>
+                        <p class="mb-1"><strong>总收益率:</strong> ${formatPercent(perf.total_return)}</p>
+                        <p class="mb-1"><strong>年化收益率:</strong> ${formatPercent(perf.annual_return)}</p>
+                        <p class="mb-1"><strong>夏普比率:</strong> ${formatNumber(perf.sharpe_ratio, 2)}</p>
+                        <p class="mb-0"><strong>最大回撤:</strong> ${formatPercent(perf.max_drawdown)}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 交易统计 -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-exchange-alt"></i> 交易统计</h6>
+                        <p class="mb-1"><strong>总交易次数:</strong> ${perf.total_trades}</p>
+                        <p class="mb-1"><strong>盈利交易:</strong> ${perf.winning_trades}</p>
+                        <p class="mb-1"><strong>胜率:</strong> ${formatPercent(perf.win_rate)}</p>
+                        <p class="mb-0"><strong>平均持仓天数:</strong> ${perf.avg_holding_days} 天</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 风险指标 -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-shield-alt"></i> 风险指标</h6>
+                        <p class="mb-1"><strong>波动率:</strong> ${formatPercent(perf.volatility)}</p>
+                        <p class="mb-1"><strong>最终资金:</strong> ¥${formatNumber(perf.final_capital, 0)}</p>
+                        <p class="mb-1"><strong>手续费总计:</strong> ¥${formatNumber(perf.total_commission, 0)}</p>
+                        <p class="mb-0"><strong>基准收益率:</strong> ${formatPercent(perf.benchmark_return)}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 交易记录 -->
+        ${results.trades && results.trades.length > 0 ? `
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-list"></i> 交易记录 (最近10笔)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>操作</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>金额</th>
+                                    <th>收益率</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${results.trades.slice(0, 10).map(trade => `
+                                    <tr>
+                                        <td>${trade.date}</td>
+                                        <td>
+                                            <span class="badge ${trade.action === 'buy' ? 'bg-success' : 'bg-danger'}">
+                                                ${trade.action === 'buy' ? '买入' : '卖出'}
+                                            </span>
+                                        </td>
+                                        <td>¥${formatNumber(trade.price, 2)}</td>
+                                        <td>${trade.quantity}</td>
+                                        <td>¥${formatNumber(trade.amount, 0)}</td>
+                                        <td class="${trade.return_rate >= 0 ? 'text-success' : 'text-danger'}">
+                                            ${trade.return_rate ? formatPercent(trade.return_rate) : '--'}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+        
+        <div class="mt-4">
+            <div class="alert alert-info">
+                <h6 class="alert-heading"><i class="fas fa-info-circle"></i> 回测说明</h6>
+                <ul class="mb-0">
+                    <li>回测基于历史数据，不考虑流动性、滑点等实际交易成本</li>
+                    <li>策略信号基于收盘价计算，实际交易可能存在延迟</li>
+                    <li>回测结果仅供参考，不构成投资建议</li>
+                    <li>过往表现不代表未来收益</li>
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 获取策略类型名称
+function getStrategyTypeName(type) {
+    const names = {
+        'ma_cross': '均线交叉策略',
+        'macd': 'MACD策略',
+        'kdj': 'KDJ策略',
+        'rsi': 'RSI策略',
+        'bollinger': '布林带策略'
+    };
+    return names[type] || type;
+}
+
+// 重置回测
+function resetBacktest() {
+    document.getElementById('backtest-form').reset();
+    initializeDates();
+    updateStrategyParams();
+    
+    document.getElementById('backtest-status').className = 'badge bg-secondary';
+    document.getElementById('backtest-status').textContent = '等待回测';
+    
+    document.getElementById('backtest-results').innerHTML = `
+        <div class="text-center py-5">
+            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+            <p class="text-muted">请配置回测参数并点击"开始回测"</p>
+        </div>
+    `;
+}
+</script>
+{% endblock %} 

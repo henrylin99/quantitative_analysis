@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能查询助手 - Text2SQL</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .query-input-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+        }
+        
+        .query-suggestions {
+            margin-top: 1rem;
+        }
+        
+        .query-example {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .query-example:hover {
+            background-color: rgba(255, 255, 255, 0.2) !important;
+            transform: translateY(-2px);
+        }
+        
+        .result-section {
+            min-height: 400px;
+        }
+        
+        .intent-badge {
+            font-size: 0.8rem;
+        }
+        
+        .sql-code {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .data-table {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 1rem;
+        }
+        
+        .loading-spinner {
+            display: none;
+        }
+        
+        .history-item {
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        
+        .history-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .statistics-card {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .floating-action-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-robot me-2"></i>智能查询助手
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="showHistory()">
+                            <i class="fas fa-history me-1"></i>查询历史
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="showStatistics()">
+                            <i class="fas fa-chart-bar me-1"></i>统计信息
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="showHelp()">
+                            <i class="fas fa-question-circle me-1"></i>帮助
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 查询输入区域 -->
+    <section class="query-input-section">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="text-center mb-4">
+                        <h2><i class="fas fa-comments me-2"></i>智能查询助手</h2>
+                        <p class="lead">用自然语言查询股票数据，让数据分析变得简单</p>
+                    </div>
+                    
+                    <div class="card bg-transparent border-light">
+                        <div class="card-body">
+                            <div class="input-group mb-3">
+                                <input type="text" class="form-control form-control-lg" id="queryInput" 
+                                       placeholder="请输入您的查询，例如：找出涨幅大于5%的股票"
+                                       onkeypress="handleKeyPress(event)">
+                                <button class="btn btn-light btn-lg" type="button" id="queryBtn" onclick="processQuery()">
+                                    <i class="fas fa-search me-1"></i>查询
+                                </button>
+                            </div>
+                            
+                            <!-- 加载动画 -->
+                            <div class="text-center loading-spinner" id="loadingSpinner">
+                                <div class="spinner-border text-light" role="status">
+                                    <span class="visually-hidden">查询中...</span>
+                                </div>
+                                <p class="mt-2">正在处理您的查询...</p>
+                            </div>
+                            
+                            <!-- 查询建议 -->
+                            <div class="query-suggestions" id="querySuggestions">
+                                <small class="text-light opacity-75">查询示例：</small>
+                                <div class="mt-2" id="suggestionsList">
+                                    <!-- 动态加载建议 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 查询结果区域 -->
+    <section class="py-4">
+        <div class="container">
+            <div class="result-section" id="resultArea" style="display: none;">
+                <div class="row">
+                    <!-- 查询解析结果 -->
+                    <div class="col-lg-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="fas fa-code me-1"></i>查询解析</h6>
+                            </div>
+                            <div class="card-body">
+                                <!-- 意图识别 -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">识别意图：</label>
+                                    <div id="intentResult"></div>
+                                </div>
+                                
+                                <!-- 实体提取 -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">提取实体：</label>
+                                    <div id="entitiesResult"></div>
+                                </div>
+                                
+                                <!-- 生成的SQL -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">生成SQL：</label>
+                                    <div class="sql-code" id="sqlResult"></div>
+                                </div>
+                                
+                                <!-- 执行信息 -->
+                                <div>
+                                    <label class="form-label fw-bold">执行信息：</label>
+                                    <div id="executionInfo"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据结果 -->
+                    <div class="col-lg-8 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-table me-1"></i>查询结果</h6>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-light me-2" id="exportBtn" onclick="exportData()" style="display: none;">
+                                        <i class="fas fa-download me-1"></i>导出
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-light" id="chartBtn" onclick="toggleChart()" style="display: none;">
+                                        <i class="fas fa-chart-bar me-1"></i>图表
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 结果摘要 -->
+                                <div class="alert alert-info" id="resultSummary" style="display: none;"></div>
+                                
+                                <!-- 数据表格 -->
+                                <div class="data-table" id="dataTable"></div>
+                                
+                                <!-- 图表容器 -->
+                                <div class="chart-container" id="chartContainer" style="display: none;">
+                                    <canvas id="resultChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 错误提示 -->
+            <div class="alert alert-danger" id="errorAlert" style="display: none;">
+                <h6><i class="fas fa-exclamation-triangle me-1"></i>查询失败</h6>
+                <p id="errorMessage" class="mb-0"></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 查询历史模态框 -->
+    <div class="modal fade" id="historyModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-history me-2"></i>查询历史</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="historyList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计信息模态框 -->
+    <div class="modal fade" id="statisticsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-chart-bar me-2"></i>统计信息</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="statisticsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帮助模态框 -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-question-circle me-2"></i>使用帮助</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>支持的查询类型</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success me-2"></i>股票筛选查询</li>
+                                <li><i class="fas fa-check text-success me-2"></i>技术指标分析</li>
+                                <li><i class="fas fa-check text-success me-2"></i>基本面分析</li>
+                                <li><i class="fas fa-check text-success me-2"></i>资金流向分析</li>
+                                <li><i class="fas fa-check text-success me-2"></i>排名查询</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>查询示例</h6>
+                            <ul class="list-unstyled">
+                                <li><code>找出收盘价大于100元的股票</code></li>
+                                <li><code>涨幅超过5%的股票有哪些</code></li>
+                                <li><code>MACD金叉的股票</code></li>
+                                <li><code>市盈率小于20的股票排名</code></li>
+                                <li><code>资金净流入最多的10只股票</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮动操作按钮 -->
+    <div class="floating-action-btn">
+        <button class="btn btn-primary rounded-circle" onclick="clearAll()" title="清空结果">
+            <i class="fas fa-trash"></i>
+        </button>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 全局变量
+        let currentResult = null;
+        let currentChart = null;
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSuggestions();
+        });
+
+        // 处理回车键
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                processQuery();
+            }
+        }
+
+        // 加载查询建议
+        function loadSuggestions() {
+            fetch('/api/text2sql/suggestions')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displaySuggestions(data.suggestions);
+                    }
+                })
+                .catch(error => {
+                    console.error('加载建议失败:', error);
+                });
+        }
+
+        // 显示查询建议
+        function displaySuggestions(suggestions) {
+            const suggestionsList = document.getElementById('suggestionsList');
+            suggestionsList.innerHTML = '';
+            
+            suggestions.forEach(suggestion => {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-light text-dark me-2 mb-2 query-example';
+                badge.textContent = suggestion.text;
+                badge.title = suggestion.description;
+                badge.onclick = () => {
+                    document.getElementById('queryInput').value = suggestion.text;
+                };
+                suggestionsList.appendChild(badge);
+            });
+        }
+
+        // 处理查询
+        function processQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            
+            if (!query) {
+                alert('请输入查询内容');
+                return;
+            }
+
+            // 显示加载动画
+            showLoading(true);
+            hideResults();
+
+            // 发送查询请求
+            fetch('/api/text2sql/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                
+                if (data.success) {
+                    currentResult = data;
+                    displayResults(data);
+                } else {
+                    displayError(data.error);
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                displayError('网络请求失败: ' + error.message);
+            });
+        }
+
+        // 显示/隐藏加载动画
+        function showLoading(show) {
+            const spinner = document.getElementById('loadingSpinner');
+            const suggestions = document.getElementById('querySuggestions');
+            
+            if (show) {
+                spinner.style.display = 'block';
+                suggestions.style.display = 'none';
+            } else {
+                spinner.style.display = 'none';
+                suggestions.style.display = 'block';
+            }
+        }
+
+        // 显示查询结果
+        function displayResults(data) {
+            // 显示结果区域
+            document.getElementById('resultArea').style.display = 'block';
+            document.getElementById('errorAlert').style.display = 'none';
+
+            // 显示意图识别结果
+            displayIntent(data.intent);
+
+            // 显示实体提取结果
+            displayEntities(data.entities);
+
+            // 显示SQL
+            displaySQL(data.sql);
+
+            // 显示执行信息
+            displayExecutionInfo(data);
+
+            // 显示数据结果
+            displayDataTable(data.data);
+
+            // 显示结果摘要
+            if (data.formatted_data && data.formatted_data.summary) {
+                displaySummary(data.formatted_data.summary);
+            }
+
+            // 显示图表按钮
+            if (data.chart_config) {
+                document.getElementById('chartBtn').style.display = 'inline-block';
+            }
+
+            // 显示导出按钮
+            if (data.data && data.data.length > 0) {
+                document.getElementById('exportBtn').style.display = 'inline-block';
+            }
+        }
+
+        // 显示意图识别结果
+        function displayIntent(intent) {
+            const intentResult = document.getElementById('intentResult');
+            const confidence = Math.round(intent.confidence * 100);
+            
+            intentResult.innerHTML = `
+                <span class="badge bg-primary intent-badge">${intent.name}</span>
+                <small class="text-muted ms-2">置信度: ${confidence}%</small>
+            `;
+        }
+
+        // 显示实体提取结果
+        function displayEntities(entities) {
+            const entitiesResult = document.getElementById('entitiesResult');
+            let html = '';
+            
+            for (const [key, value] of Object.entries(entities)) {
+                if (Array.isArray(value)) {
+                    html += `<div><strong>${key}:</strong> ${value.join(', ')}</div>`;
+                } else if (typeof value === 'object') {
+                    html += `<div><strong>${key}:</strong> ${JSON.stringify(value)}</div>`;
+                } else {
+                    html += `<div><strong>${key}:</strong> ${value}</div>`;
+                }
+            }
+            
+            entitiesResult.innerHTML = html || '<span class="text-muted">无</span>';
+        }
+
+        // 显示SQL
+        function displaySQL(sql) {
+            document.getElementById('sqlResult').textContent = sql;
+        }
+
+        // 显示执行信息
+        function displayExecutionInfo(data) {
+            const executionInfo = document.getElementById('executionInfo');
+            executionInfo.innerHTML = `
+                <div><strong>执行时间:</strong> ${data.execution_time.toFixed(3)}秒</div>
+                <div><strong>结果数量:</strong> ${data.result_count}条</div>
+                ${data.explanation ? `<div><strong>查询说明:</strong> ${data.explanation}</div>` : ''}
+            `;
+        }
+
+        // 显示数据表格
+        function displayDataTable(data) {
+            const dataTable = document.getElementById('dataTable');
+            
+            if (!data || data.length === 0) {
+                dataTable.innerHTML = '<p class="text-muted">没有找到匹配的数据</p>';
+                return;
+            }
+
+            // 创建表格
+            let html = '<table class="table table-striped table-hover"><thead class="table-dark"><tr>';
+            
+            // 表头
+            const columns = Object.keys(data[0]);
+            columns.forEach(column => {
+                html += `<th>${column}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            // 表格数据
+            data.forEach(row => {
+                html += '<tr>';
+                columns.forEach(column => {
+                    const value = row[column];
+                    html += `<td>${value !== null && value !== undefined ? value : '-'}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            dataTable.innerHTML = html;
+        }
+
+        // 显示结果摘要
+        function displaySummary(summary) {
+            const summaryElement = document.getElementById('resultSummary');
+            summaryElement.textContent = summary;
+            summaryElement.style.display = 'block';
+        }
+
+        // 显示错误信息
+        function displayError(error) {
+            document.getElementById('errorMessage').textContent = error;
+            document.getElementById('errorAlert').style.display = 'block';
+            document.getElementById('resultArea').style.display = 'none';
+        }
+
+        // 隐藏结果
+        function hideResults() {
+            document.getElementById('resultArea').style.display = 'none';
+            document.getElementById('errorAlert').style.display = 'none';
+        }
+
+        // 切换图表显示
+        function toggleChart() {
+            const chartContainer = document.getElementById('chartContainer');
+            const dataTable = document.getElementById('dataTable');
+            
+            if (chartContainer.style.display === 'none') {
+                // 显示图表
+                chartContainer.style.display = 'block';
+                dataTable.style.display = 'none';
+                
+                if (currentResult && currentResult.chart_config) {
+                    createChart(currentResult.chart_config);
+                }
+            } else {
+                // 显示表格
+                chartContainer.style.display = 'none';
+                dataTable.style.display = 'block';
+            }
+        }
+
+        // 创建图表
+        function createChart(config) {
+            const ctx = document.getElementById('resultChart').getContext('2d');
+            
+            // 销毁现有图表
+            if (currentChart) {
+                currentChart.destroy();
+            }
+            
+            currentChart = new Chart(ctx, {
+                type: config.type,
+                data: {
+                    labels: config.data.map(item => item[config.x_field]),
+                    datasets: [{
+                        label: config.y_label,
+                        data: config.data.map(item => item[config.y_field]),
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: config.title
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: config.y_label
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: config.x_label
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 导出数据
+        function exportData() {
+            if (!currentResult || !currentResult.data) {
+                alert('没有数据可导出');
+                return;
+            }
+
+            // 简单的CSV导出
+            const data = currentResult.data;
+            const columns = Object.keys(data[0]);
+            
+            let csv = columns.join(',') + '\n';
+            data.forEach(row => {
+                const values = columns.map(col => {
+                    const value = row[col];
+                    return value !== null && value !== undefined ? `"${value}"` : '';
+                });
+                csv += values.join(',') + '\n';
+            });
+            
+            // 下载文件
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'query_result.csv';
+            link.click();
+        }
+
+        // 显示查询历史
+        function showHistory() {
+            fetch('/api/text2sql/history')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayHistory(data.history);
+                        new bootstrap.Modal(document.getElementById('historyModal')).show();
+                    }
+                })
+                .catch(error => {
+                    console.error('获取历史失败:', error);
+                });
+        }
+
+        // 显示历史记录
+        function displayHistory(history) {
+            const historyList = document.getElementById('historyList');
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<p class="text-muted">暂无查询历史</p>';
+                return;
+            }
+            
+            let html = '';
+            history.forEach(item => {
+                const statusBadge = item.is_successful ? 
+                    '<span class="badge bg-success">成功</span>' : 
+                    '<span class="badge bg-danger">失败</span>';
+                
+                html += `
+                    <div class="history-item border-bottom py-3" onclick="rerunQuery('${item.user_query}')">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">${item.user_query}</h6>
+                                <small class="text-muted">
+                                    ${new Date(item.created_at).toLocaleString()} | 
+                                    执行时间: ${item.execution_time}秒 | 
+                                    结果: ${item.result_count}条
+                                </small>
+                            </div>
+                            <div>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            historyList.innerHTML = html;
+        }
+
+        // 重新执行查询
+        function rerunQuery(query) {
+            document.getElementById('queryInput').value = query;
+            bootstrap.Modal.getInstance(document.getElementById('historyModal')).hide();
+            processQuery();
+        }
+
+        // 显示统计信息
+        function showStatistics() {
+            fetch('/api/text2sql/statistics')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayStatistics(data.statistics);
+                        new bootstrap.Modal(document.getElementById('statisticsModal')).show();
+                    }
+                })
+                .catch(error => {
+                    console.error('获取统计失败:', error);
+                });
+        }
+
+        // 显示统计信息
+        function displayStatistics(stats) {
+            const content = document.getElementById('statisticsContent');
+            
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card statistics-card">
+                            <div class="card-body text-center">
+                                <h3>${stats.total_queries}</h3>
+                                <p class="mb-0">总查询次数</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card statistics-card">
+                            <div class="card-body text-center">
+                                <h3>${stats.success_rate}%</h3>
+                                <p class="mb-0">成功率</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card statistics-card">
+                            <div class="card-body text-center">
+                                <h3>${stats.avg_execution_time}s</h3>
+                                <p class="mb-0">平均执行时间</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card statistics-card">
+                            <div class="card-body text-center">
+                                <h3>${stats.successful_queries}</h3>
+                                <p class="mb-0">成功查询次数</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>最常用意图</h6>
+                        <ul class="list-group">
+                            ${stats.top_intents.map(item => 
+                                `<li class="list-group-item d-flex justify-content-between">
+                                    <span>${item.intent}</span>
+                                    <span class="badge bg-primary">${item.count}</span>
+                                </li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>最常用模板</h6>
+                        <ul class="list-group">
+                            ${stats.top_templates.map(item => 
+                                `<li class="list-group-item d-flex justify-content-between">
+                                    <span>${item.template}</span>
+                                    <span class="badge bg-primary">${item.count}</span>
+                                </li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 显示帮助
+        function showHelp() {
+            new bootstrap.Modal(document.getElementById('helpModal')).show();
+        }
+
+        // 清空所有结果
+        function clearAll() {
+            document.getElementById('queryInput').value = '';
+            hideResults();
+            
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            
+            currentResult = null;
+        }
+    </script>
+</body>
+</html> 

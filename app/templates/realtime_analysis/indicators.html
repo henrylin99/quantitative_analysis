@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时技术指标 - 多因子模型系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+    <style>
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .nav-pills .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-success { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-danger { background-color: #dc3545; }
+        .chart-container {
+            height: 400px;
+            margin: 20px 0;
+        }
+        .indicator-card {
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .indicator-card:hover {
+            transform: translateY(-2px);
+        }
+        .progress-container {
+            display: none;
+        }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>实时技术指标分析
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-0">计算和分析股票的实时技术指标，支持多周期和多指标对比分析</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能导航 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <ul class="nav nav-pills" id="indicatorTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="calculate-tab" data-bs-toggle="pill" data-bs-target="#calculate" type="button" role="tab">
+                            <i class="fas fa-calculator me-2"></i>指标计算
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="multi-period-tab" data-bs-toggle="pill" data-bs-target="#multi-period" type="button" role="tab">
+                            <i class="fas fa-layer-group me-2"></i>多周期分析
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="compare-tab" data-bs-toggle="pill" data-bs-target="#compare" type="button" role="tab">
+                            <i class="fas fa-balance-scale me-2"></i>指标对比
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="stats-tab" data-bs-toggle="pill" data-bs-target="#stats" type="button" role="tab">
+                            <i class="fas fa-chart-pie me-2"></i>统计信息
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 功能面板 -->
+        <div class="tab-content" id="indicatorTabsContent">
+            <!-- 指标计算面板 -->
+            <div class="tab-pane fade show active" id="calculate" role="tabpanel">
+                <div class="row">
+                    <!-- 计算配置 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">计算配置</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="calculateForm">
+                                    <div class="mb-3">
+                                        <label for="stockCode" class="form-label">股票代码</label>
+                                        <select class="form-select" id="stockCode" required>
+                                            <option value="">请选择股票</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="periodType" class="form-label">周期类型</label>
+                                        <select class="form-select" id="periodType">
+                                            <option value="1min">1分钟</option>
+                                            <option value="5min" selected>5分钟</option>
+                                            <option value="15min">15分钟</option>
+                                            <option value="30min">30分钟</option>
+                                            <option value="60min">60分钟</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="lookbackDays" class="form-label">回看天数</label>
+                                        <input type="number" class="form-control" id="lookbackDays" value="30" min="1" max="90">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">选择指标</label>
+                                        <div id="indicatorCheckboxes">
+                                            <!-- 动态加载指标选项 -->
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="fas fa-play me-2"></i>开始计算
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- 进度显示 -->
+                        <div class="card mt-3 progress-container" id="progressContainer">
+                            <div class="card-header">
+                                <h6 class="mb-0">计算进度</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="progress mb-2">
+                                    <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <div class="log-container" id="logContainer"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 计算结果 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">计算结果</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="calculateResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                                        <p>请选择股票和指标开始计算</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 多周期分析面板 -->
+            <div class="tab-pane fade" id="multi-period" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">多周期配置</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="multiPeriodForm">
+                                    <div class="mb-3">
+                                        <label for="multiStockCode" class="form-label">股票代码</label>
+                                        <select class="form-select" id="multiStockCode" required>
+                                            <option value="">请选择股票</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">选择周期</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1min" id="period1min" checked>
+                                            <label class="form-check-label" for="period1min">1分钟</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="5min" id="period5min" checked>
+                                            <label class="form-check-label" for="period5min">5分钟</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="15min" id="period15min" checked>
+                                            <label class="form-check-label" for="period15min">15分钟</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="30min" id="period30min">
+                                            <label class="form-check-label" for="period30min">30分钟</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="60min" id="period60min">
+                                            <label class="form-check-label" for="period60min">60分钟</label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">选择指标</label>
+                                        <div id="multiIndicatorCheckboxes">
+                                            <!-- 动态加载指标选项 -->
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="fas fa-layer-group me-2"></i>多周期分析
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">多周期分析结果</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="multiPeriodResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="fas fa-layer-group fa-3x mb-3"></i>
+                                        <p>请选择股票和周期开始分析</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 指标对比面板 -->
+            <div class="tab-pane fade" id="compare" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">对比配置</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="compareForm">
+                                    <div class="mb-3">
+                                        <label for="compareStocks" class="form-label">股票代码（多选）</label>
+                                        <select class="form-select" id="compareStocks" multiple size="5" required>
+                                            <!-- 动态加载股票选项 -->
+                                        </select>
+                                        <small class="form-text text-muted">按住Ctrl键可多选</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="comparePeriod" class="form-label">周期类型</label>
+                                        <select class="form-select" id="comparePeriod">
+                                            <option value="1min">1分钟</option>
+                                            <option value="5min" selected>5分钟</option>
+                                            <option value="15min">15分钟</option>
+                                            <option value="30min">30分钟</option>
+                                            <option value="60min">60分钟</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="compareIndicator" class="form-label">对比指标</label>
+                                        <select class="form-select" id="compareIndicator" required>
+                                            <!-- 动态加载指标选项 -->
+                                        </select>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-warning w-100">
+                                        <i class="fas fa-balance-scale me-2"></i>开始对比
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">指标对比结果</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="compareResults">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="fas fa-balance-scale fa-3x mb-3"></i>
+                                        <p>请选择股票和指标开始对比</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 统计信息面板 -->
+            <div class="tab-pane fade" id="stats" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">指标统计概览</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="indicatorStats">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">支持的指标</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="supportedIndicators">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">指标分布图表</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="indicatorChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let supportedIndicators = [];
+        let availableStocks = [];
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面初始化开始...');
+            
+            try {
+                loadSupportedIndicators();
+                loadAvailableStocks();
+                loadIndicatorStats();
+                
+                // 绑定表单事件
+                const calculateForm = document.getElementById('calculateForm');
+                const multiPeriodForm = document.getElementById('multiPeriodForm');
+                const compareForm = document.getElementById('compareForm');
+                
+                if (calculateForm) {
+                    calculateForm.addEventListener('submit', handleCalculate);
+                    console.log('计算表单事件绑定成功');
+                } else {
+                    console.error('找不到calculateForm元素');
+                }
+                
+                if (multiPeriodForm) {
+                    multiPeriodForm.addEventListener('submit', handleMultiPeriod);
+                    console.log('多周期表单事件绑定成功');
+                } else {
+                    console.error('找不到multiPeriodForm元素');
+                }
+                
+                if (compareForm) {
+                    compareForm.addEventListener('submit', handleCompare);
+                    console.log('对比表单事件绑定成功');
+                } else {
+                    console.error('找不到compareForm元素');
+                }
+                
+                console.log('页面初始化完成');
+            } catch (error) {
+                console.error('页面初始化失败:', error);
+            }
+        });
+        
+        // 加载支持的指标
+        async function loadSupportedIndicators() {
+            try {
+                console.log('开始加载支持的指标...');
+                const response = await axios.get('/api/realtime-analysis/indicators/supported');
+                console.log('指标API响应:', response.data);
+                
+                if (response.data.success) {
+                    supportedIndicators = response.data.data;
+                    console.log('支持的指标数量:', supportedIndicators.length);
+                    renderIndicatorCheckboxes();
+                    renderSupportedIndicators();
+                } else {
+                    console.error('加载指标失败:', response.data.message);
+                    showError('indicatorCheckboxes', '加载指标失败: ' + response.data.message);
+                }
+            } catch (error) {
+                console.error('加载支持的指标失败:', error);
+                showError('indicatorCheckboxes', '加载指标失败: ' + error.message);
+            }
+        }
+        
+        // 加载可用股票
+        async function loadAvailableStocks() {
+            try {
+                console.log('开始加载可用股票...');
+                const response = await axios.get('/api/realtime-analysis/data/stock-list');
+                console.log('股票API响应:', response.data);
+                
+                if (response.data.success) {
+                    availableStocks = response.data.data;
+                    console.log('可用股票数量:', availableStocks.length);
+                    renderStockOptions();
+                } else {
+                    console.error('加载股票失败:', response.data.message);
+                    showError('stockCode', '加载股票失败: ' + response.data.message);
+                }
+            } catch (error) {
+                console.error('加载可用股票失败:', error);
+                showError('stockCode', '加载股票失败: ' + error.message);
+            }
+        }
+        
+        // 渲染指标复选框
+        function renderIndicatorCheckboxes() {
+            const containers = ['indicatorCheckboxes', 'multiIndicatorCheckboxes'];
+            
+            containers.forEach(containerId => {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+                
+                supportedIndicators.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'form-check';
+                    div.innerHTML = `
+                        <input class="form-check-input" type="checkbox" value="${indicator.code}" id="${containerId}_${indicator.code}">
+                        <label class="form-check-label" for="${containerId}_${indicator.code}" title="${indicator.description}">
+                            ${indicator.name} (${indicator.code})
+                        </label>
+                    `;
+                    container.appendChild(div);
+                });
+            });
+            
+            // 渲染对比指标下拉框
+            const compareSelect = document.getElementById('compareIndicator');
+            compareSelect.innerHTML = '<option value="">请选择指标</option>';
+            supportedIndicators.forEach(indicator => {
+                const option = document.createElement('option');
+                option.value = indicator.code;
+                option.textContent = `${indicator.name} (${indicator.code})`;
+                compareSelect.appendChild(option);
+            });
+        }
+        
+        // 渲染股票选项
+        function renderStockOptions() {
+            const selects = ['stockCode', 'multiStockCode', 'compareStocks'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (selectId !== 'compareStocks') {
+                    select.innerHTML = '<option value="">请选择股票</option>';
+                } else {
+                    select.innerHTML = '';
+                }
+                
+                availableStocks.forEach(stock => {
+                    const option = document.createElement('option');
+                    option.value = stock;
+                    option.textContent = stock;
+                    select.appendChild(option);
+                });
+            });
+        }
+        
+        // 处理指标计算
+        async function handleCalculate(event) {
+            event.preventDefault();
+            console.log('开始处理指标计算...');
+            
+            const formData = new FormData(event.target);
+            const stockCode = document.getElementById('stockCode').value;
+            const periodType = document.getElementById('periodType').value;
+            const lookbackDays = parseInt(document.getElementById('lookbackDays').value);
+            
+            // 获取选中的指标
+            const selectedIndicators = [];
+            document.querySelectorAll('#indicatorCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedIndicators.push(checkbox.value);
+            });
+            
+            console.log('表单数据:', {
+                stockCode,
+                periodType,
+                lookbackDays,
+                selectedIndicators
+            });
+            
+            if (!stockCode) {
+                alert('请选择股票代码');
+                return;
+            }
+            
+            if (selectedIndicators.length === 0) {
+                alert('请至少选择一个指标');
+                return;
+            }
+            
+            showProgress('开始计算技术指标...');
+            
+            try {
+                console.log('发送API请求...');
+                const response = await axios.post('/api/realtime-analysis/indicators/calculate', {
+                    ts_code: stockCode,
+                    period_type: periodType,
+                    indicators: selectedIndicators,
+                    lookback_days: lookbackDays
+                });
+                
+                console.log('API响应:', response.data);
+                updateProgress(100, '计算完成');
+                
+                if (response.data.success) {
+                    renderCalculateResults(response.data);
+                } else {
+                    showError('calculateResults', response.data.message);
+                }
+                
+            } catch (error) {
+                console.error('计算指标失败:', error);
+                showError('calculateResults', '计算指标失败: ' + error.message);
+            } finally {
+                hideProgress();
+            }
+        }
+        
+        // 处理多周期分析
+        async function handleMultiPeriod(event) {
+            event.preventDefault();
+            
+            const stockCode = document.getElementById('multiStockCode').value;
+            
+            // 获取选中的周期
+            const selectedPeriods = [];
+            document.querySelectorAll('#multi-period input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedPeriods.push(checkbox.value);
+            });
+            
+            // 获取选中的指标
+            const selectedIndicators = [];
+            document.querySelectorAll('#multiIndicatorCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedIndicators.push(checkbox.value);
+            });
+            
+            if (!stockCode) {
+                alert('请选择股票代码');
+                return;
+            }
+            
+            if (selectedPeriods.length === 0) {
+                alert('请至少选择一个周期');
+                return;
+            }
+            
+            if (selectedIndicators.length === 0) {
+                alert('请至少选择一个指标');
+                return;
+            }
+            
+            try {
+                const response = await axios.post('/api/realtime-analysis/indicators/multi-period', {
+                    ts_code: stockCode,
+                    periods: selectedPeriods,
+                    indicators: selectedIndicators
+                });
+                
+                if (response.data.success) {
+                    renderMultiPeriodResults(response.data);
+                } else {
+                    showError('multiPeriodResults', response.data.message);
+                }
+                
+            } catch (error) {
+                console.error('多周期分析失败:', error);
+                showError('multiPeriodResults', '多周期分析失败: ' + error.message);
+            }
+        }
+        
+        // 处理指标对比
+        async function handleCompare(event) {
+            event.preventDefault();
+            
+            const stockCodes = Array.from(document.getElementById('compareStocks').selectedOptions).map(option => option.value);
+            const periodType = document.getElementById('comparePeriod').value;
+            const indicatorName = document.getElementById('compareIndicator').value;
+            
+            if (stockCodes.length === 0) {
+                alert('请至少选择一个股票');
+                return;
+            }
+            
+            if (!indicatorName) {
+                alert('请选择对比指标');
+                return;
+            }
+            
+            try {
+                const response = await axios.post('/api/realtime-analysis/indicators/compare', {
+                    stock_codes: stockCodes,
+                    period_type: periodType,
+                    indicator_name: indicatorName,
+                    limit: 50
+                });
+                
+                if (response.data.success) {
+                    renderCompareResults(response.data);
+                } else {
+                    showError('compareResults', response.data.message);
+                }
+                
+            } catch (error) {
+                console.error('指标对比失败:', error);
+                showError('compareResults', '指标对比失败: ' + error.message);
+            }
+        }
+        
+        // 加载指标统计信息
+        async function loadIndicatorStats() {
+            try {
+                const response = await axios.get('/api/realtime-analysis/indicators/stats');
+                if (response.data.success) {
+                    renderIndicatorStats(response.data.data);
+                }
+            } catch (error) {
+                console.error('加载指标统计失败:', error);
+                document.getElementById('indicatorStats').innerHTML = '<div class="alert alert-danger">加载统计信息失败</div>';
+            }
+        }
+        
+        // 渲染计算结果
+        function renderCalculateResults(data) {
+            const container = document.getElementById('calculateResults');
+            
+            let html = `
+                <div class="alert alert-success">
+                    <h6>计算完成</h6>
+                    <p class="mb-0">
+                        总指标数: ${data.total_indicators} | 
+                        数据点数: ${data.data_points} | 
+                        存储记录: ${data.stored_records}
+                    </p>
+                </div>
+            `;
+            
+            // 显示各指标的计算结果摘要
+            if (data.data) {
+                html += '<div class="row">';
+                Object.keys(data.data).forEach(indicator => {
+                    const result = data.data[indicator];
+                    if (result.error) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">${indicator}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-danger mb-0">错误: ${result.error}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        const subIndicators = Object.keys(result);
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">${indicator}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="mb-0">子指标: ${subIndicators.join(', ')}</p>
+                                        <small class="text-muted">计算成功</small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // 渲染多周期结果
+        function renderMultiPeriodResults(data) {
+            const container = document.getElementById('multiPeriodResults');
+            
+            let html = '<div class="row">';
+            
+            Object.keys(data.data).forEach(period => {
+                const result = data.data[period];
+                const statusClass = result.success ? 'border-success' : 'border-danger';
+                const statusIcon = result.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+                
+                html += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card ${statusClass}">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="fas ${statusIcon} me-2"></i>${period}
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                `;
+                
+                if (result.success) {
+                    html += `
+                        <p class="mb-1">指标数: ${result.total_indicators}</p>
+                        <p class="mb-1">数据点: ${result.data_points}</p>
+                        <p class="mb-0">存储记录: ${result.stored_records}</p>
+                    `;
+                } else {
+                    html += `<p class="text-danger mb-0">${result.message}</p>`;
+                }
+                
+                html += `
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        // 渲染对比结果
+        function renderCompareResults(data) {
+            const container = document.getElementById('compareResults');
+            
+            // 创建图表
+            const chartContainer = document.createElement('div');
+            chartContainer.style.height = '400px';
+            chartContainer.id = 'compareChart';
+            
+            let html = `
+                <div class="alert alert-info">
+                    <h6>对比指标: ${data.indicator_name}</h6>
+                    <p class="mb-0">周期: ${data.period_type} | 股票数: ${data.stock_codes.length}</p>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+            container.appendChild(chartContainer);
+            
+            // 渲染图表
+            renderCompareChart(data);
+        }
+        
+        // 渲染对比图表
+        function renderCompareChart(data) {
+            const chart = echarts.init(document.getElementById('compareChart'));
+            
+            const series = [];
+            const legend = [];
+            
+            Object.keys(data.data).forEach(stockCode => {
+                const stockData = data.data[stockCode];
+                if (stockData.length > 0) {
+                    legend.push(stockCode);
+                    
+                    const seriesData = stockData.map(item => [
+                        item.datetime,
+                        item.value1
+                    ]);
+                    
+                    series.push({
+                        name: stockCode,
+                        type: 'line',
+                        data: seriesData,
+                        smooth: true
+                    });
+                }
+            });
+            
+            const option = {
+                title: {
+                    text: `${data.indicator_name} 对比分析`,
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross'
+                    }
+                },
+                legend: {
+                    data: legend,
+                    top: 30
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '15%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'time',
+                    boundaryGap: false
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: series
+            };
+            
+            chart.setOption(option);
+        }
+        
+        // 渲染指标统计信息
+        function renderIndicatorStats(stats) {
+            const container = document.getElementById('indicatorStats');
+            
+            if (stats.error) {
+                container.innerHTML = `<div class="alert alert-danger">${stats.error}</div>`;
+                return;
+            }
+            
+            let html = `
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h3 class="text-primary">${stats.total_records || 0}</h3>
+                        <p class="mb-0">总记录数</p>
+                    </div>
+                    <div class="col-6">
+                        <h3 class="text-success">${stats.total_stocks || 0}</h3>
+                        <p class="mb-0">股票数量</p>
+                    </div>
+                </div>
+                <hr>
+            `;
+            
+            if (stats.indicator_stats) {
+                html += '<h6>指标分布</h6>';
+                Object.keys(stats.indicator_stats).forEach(indicator => {
+                    const count = stats.indicator_stats[indicator];
+                    html += `
+                        <div class="d-flex justify-content-between">
+                            <span>${indicator}</span>
+                            <span class="badge bg-primary">${count}</span>
+                        </div>
+                    `;
+                });
+            }
+            
+            if (stats.period_stats) {
+                html += '<hr><h6>周期分布</h6>';
+                Object.keys(stats.period_stats).forEach(period => {
+                    const count = stats.period_stats[period];
+                    html += `
+                        <div class="d-flex justify-content-between">
+                            <span>${period}</span>
+                            <span class="badge bg-secondary">${count}</span>
+                        </div>
+                    `;
+                });
+            }
+            
+            if (stats.earliest_time && stats.latest_time) {
+                html += `
+                    <hr>
+                    <small class="text-muted">
+                        数据时间范围: ${new Date(stats.earliest_time).toLocaleString()} - ${new Date(stats.latest_time).toLocaleString()}
+                    </small>
+                `;
+            }
+            
+            container.innerHTML = html;
+            
+            // 渲染指标分布图表
+            if (stats.indicator_stats) {
+                renderIndicatorChart(stats.indicator_stats);
+            }
+        }
+        
+        // 渲染支持的指标
+        function renderSupportedIndicators() {
+            const container = document.getElementById('supportedIndicators');
+            
+            let html = '';
+            supportedIndicators.forEach(indicator => {
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <h6 class="mb-1">${indicator.name} (${indicator.code})</h6>
+                            <small class="text-muted">${indicator.description}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // 渲染指标分布图表
+        function renderIndicatorChart(indicatorStats) {
+            const chart = echarts.init(document.getElementById('indicatorChart'));
+            
+            const data = Object.keys(indicatorStats).map(indicator => ({
+                name: indicator,
+                value: indicatorStats[indicator]
+            }));
+            
+            const option = {
+                title: {
+                    text: '指标数据分布',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{a} <br/>{b}: {c} ({d}%)'
+                },
+                legend: {
+                    orient: 'vertical',
+                    left: 'left'
+                },
+                series: [
+                    {
+                        name: '指标数据',
+                        type: 'pie',
+                        radius: '50%',
+                        data: data,
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        }
+                    }
+                ]
+            };
+            
+            chart.setOption(option);
+        }
+        
+        // 显示进度
+        function showProgress(message) {
+            document.getElementById('progressContainer').style.display = 'block';
+            updateProgress(0, message);
+        }
+        
+        // 更新进度
+        function updateProgress(percent, message) {
+            const progressBar = document.getElementById('progressBar');
+            const logContainer = document.getElementById('logContainer');
+            
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logContainer.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 隐藏进度
+        function hideProgress() {
+            setTimeout(() => {
+                document.getElementById('progressContainer').style.display = 'none';
+            }, 2000);
+        }
+        
+        // 显示错误信息
+        function showError(containerId, message) {
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.error('找不到容器:', containerId);
+                return;
+            }
+            
+            // 如果是select元素，在其父容器中显示错误
+            if (container.tagName === 'SELECT') {
+                const parentDiv = container.parentElement;
+                let errorDiv = parentDiv.querySelector('.error-message');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message alert alert-danger mt-2';
+                    parentDiv.appendChild(errorDiv);
+                }
+                errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
+            } else {
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        ${message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

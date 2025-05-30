@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报告管理 - 实时分析系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        .report-card {
+            transition: transform 0.2s;
+            border-left: 4px solid #007bff;
+        }
+        .report-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .status-badge {
+            font-size: 0.75rem;
+        }
+        .template-card {
+            border-left: 4px solid #28a745;
+        }
+        .subscription-card {
+            border-left: 4px solid #ffc107;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #007bff;
+        }
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2><i class="bi bi-file-earmark-text"></i> 报告管理</h2>
+                        <p class="text-muted">管理分析报告、模板和订阅</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" onclick="showGenerateReportModal()">
+                            <i class="bi bi-plus-circle"></i> 生成报告
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="refreshData()">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="totalReports">0</h4>
+                                <p class="mb-0">总报告数</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-file-earmark-text fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="totalTemplates">0</h4>
+                                <p class="mb-0">模板数量</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-layout-text-window fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="totalSubscriptions">0</h4>
+                                <p class="mb-0">订阅数量</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-bell fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="successRate">0%</h4>
+                                <p class="mb-0">成功率</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-check-circle fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能标签页 -->
+        <ul class="nav nav-pills mb-4" id="reportTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="reports-tab" data-bs-toggle="pill" data-bs-target="#reports" type="button" role="tab">
+                    <i class="bi bi-file-earmark-text"></i> 报告列表
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="templates-tab" data-bs-toggle="pill" data-bs-target="#templates" type="button" role="tab">
+                    <i class="bi bi-layout-text-window"></i> 模板管理
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="subscriptions-tab" data-bs-toggle="pill" data-bs-target="#subscriptions" type="button" role="tab">
+                    <i class="bi bi-bell"></i> 订阅管理
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="statistics-tab" data-bs-toggle="pill" data-bs-target="#statistics" type="button" role="tab">
+                    <i class="bi bi-graph-up"></i> 统计分析
+                </button>
+            </li>
+        </ul>
+
+        <!-- 标签页内容 -->
+        <div class="tab-content" id="reportTabsContent">
+            <!-- 报告列表 -->
+            <div class="tab-pane fade show active" id="reports" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">报告列表</h5>
+                        <div>
+                            <select class="form-select form-select-sm" id="reportTypeFilter" onchange="filterReports()">
+                                <option value="">所有类型</option>
+                                <option value="daily_summary">每日总结</option>
+                                <option value="portfolio_analysis">组合分析</option>
+                                <option value="risk_assessment">风险评估</option>
+                                <option value="signal_analysis">信号分析</option>
+                                <option value="market_overview">市场概览</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="reportsContainer" class="row">
+                            <!-- 报告卡片将在这里动态生成 -->
+                        </div>
+                        <div class="text-center mt-3">
+                            <div class="loading-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">加载中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模板管理 -->
+            <div class="tab-pane fade" id="templates" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">模板管理</h5>
+                        <button class="btn btn-success btn-sm" onclick="showCreateTemplateModal()">
+                            <i class="bi bi-plus"></i> 创建模板
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="templatesContainer" class="row">
+                            <!-- 模板卡片将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 订阅管理 -->
+            <div class="tab-pane fade" id="subscriptions" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">订阅管理</h5>
+                        <button class="btn btn-warning btn-sm" onclick="showCreateSubscriptionModal()">
+                            <i class="bi bi-plus"></i> 创建订阅
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="subscriptionsContainer" class="row">
+                            <!-- 订阅卡片将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计分析 -->
+            <div class="tab-pane fade" id="statistics" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">报告类型分布</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="reportTypeChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">报告状态统计</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="reportStatusChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 生成报告模态框 -->
+    <div class="modal fade" id="generateReportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">生成报告</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="generateReportForm">
+                        <div class="mb-3">
+                            <label class="form-label">报告类型</label>
+                            <select class="form-select" id="reportType" required>
+                                <option value="">请选择报告类型</option>
+                                <option value="daily_summary">每日市场总结</option>
+                                <option value="portfolio_analysis">投资组合分析</option>
+                                <option value="risk_assessment">风险评估报告</option>
+                                <option value="signal_analysis">交易信号分析</option>
+                                <option value="market_overview">市场概览报告</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">报告名称</label>
+                            <input type="text" class="form-control" id="reportName" placeholder="留空自动生成">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模板</label>
+                            <select class="form-select" id="templateId">
+                                <option value="">使用默认模板</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" id="portfolioIdGroup" style="display: none;">
+                            <label class="form-label">投资组合ID</label>
+                            <input type="text" class="form-control" id="portfolioId" value="demo_portfolio">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="generateReport()">生成报告</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建模板模态框 -->
+    <div class="modal fade" id="createTemplateModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createTemplateForm">
+                        <div class="mb-3">
+                            <label class="form-label">模板名称</label>
+                            <input type="text" class="form-control" id="templateName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模板类型</label>
+                            <select class="form-select" id="templateType" required>
+                                <option value="">请选择模板类型</option>
+                                <option value="daily_summary">每日总结</option>
+                                <option value="portfolio_analysis">组合分析</option>
+                                <option value="risk_assessment">风险评估</option>
+                                <option value="signal_analysis">信号分析</option>
+                                <option value="market_overview">市场概览</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模板描述</label>
+                            <textarea class="form-control" id="templateDescription" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="createTemplate()">创建模板</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建订阅模态框 -->
+    <div class="modal fade" id="createSubscriptionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建订阅</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createSubscriptionForm">
+                        <div class="mb-3">
+                            <label class="form-label">订阅名称</label>
+                            <input type="text" class="form-control" id="subscriptionName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模板</label>
+                            <select class="form-select" id="subscriptionTemplateId" required>
+                                <option value="">请选择模板</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">订阅者邮箱</label>
+                            <input type="email" class="form-control" id="subscriberEmail">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">调度类型</label>
+                            <select class="form-select" id="scheduleType">
+                                <option value="daily">每日</option>
+                                <option value="weekly">每周</option>
+                                <option value="monthly">每月</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-warning" onclick="createSubscription()">创建订阅</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let reports = [];
+        let templates = [];
+        let subscriptions = [];
+        let statistics = {};
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadInitialData();
+            setupEventListeners();
+        });
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 报告类型变化时显示/隐藏组合ID输入框
+            document.getElementById('reportType').addEventListener('change', function() {
+                const portfolioGroup = document.getElementById('portfolioIdGroup');
+                const needsPortfolio = ['portfolio_analysis', 'risk_assessment'].includes(this.value);
+                portfolioGroup.style.display = needsPortfolio ? 'block' : 'none';
+            });
+
+            // 标签页切换时加载数据
+            document.querySelectorAll('[data-bs-toggle="pill"]').forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function(e) {
+                    const target = e.target.getAttribute('data-bs-target');
+                    if (target === '#statistics') {
+                        loadStatistics();
+                    }
+                });
+            });
+        }
+
+        // 加载初始数据
+        async function loadInitialData() {
+            await Promise.all([
+                loadReports(),
+                loadTemplates(),
+                loadSubscriptions(),
+                loadStatisticsOverview()
+            ]);
+        }
+
+        // 加载报告列表
+        async function loadReports() {
+            try {
+                showLoading();
+                const response = await fetch('/api/realtime-analysis/reports/reports');
+                const result = await response.json();
+                
+                if (result.success) {
+                    reports = result.data;
+                    renderReports();
+                } else {
+                    showAlert('加载报告失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('加载报告失败: ' + error.message, 'danger');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 渲染报告列表
+        function renderReports() {
+            const container = document.getElementById('reportsContainer');
+            
+            if (reports.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="text-center py-4">
+                            <i class="bi bi-file-earmark-text fs-1 text-muted"></i>
+                            <p class="text-muted mt-2">暂无报告数据</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = reports.map(report => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card report-card fade-in">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title">${report.report_name}</h6>
+                                <span class="badge ${getStatusBadgeClass(report.report_status)} status-badge">
+                                    ${getStatusText(report.report_status)}
+                                </span>
+                            </div>
+                            <p class="card-text text-muted small">
+                                类型: ${getReportTypeText(report.report_type)}<br>
+                                生成时间: ${formatDateTime(report.generated_at)}<br>
+                                ${report.generation_time ? `耗时: ${report.generation_time.toFixed(2)}秒` : ''}
+                            </p>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewReport(${report.id})">
+                                    <i class="bi bi-eye"></i> 查看
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport(${report.id})">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 加载模板列表
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/realtime-analysis/reports/templates');
+                const result = await response.json();
+                
+                if (result.success) {
+                    templates = result.data;
+                    renderTemplates();
+                    updateTemplateSelects();
+                } else {
+                    showAlert('加载模板失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('加载模板失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 渲染模板列表
+        function renderTemplates() {
+            const container = document.getElementById('templatesContainer');
+            
+            if (templates.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="text-center py-4">
+                            <i class="bi bi-layout-text-window fs-1 text-muted"></i>
+                            <p class="text-muted mt-2">暂无模板数据</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = templates.map(template => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card template-card fade-in">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title">${template.template_name}</h6>
+                                <div>
+                                    ${template.is_default ? '<span class="badge bg-primary">默认</span>' : ''}
+                                    ${template.is_active ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>'}
+                                </div>
+                            </div>
+                            <p class="card-text text-muted small">
+                                类型: ${getReportTypeText(template.template_type)}<br>
+                                创建时间: ${formatDateTime(template.created_at)}<br>
+                                ${template.description || '无描述'}
+                            </p>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="editTemplate(${template.id})">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTemplate(${template.id})">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 更新模板选择框
+        function updateTemplateSelects() {
+            const selects = ['templateId', 'subscriptionTemplateId'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (select) {
+                    // 保留第一个选项
+                    const firstOption = select.children[0];
+                    select.innerHTML = '';
+                    select.appendChild(firstOption);
+                    
+                    // 添加模板选项
+                    templates.forEach(template => {
+                        if (template.is_active) {
+                            const option = document.createElement('option');
+                            option.value = template.id;
+                            option.textContent = template.template_name;
+                            select.appendChild(option);
+                        }
+                    });
+                }
+            });
+        }
+
+        // 生成报告
+        async function generateReport() {
+            const form = document.getElementById('generateReportForm');
+            const formData = new FormData(form);
+            
+            const data = {
+                report_type: document.getElementById('reportType').value,
+                report_name: document.getElementById('reportName').value || null,
+                template_id: document.getElementById('templateId').value || null,
+                parameters: {},
+                generated_by: 'user'
+            };
+
+            // 如果需要组合ID
+            const portfolioId = document.getElementById('portfolioId').value;
+            if (portfolioId && ['portfolio_analysis', 'risk_assessment'].includes(data.report_type)) {
+                data.parameters.portfolio_id = portfolioId;
+            }
+
+            try {
+                const response = await fetch('/api/realtime-analysis/reports/generate-report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('报告生成成功', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('generateReportModal')).hide();
+                    form.reset();
+                    await loadReports();
+                } else {
+                    showAlert('报告生成失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('报告生成失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 工具函数
+        function getStatusBadgeClass(status) {
+            const classes = {
+                'completed': 'bg-success',
+                'failed': 'bg-danger',
+                'generating': 'bg-warning'
+            };
+            return classes[status] || 'bg-secondary';
+        }
+
+        function getStatusText(status) {
+            const texts = {
+                'completed': '已完成',
+                'failed': '失败',
+                'generating': '生成中'
+            };
+            return texts[status] || status;
+        }
+
+        function getReportTypeText(type) {
+            const texts = {
+                'daily_summary': '每日总结',
+                'portfolio_analysis': '组合分析',
+                'risk_assessment': '风险评估',
+                'signal_analysis': '信号分析',
+                'market_overview': '市场概览',
+                'custom': '自定义'
+            };
+            return texts[type] || type;
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            return new Date(dateStr).toLocaleString('zh-CN');
+        }
+
+        function showAlert(message, type = 'info') {
+            // 简单的提示实现
+            alert(message);
+        }
+
+        function showLoading() {
+            document.querySelector('.loading-spinner').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.querySelector('.loading-spinner').style.display = 'none';
+        }
+
+        // 模态框显示函数
+        function showGenerateReportModal() {
+            new bootstrap.Modal(document.getElementById('generateReportModal')).show();
+        }
+
+        function showCreateTemplateModal() {
+            new bootstrap.Modal(document.getElementById('createTemplateModal')).show();
+        }
+
+        function showCreateSubscriptionModal() {
+            new bootstrap.Modal(document.getElementById('createSubscriptionModal')).show();
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadInitialData();
+        }
+
+        // 其他功能函数（简化实现）
+        function loadSubscriptions() {
+            // TODO: 实现订阅加载
+        }
+
+        function loadStatisticsOverview() {
+            // TODO: 实现统计概览加载
+        }
+
+        function loadStatistics() {
+            // TODO: 实现统计图表加载
+        }
+
+        function filterReports() {
+            // TODO: 实现报告筛选
+        }
+
+        function viewReport(id) {
+            // TODO: 实现报告查看
+        }
+
+        function deleteReport(id) {
+            // TODO: 实现报告删除
+        }
+
+        function createTemplate() {
+            // TODO: 实现模板创建
+        }
+
+        function editTemplate(id) {
+            // TODO: 实现模板编辑
+        }
+
+        function deleteTemplate(id) {
+            // TODO: 实现模板删除
+        }
+
+        function createSubscription() {
+            // TODO: 实现订阅创建
+        }
+    </script>
+</body>
+</html> 

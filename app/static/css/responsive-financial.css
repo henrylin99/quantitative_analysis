@@ -1,0 +1,683 @@
+/* 移动端响应式金融主题样式 */
+
+/* ===== 移动端导航优化 ===== */
+@media (max-width: 991.98px) {
+    .navbar-financial .navbar-toggler {
+        border: none;
+        padding: 0.25rem 0.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: var(--border-radius);
+    }
+    
+    .navbar-financial .navbar-toggler:focus {
+        box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.25);
+    }
+    
+    .navbar-financial .navbar-collapse {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        margin-top: 1rem;
+        border-radius: var(--border-radius-lg);
+        padding: 1rem;
+        box-shadow: var(--shadow-lg);
+    }
+    
+    .navbar-financial .nav-link {
+        color: var(--gray-700) !important;
+        padding: 0.75rem 1rem;
+        border-radius: var(--border-radius);
+        margin-bottom: 0.25rem;
+        transition: var(--transition-fast);
+    }
+    
+    .navbar-financial .nav-link:hover,
+    .navbar-financial .nav-link.active {
+        background-color: var(--primary-color);
+        color: white !important;
+        transform: translateX(8px);
+    }
+    
+    .navbar-financial .dropdown-menu {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        position: static;
+    }
+    
+    .navbar-financial .dropdown-item {
+        color: var(--gray-600);
+        padding: 0.5rem 1.5rem;
+        margin-left: 1rem;
+        border-left: 2px solid var(--gray-200);
+    }
+    
+    .navbar-financial .dropdown-item:hover {
+        background-color: var(--gray-100);
+        border-left-color: var(--primary-color);
+        transform: translateX(4px);
+    }
+}
+
+/* ===== 移动端表格优化 ===== */
+@media (max-width: 768px) {
+    .table-responsive {
+        border: none;
+        border-radius: var(--border-radius-lg);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: var(--gray-300) transparent;
+    }
+    
+    .table-responsive::-webkit-scrollbar {
+        height: 6px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-track {
+        background: var(--gray-100);
+        border-radius: var(--border-radius);
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: var(--gray-300);
+        border-radius: var(--border-radius);
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: var(--gray-400);
+    }
+    
+    /* 表格滚动提示 */
+    .table-responsive::after {
+        content: '← 左右滑动查看更多 →';
+        position: absolute;
+        bottom: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: var(--font-size-xs);
+        color: var(--gray-400);
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0.7;
+    }
+    
+    .table-financial {
+        min-width: 600px;
+        margin-bottom: 2rem;
+    }
+    
+    .table-financial th,
+    .table-financial td {
+        padding: 0.75rem 0.5rem;
+        font-size: var(--font-size-sm);
+        white-space: nowrap;
+    }
+    
+    .table-financial th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
+    }
+}
+
+/* ===== 移动端按钮优化 ===== */
+@media (max-width: 768px) {
+    .btn-financial {
+        min-height: 44px; /* iOS推荐的最小触摸目标 */
+        padding: 0.75rem 1rem;
+        font-size: var(--font-size-sm);
+        font-weight: 600;
+        border-radius: var(--border-radius-lg);
+        transition: var(--transition-fast);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    /* 触摸反馈 */
+    .btn-financial:active {
+        transform: scale(0.98);
+    }
+    
+    /* 按钮组移动端优化 */
+    .btn-group-vertical .btn-financial {
+        margin-bottom: 0.5rem;
+        width: 100%;
+    }
+    
+    .btn-group-vertical .btn-financial:last-child {
+        margin-bottom: 0;
+    }
+    
+    /* 大按钮变体 */
+    .btn-lg.btn-financial {
+        min-height: 52px;
+        padding: 1rem 1.5rem;
+        font-size: var(--font-size-base);
+    }
+    
+    /* 小按钮变体 */
+    .btn-sm.btn-financial {
+        min-height: 36px;
+        padding: 0.5rem 0.75rem;
+        font-size: var(--font-size-xs);
+    }
+}
+
+/* ===== 移动端表单优化 ===== */
+@media (max-width: 768px) {
+    .form-control,
+    .form-select {
+        font-size: 16px; /* 防止iOS Safari缩放 */
+        padding: 0.75rem;
+        border-radius: var(--border-radius-lg);
+        border: 2px solid var(--gray-200);
+        transition: var(--transition-fast);
+        min-height: 44px;
+    }
+    
+    .form-control:focus,
+    .form-select:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+        outline: none;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: var(--gray-700);
+        margin-bottom: 0.5rem;
+        font-size: var(--font-size-sm);
+    }
+    
+    .form-text {
+        font-size: var(--font-size-xs);
+        color: var(--gray-500);
+        margin-top: 0.25rem;
+    }
+    
+    /* 输入组优化 */
+    .input-group {
+        margin-bottom: 1rem;
+    }
+    
+    .input-group-text {
+        background-color: var(--gray-100);
+        border: 2px solid var(--gray-200);
+        color: var(--gray-600);
+        font-weight: 500;
+    }
+    
+    /* 复选框和单选框优化 */
+    .form-check-input {
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-top: 0.125rem;
+        border: 2px solid var(--gray-300);
+    }
+    
+    .form-check-input:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+    
+    .form-check-label {
+        font-size: var(--font-size-sm);
+        color: var(--gray-700);
+        margin-left: 0.5rem;
+    }
+}
+
+/* ===== 移动端模态框优化 ===== */
+@media (max-width: 576px) {
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+        height: calc(100vh - 1rem);
+    }
+    
+    .modal-content {
+        height: 100%;
+        border: none;
+        border-radius: var(--border-radius-xl);
+        box-shadow: var(--shadow-xl);
+    }
+    
+    .modal-header {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+        background: linear-gradient(135deg, var(--gray-50), white);
+    }
+    
+    .modal-title {
+        font-size: var(--font-size-lg);
+        font-weight: 600;
+        color: var(--gray-800);
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        flex: 1;
+    }
+    
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--gray-200);
+        background: var(--gray-50);
+    }
+    
+    .modal-footer .btn {
+        flex: 1;
+        margin: 0 0.25rem;
+    }
+    
+    /* 关闭按钮优化 */
+    .btn-close {
+        width: 32px;
+        height: 32px;
+        background-size: 16px;
+        opacity: 0.7;
+    }
+    
+    .btn-close:hover {
+        opacity: 1;
+    }
+}
+
+/* ===== 移动端图表优化 ===== */
+@media (max-width: 768px) {
+    .chart-container-financial {
+        height: 300px;
+        margin: 1rem 0;
+        padding: 1rem;
+        border-radius: var(--border-radius-lg);
+        position: relative;
+    }
+    
+    /* 图表工具栏优化 */
+    .chart-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        background: var(--gray-50);
+        border-radius: var(--border-radius);
+    }
+    
+    .chart-toolbar .btn {
+        flex: 1;
+        min-width: 80px;
+        font-size: var(--font-size-xs);
+        padding: 0.5rem;
+    }
+}
+
+/* ===== 移动端卡片优化 ===== */
+@media (max-width: 768px) {
+    .metric-card-enhanced {
+        margin-bottom: 1rem;
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition-normal);
+    }
+    
+    .metric-card-enhanced .card-body {
+        padding: 1rem;
+        text-align: center;
+    }
+    
+    .metric-card-enhanced .card-title {
+        font-size: var(--font-size-base);
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--gray-800);
+    }
+    
+    .metric-card-enhanced .card-text {
+        font-size: var(--font-size-sm);
+        color: var(--gray-600);
+        margin-bottom: 1rem;
+        line-height: 1.5;
+    }
+    
+    .metric-icon {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 0.75rem;
+    }
+    
+    .metric-icon i {
+        font-size: 1.5rem;
+    }
+    
+    /* 数据概览卡片 */
+    .number-display {
+        font-size: var(--font-size-2xl);
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    
+    .card-financial .card-text {
+        font-size: var(--font-size-sm);
+        color: var(--gray-600);
+        margin: 0;
+    }
+}
+
+/* ===== 移动端分页优化 ===== */
+@media (max-width: 768px) {
+    .pagination {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+    
+    .page-link {
+        padding: 0.5rem 0.75rem;
+        font-size: var(--font-size-sm);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--gray-300);
+        color: var(--gray-700);
+        background: white;
+        transition: var(--transition-fast);
+        min-width: 40px;
+        text-align: center;
+    }
+    
+    .page-link:hover {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        color: white;
+        transform: translateY(-1px);
+    }
+    
+    .page-item.active .page-link {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        color: white;
+        font-weight: 600;
+    }
+    
+    .page-item.disabled .page-link {
+        color: var(--gray-400);
+        background-color: var(--gray-100);
+        border-color: var(--gray-200);
+    }
+}
+
+/* ===== 移动端警告框优化 ===== */
+@media (max-width: 768px) {
+    .alert-financial {
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: var(--border-radius-lg);
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+    }
+    
+    .alert-financial .alert-heading {
+        font-size: var(--font-size-base);
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .alert-financial .btn {
+        margin-top: 0.5rem;
+        width: 100%;
+    }
+}
+
+/* ===== 移动端进度条优化 ===== */
+@media (max-width: 768px) {
+    .progress {
+        height: 1rem;
+        background-color: var(--gray-200);
+        border-radius: var(--border-radius-xl);
+        overflow: hidden;
+        margin-bottom: 1rem;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    .progress-bar {
+        background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+        border-radius: var(--border-radius-xl);
+        transition: width 0.6s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.2) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.2) 50%,
+            rgba(255, 255, 255, 0.2) 75%,
+            transparent 75%,
+            transparent
+        );
+        background-size: 1rem 1rem;
+        animation: progress-bar-stripes 1s linear infinite;
+    }
+    
+    @keyframes progress-bar-stripes {
+        0% { background-position: 1rem 0; }
+        100% { background-position: 0 0; }
+    }
+}
+
+/* ===== 移动端标签页优化 ===== */
+@media (max-width: 768px) {
+    .nav-tabs {
+        border-bottom: 2px solid var(--gray-200);
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    
+    .nav-tabs::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 0.75rem 1rem;
+        font-size: var(--font-size-sm);
+        font-weight: 500;
+        color: var(--gray-600);
+        border: none;
+        border-radius: var(--border-radius) var(--border-radius) 0 0;
+        background: transparent;
+        transition: var(--transition-fast);
+        white-space: nowrap;
+        position: relative;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        color: var(--primary-color);
+        background-color: var(--gray-50);
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: var(--primary-color);
+        background-color: white;
+        border-bottom: 2px solid var(--primary-color);
+        font-weight: 600;
+    }
+    
+    .nav-tabs .nav-link.active::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--primary-color);
+    }
+    
+    .tab-content {
+        padding: 1rem 0;
+    }
+    
+    .tab-pane {
+        animation: fadeInUp 0.3s ease-out;
+    }
+}
+
+/* ===== 移动端面包屑优化 ===== */
+@media (max-width: 768px) {
+    .breadcrumb {
+        padding: 0.5rem 0;
+        margin-bottom: 1rem;
+        background: transparent;
+        font-size: var(--font-size-sm);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
+    
+    .breadcrumb-item {
+        display: inline-block;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: "›";
+        color: var(--gray-400);
+        margin: 0 0.5rem;
+    }
+    
+    .breadcrumb-item a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .breadcrumb-item.active {
+        color: var(--gray-600);
+        font-weight: 600;
+    }
+}
+
+/* ===== 触摸优化 ===== */
+@media (hover: none) and (pointer: coarse) {
+    /* 移除悬停效果，添加触摸反馈 */
+    .metric-card-enhanced:hover {
+        transform: none;
+        box-shadow: var(--shadow-sm);
+    }
+    
+    .metric-card-enhanced:active {
+        transform: scale(0.98);
+        transition: transform 0.1s ease;
+    }
+    
+    .btn-financial:hover {
+        transform: none;
+    }
+    
+    .btn-financial:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+    }
+    
+    .card-financial:hover {
+        transform: none;
+        box-shadow: var(--shadow-sm);
+    }
+    
+    .card-financial:active {
+        transform: scale(0.99);
+        transition: transform 0.1s ease;
+    }
+}
+
+/* ===== 横屏模式优化 ===== */
+@media (max-width: 768px) and (orientation: landscape) {
+    .chart-container-financial {
+        height: 250px;
+    }
+    
+    .modal-dialog {
+        height: calc(100vh - 1rem);
+    }
+    
+    .navbar-financial .navbar-collapse {
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+    }
+}
+
+/* ===== 超小屏幕优化 ===== */
+@media (max-width: 375px) {
+    .container {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    
+    .metric-card-enhanced .card-body {
+        padding: 0.75rem;
+    }
+    
+    .btn-financial {
+        padding: 0.625rem 0.875rem;
+        font-size: var(--font-size-xs);
+    }
+    
+    .stock-info-banner .card-body {
+        padding: 1.5rem 1rem;
+    }
+    
+    .stock-info-banner .display-4 {
+        font-size: var(--font-size-2xl);
+    }
+    
+    .number-display {
+        font-size: var(--font-size-xl);
+    }
+}
+
+/* ===== 可访问性增强 ===== */
+@media (max-width: 768px) {
+    /* 确保足够的对比度 */
+    .text-muted {
+        color: var(--gray-600) !important;
+    }
+    
+    /* 增强焦点指示器 */
+    .btn-financial:focus,
+    .form-control:focus,
+    .form-select:focus {
+        outline: 3px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+    
+    /* 减少动画（如果用户偏好） */
+    @media (prefers-reduced-motion: reduce) {
+        .metric-card-enhanced,
+        .btn-financial,
+        .card-financial {
+            transition: none;
+        }
+        
+        .progress-bar::after {
+            animation: none;
+        }
+    }
+} 

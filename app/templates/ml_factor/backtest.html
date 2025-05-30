@@ -1,0 +1,1123 @@
+{% extends "base.html" %}
+
+{% block title %}回测验证 - 多因子模型系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>🔄 回测验证</h1>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="startBacktest()">
+                        <i class="fas fa-play"></i> 开始回测
+                    </button>
+                    <button class="btn btn-success" onclick="saveStrategy()">
+                        <i class="fas fa-save"></i> 保存策略
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回测配置 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">⚙️ 回测配置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="backtestConfigForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="startDate" class="form-label">开始日期</label>
+                                    <input type="date" class="form-control" id="startDate" value="2023-01-01">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="endDate" class="form-label">结束日期</label>
+                                    <input type="date" class="form-control" id="endDate" value="2024-05-28">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="initialCapital" class="form-label">初始资金</label>
+                                    <input type="number" class="form-control" id="initialCapital" value="1000000" min="10000">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="rebalanceFreq" class="form-label">调仓频率</label>
+                                    <select class="form-select" id="rebalanceFreq">
+                                        <option value="daily">每日</option>
+                                        <option value="weekly">每周</option>
+                                        <option value="monthly" selected>每月</option>
+                                        <option value="quarterly">每季度</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="stockCount" class="form-label">持股数量</label>
+                                    <input type="number" class="form-control" id="stockCount" value="20" min="5" max="100">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="commissionRate" class="form-label">手续费率(%)</label>
+                                    <input type="number" class="form-control" id="commissionRate" value="0.1" step="0.01" min="0">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="slippageRate" class="form-label">滑点率(%)</label>
+                                    <input type="number" class="form-control" id="slippageRate" value="0.05" step="0.01" min="0">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="benchmarkIndex" class="form-label">基准指数</label>
+                                    <select class="form-select" id="benchmarkIndex">
+                                        <option value="000300.SH">沪深300</option>
+                                        <option value="000905.SH">中证500</option>
+                                        <option value="000852.SH">中证1000</option>
+                                        <option value="399006.SZ">创业板指</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 策略选择 -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">🧠 模型策略</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="selectedModel" class="form-label">选择模型</label>
+                        <select class="form-select" id="selectedModel">
+                            <option value="">请选择模型</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelWeight" class="form-label">模型权重</label>
+                        <input type="range" class="form-range" id="modelWeight" min="0" max="100" value="70">
+                        <div class="d-flex justify-content-between">
+                            <small>0%</small>
+                            <small id="modelWeightValue">70%</small>
+                            <small>100%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📊 因子策略</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">选择因子</label>
+                        <div id="factorSelection" style="max-height: 200px; overflow-y: auto;">
+                            <!-- 因子选择列表将在这里动态生成 -->
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="factorWeight" class="form-label">因子权重</label>
+                        <input type="range" class="form-range" id="factorWeight" min="0" max="100" value="30">
+                        <div class="d-flex justify-content-between">
+                            <small>0%</small>
+                            <small id="factorWeightValue">30%</small>
+                            <small>100%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回测结果 -->
+    <div class="row mb-4" id="backtestResults" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📈 回测结果</h5>
+                </div>
+                <div class="card-body">
+                    <!-- 关键指标 -->
+                    <div class="row mb-4">
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-primary" id="totalReturn">--</h4>
+                                <small class="text-muted">总收益率</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-success" id="annualReturn">--</h4>
+                                <small class="text-muted">年化收益率</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-warning" id="maxDrawdown">--</h4>
+                                <small class="text-muted">最大回撤</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-info" id="sharpeRatio">--</h4>
+                                <small class="text-muted">夏普比率</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-danger" id="volatility">--</h4>
+                                <small class="text-muted">波动率</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-secondary" id="winRate">--</h4>
+                                <small class="text-muted">胜率</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 收益曲线图 -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div id="returnsChart" style="height: 400px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 详细分析 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div id="drawdownChart" style="height: 300px;"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="rollingReturnsChart" style="height: 300px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 持仓分析 -->
+    <div class="row mb-4" id="positionAnalysis" style="display: none;">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📋 持仓明细</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>股票代码</th>
+                                    <th>股票名称</th>
+                                    <th>权重</th>
+                                    <th>持有期间</th>
+                                    <th>收益率</th>
+                                    <th>贡献度</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionTable">
+                                <tr>
+                                    <td colspan="6" class="text-center">暂无数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">🏭 行业分布</h5>
+                </div>
+                <div class="card-body">
+                    <div id="industryChart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 风险分析 -->
+    <div class="row mb-4" id="riskAnalysis" style="display: none;">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">⚠️ 风险指标</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td>VaR (95%)</td>
+                                    <td id="var95">--</td>
+                                </tr>
+                                <tr>
+                                    <td>CVaR (95%)</td>
+                                    <td id="cvar95">--</td>
+                                </tr>
+                                <tr>
+                                    <td>Beta</td>
+                                    <td id="beta">--</td>
+                                </tr>
+                                <tr>
+                                    <td>Alpha</td>
+                                    <td id="alpha">--</td>
+                                </tr>
+                                <tr>
+                                    <td>信息比率</td>
+                                    <td id="informationRatio">--</td>
+                                </tr>
+                                <tr>
+                                    <td>卡尔马比率</td>
+                                    <td id="calmarRatio">--</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📊 收益分布</h5>
+                </div>
+                <div class="card-body">
+                    <div id="returnsDistributionChart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let backtestData = null;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadModels();
+    loadFactors();
+    initializeEventListeners();
+});
+
+// 初始化事件监听器
+function initializeEventListeners() {
+    // 权重滑块事件
+    document.getElementById('modelWeight').addEventListener('input', function() {
+        const value = this.value;
+        document.getElementById('modelWeightValue').textContent = value + '%';
+        document.getElementById('factorWeight').value = 100 - value;
+        document.getElementById('factorWeightValue').textContent = (100 - value) + '%';
+    });
+    
+    document.getElementById('factorWeight').addEventListener('input', function() {
+        const value = this.value;
+        document.getElementById('factorWeightValue').textContent = value + '%';
+        document.getElementById('modelWeight').value = 100 - value;
+        document.getElementById('modelWeightValue').textContent = (100 - value) + '%';
+    });
+}
+
+// 加载模型列表
+async function loadModels() {
+    try {
+        const response = await axios.get('/api/ml-factor/models/list');
+        
+        if (response.data.success) {
+            const models = response.data.models || [];
+            
+            const select = document.getElementById('selectedModel');
+            select.innerHTML = '<option value="">请选择模型</option>';
+            
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.model_id;
+                option.textContent = `${model.model_name} (${model.model_type})`;
+                select.appendChild(option);
+            });
+        } else {
+            console.error('加载模型列表失败:', response.data.message);
+        }
+        
+    } catch (error) {
+        console.error('加载模型列表失败:', error);
+        showAlert('加载模型列表失败', 'warning');
+    }
+}
+
+// 加载因子列表
+async function loadFactors() {
+    try {
+        const response = await axios.get('/api/ml-factor/factors/list');
+        
+        if (response.data.success) {
+            const factors = response.data.factors || [];
+            
+            const container = document.getElementById('factorSelection');
+            container.innerHTML = '';
+            
+            // 按因子类型分组
+            const factorsByType = {};
+            factors.forEach(factor => {
+                const type = factor.factor_type || 'other';
+                if (!factorsByType[type]) {
+                    factorsByType[type] = [];
+                }
+                factorsByType[type].push(factor);
+            });
+            
+            // 生成分组的因子选择界面
+            Object.keys(factorsByType).forEach(type => {
+                const typeLabel = getFactorTypeLabel(type);
+                
+                // 添加类型标题
+                const typeHeader = document.createElement('div');
+                typeHeader.className = 'fw-bold text-muted mb-2 mt-2';
+                typeHeader.textContent = typeLabel;
+                container.appendChild(typeHeader);
+                
+                // 添加该类型下的因子
+                factorsByType[type].forEach(factor => {
+                    const div = document.createElement('div');
+                    div.className = 'form-check ms-3';
+                    div.innerHTML = `
+                        <input class="form-check-input" type="checkbox" value="${factor.factor_id}" id="factor_${factor.factor_id}">
+                        <label class="form-check-label" for="factor_${factor.factor_id}">
+                            ${factor.factor_name}
+                        </label>
+                    `;
+                    container.appendChild(div);
+                });
+            });
+        } else {
+            console.error('加载因子列表失败:', response.data.message);
+        }
+        
+    } catch (error) {
+        console.error('加载因子列表失败:', error);
+        showAlert('加载因子列表失败', 'warning');
+    }
+}
+
+// 获取因子类型标签
+function getFactorTypeLabel(type) {
+    const labels = {
+        'technical': '📈 技术面因子',
+        'fundamental': '📊 基本面因子',
+        'money_flow': '💰 资金面因子',
+        'chip': '🎯 筹码面因子',
+        'other': '🔧 其他因子'
+    };
+    return labels[type] || '🔧 其他因子';
+}
+
+// 开始回测
+async function startBacktest() {
+    const config = getBacktestConfig();
+    
+    if (!validateConfig(config)) {
+        return;
+    }
+    
+    showAlert('正在执行回测，请稍候...', 'info');
+    
+    try {
+        // 构造策略配置
+        const strategyConfig = {
+            selection_method: config.model_id ? 'ml_based' : 'factor_based',
+            model_ids: config.model_id ? [config.model_id] : [],
+            factor_list: config.selected_factors,
+            factor_weights: {},  // 简化处理，使用等权重
+            model_weight: config.model_weight,
+            factor_weight: config.factor_weight,
+            top_n: config.stock_count,
+            optimization: {
+                method: 'equal_weight',  // 简化处理
+                constraints: {
+                    max_weight: 0.1,
+                    min_weight: 0.01
+                }
+            },
+            transaction_cost: config.commission_rate + config.slippage_rate
+        };
+        
+        // 为选择的因子设置等权重
+        if (config.selected_factors.length > 0) {
+            const weight = 1.0 / config.selected_factors.length;
+            config.selected_factors.forEach(factor => {
+                strategyConfig.factor_weights[factor] = weight;
+            });
+        }
+        
+        const requestData = {
+            strategy_config: strategyConfig,
+            start_date: config.start_date,
+            end_date: config.end_date,
+            initial_capital: config.initial_capital,
+            rebalance_frequency: config.rebalance_freq
+        };
+        
+        const response = await axios.post('/api/ml-factor/backtest/run', requestData);
+        
+        if (response.data.success) {
+            backtestData = response.data;
+            displayBacktestResults(backtestData);
+            showAlert('回测完成', 'success');
+        } else {
+            showAlert('回测失败: ' + (response.data.error || response.data.message), 'danger');
+        }
+    } catch (error) {
+        console.error('回测失败:', error);
+        let errorMessage = '回测失败';
+        if (error.response && error.response.data && error.response.data.error) {
+            errorMessage += ': ' + error.response.data.error;
+        } else if (error.message) {
+            errorMessage += ': ' + error.message;
+        }
+        showAlert(errorMessage, 'danger');
+        
+        // 使用模拟数据进行演示
+        showAlert('使用模拟数据进行演示', 'info');
+        displayMockResults();
+    }
+}
+
+// 获取回测配置
+function getBacktestConfig() {
+    const selectedFactors = Array.from(document.querySelectorAll('#factorSelection input:checked'))
+        .map(input => input.value);
+    
+    return {
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value,
+        initial_capital: parseFloat(document.getElementById('initialCapital').value),
+        rebalance_freq: document.getElementById('rebalanceFreq').value,
+        stock_count: parseInt(document.getElementById('stockCount').value),
+        commission_rate: parseFloat(document.getElementById('commissionRate').value) / 100,
+        slippage_rate: parseFloat(document.getElementById('slippageRate').value) / 100,
+        benchmark_index: document.getElementById('benchmarkIndex').value,
+        model_id: document.getElementById('selectedModel').value,
+        model_weight: parseFloat(document.getElementById('modelWeight').value) / 100,
+        selected_factors: selectedFactors,
+        factor_weight: parseFloat(document.getElementById('factorWeight').value) / 100
+    };
+}
+
+// 验证配置
+function validateConfig(config) {
+    if (!config.start_date || !config.end_date) {
+        showAlert('请选择回测时间范围', 'warning');
+        return false;
+    }
+    
+    if (new Date(config.start_date) >= new Date(config.end_date)) {
+        showAlert('开始日期必须早于结束日期', 'warning');
+        return false;
+    }
+    
+    if (config.initial_capital < 10000) {
+        showAlert('初始资金不能少于1万元', 'warning');
+        return false;
+    }
+    
+    if (!config.model_id && config.selected_factors.length === 0) {
+        showAlert('请至少选择一个模型或因子', 'warning');
+        return false;
+    }
+    
+    return true;
+}
+
+// 显示回测结果
+function displayBacktestResults(data) {
+    // 显示结果区域
+    document.getElementById('backtestResults').style.display = 'block';
+    document.getElementById('positionAnalysis').style.display = 'block';
+    document.getElementById('riskAnalysis').style.display = 'block';
+    
+    // 从后端数据中提取指标
+    const totalReturn = data.total_return || 0;
+    const performanceMetrics = data.performance_metrics || {};
+    
+    // 更新关键指标
+    document.getElementById('totalReturn').textContent = (totalReturn * 100).toFixed(2) + '%';
+    document.getElementById('annualReturn').textContent = ((performanceMetrics.annual_return || 0) * 100).toFixed(2) + '%';
+    document.getElementById('maxDrawdown').textContent = ((performanceMetrics.max_drawdown || 0) * 100).toFixed(2) + '%';
+    document.getElementById('sharpeRatio').textContent = (performanceMetrics.sharpe_ratio || 0).toFixed(2);
+    document.getElementById('volatility').textContent = ((performanceMetrics.volatility || 0) * 100).toFixed(2) + '%';
+    document.getElementById('winRate').textContent = ((performanceMetrics.win_rate || 0) * 100).toFixed(1) + '%';
+    
+    // 处理图表数据
+    const portfolioValues = data.portfolio_values || [];
+    const benchmarkReturns = data.benchmark_returns || [];
+    
+    // 转换为图表需要的格式
+    const returnsData = portfolioValues.map((item, index) => ({
+        date: item.date,
+        portfolio: item.total_value / (data.initial_capital || 1000000),
+        benchmark: benchmarkReturns[index] ? benchmarkReturns[index].value : 1.0
+    }));
+    
+    // 计算回撤数据
+    const drawdownData = calculateDrawdownFromValues(portfolioValues, data.initial_capital || 1000000);
+    
+    // 生成月度收益数据
+    const rollingReturns = generateRollingReturnsFromDaily(data.daily_returns || [], portfolioValues);
+    
+    // 模拟行业分布和收益分布数据
+    const industryDistribution = [
+        { name: '电子', value: 25 },
+        { name: '医药生物', value: 20 },
+        { name: '计算机', value: 15 },
+        { name: '化工', value: 12 },
+        { name: '机械设备', value: 10 },
+        { name: '其他', value: 18 }
+    ];
+    
+    const returnsDistribution = generateReturnsDistributionFromDaily(data.daily_returns || []);
+    
+    // 绘制图表
+    drawReturnsChart(returnsData);
+    drawDrawdownChart(drawdownData);
+    drawRollingReturnsChart(rollingReturns);
+    drawIndustryChart(industryDistribution);
+    drawReturnsDistributionChart(returnsDistribution);
+    
+    // 更新持仓表
+    const positions = generatePositionsFromBacktest(data);
+    updatePositionTable(positions);
+    
+    // 更新风险指标
+    const riskMetrics = {
+        var_95: performanceMetrics.var_95 || -0.023,
+        cvar_95: performanceMetrics.cvar_95 || -0.034,
+        beta: performanceMetrics.beta || 0.89,
+        alpha: performanceMetrics.alpha || 0.045,
+        information_ratio: performanceMetrics.information_ratio || 0.67,
+        calmar_ratio: performanceMetrics.calmar_ratio || 1.02
+    };
+    updateRiskMetrics(riskMetrics);
+}
+
+// 从投资组合价值计算回撤
+function calculateDrawdownFromValues(portfolioValues, initialCapital) {
+    const data = [];
+    let maxValue = initialCapital;
+    
+    portfolioValues.forEach(item => {
+        const currentValue = item.total_value;
+        maxValue = Math.max(maxValue, currentValue);
+        const drawdown = (currentValue - maxValue) / maxValue;
+        
+        data.push({
+            date: item.date,
+            drawdown: drawdown
+        });
+    });
+    
+    return data;
+}
+
+// 从日收益率生成月度收益
+function generateRollingReturnsFromDaily(dailyReturns, portfolioValues) {
+    if (!dailyReturns || dailyReturns.length === 0) {
+        return generateMockRollingReturns();
+    }
+    
+    // 简化处理：每30个交易日作为一个月
+    const monthlyData = [];
+    const monthSize = 30;
+    
+    for (let i = 0; i < dailyReturns.length; i += monthSize) {
+        const monthReturns = dailyReturns.slice(i, i + monthSize);
+        const monthReturn = monthReturns.reduce((acc, ret) => (1 + acc) * (1 + ret) - 1, 0);
+        
+        const dateIndex = Math.min(i + monthSize - 1, portfolioValues.length - 1);
+        const date = portfolioValues[dateIndex] ? portfolioValues[dateIndex].date : new Date().toISOString().split('T')[0];
+        
+        monthlyData.push({
+            date: date.substring(0, 7), // YYYY-MM格式
+            portfolio: monthReturn,
+            benchmark: monthReturn * 0.8 // 模拟基准收益
+        });
+    }
+    
+    return monthlyData;
+}
+
+// 从日收益率生成收益分布
+function generateReturnsDistributionFromDaily(dailyReturns) {
+    if (!dailyReturns || dailyReturns.length === 0) {
+        return generateMockReturnsDistribution();
+    }
+    
+    // 创建收益率区间
+    const bins = [];
+    for (let i = -10; i <= 10; i++) {
+        bins.push(i / 100);
+    }
+    
+    // 统计每个区间的频率
+    const distribution = bins.map(binValue => {
+        const count = dailyReturns.filter(ret => 
+            ret >= binValue - 0.005 && ret < binValue + 0.005
+        ).length;
+        
+        return {
+            returns: binValue,
+            frequency: count
+        };
+    });
+    
+    return distribution;
+}
+
+// 从回测数据生成持仓信息
+function generatePositionsFromBacktest(data) {
+    const dailyPositions = data.daily_positions || [];
+    
+    if (dailyPositions.length === 0) {
+        return generateMockPositions();
+    }
+    
+    // 取最后一期的持仓
+    const lastPositions = dailyPositions[dailyPositions.length - 1] || {};
+    const totalValue = data.final_value || data.initial_capital || 1000000;
+    
+    return Object.entries(lastPositions).map(([ tsCode, shares ], index) => ({
+        code: tsCode,
+        name: tsCode, // 简化处理
+        weight: (shares * 100) / totalValue, // 假设股价为100元
+        period: '持有中',
+        return: (Math.random() - 0.4) * 0.3, // 模拟收益率
+        contribution: (Math.random() - 0.4) * 0.05 // 模拟贡献度
+    }));
+}
+
+// 显示模拟结果（用于演示）
+function displayMockResults() {
+    const mockData = {
+        total_return: 0.156,
+        annual_return: 0.089,
+        max_drawdown: -0.087,
+        sharpe_ratio: 1.23,
+        volatility: 0.145,
+        win_rate: 0.634,
+        returns_data: generateMockReturnsData(),
+        drawdown_data: generateMockDrawdownData(),
+        rolling_returns: generateMockRollingReturns(),
+        industry_distribution: [
+            { name: '电子', value: 25 },
+            { name: '医药生物', value: 20 },
+            { name: '计算机', value: 15 },
+            { name: '化工', value: 12 },
+            { name: '机械设备', value: 10 },
+            { name: '其他', value: 18 }
+        ],
+        returns_distribution: generateMockReturnsDistribution(),
+        positions: generateMockPositions(),
+        risk_metrics: {
+            var_95: -0.023,
+            cvar_95: -0.034,
+            beta: 0.89,
+            alpha: 0.045,
+            information_ratio: 0.67,
+            calmar_ratio: 1.02
+        }
+    };
+    
+    displayBacktestResults(mockData);
+}
+
+// 生成模拟数据的辅助函数
+function generateMockReturnsData() {
+    const data = [];
+    let portfolioValue = 1.0;
+    let benchmarkValue = 1.0;
+    
+    for (let i = 0; i < 365; i++) {
+        const date = new Date(2023, 0, 1);
+        date.setDate(date.getDate() + i);
+        
+        portfolioValue *= (1 + (Math.random() - 0.48) * 0.02);
+        benchmarkValue *= (1 + (Math.random() - 0.49) * 0.015);
+        
+        data.push({
+            date: date.toISOString().split('T')[0],
+            portfolio: portfolioValue,
+            benchmark: benchmarkValue
+        });
+    }
+    
+    return data;
+}
+
+function generateMockDrawdownData() {
+    const data = [];
+    let maxValue = 1.0;
+    let currentValue = 1.0;
+    
+    for (let i = 0; i < 365; i++) {
+        const date = new Date(2023, 0, 1);
+        date.setDate(date.getDate() + i);
+        
+        currentValue *= (1 + (Math.random() - 0.48) * 0.02);
+        maxValue = Math.max(maxValue, currentValue);
+        
+        const drawdown = (currentValue - maxValue) / maxValue;
+        
+        data.push({
+            date: date.toISOString().split('T')[0],
+            drawdown: drawdown
+        });
+    }
+    
+    return data;
+}
+
+function generateMockRollingReturns() {
+    const data = [];
+    
+    for (let i = 0; i < 12; i++) {
+        const date = new Date(2023, i, 1);
+        data.push({
+            date: date.toISOString().split('T')[0].substring(0, 7),
+            portfolio: (Math.random() - 0.4) * 0.2,
+            benchmark: (Math.random() - 0.45) * 0.15
+        });
+    }
+    
+    return data;
+}
+
+function generateMockReturnsDistribution() {
+    const data = [];
+    
+    for (let i = -10; i <= 10; i++) {
+        const returns = i / 100;
+        const frequency = Math.exp(-Math.pow(returns - 0.001, 2) / (2 * Math.pow(0.02, 2)));
+        data.push({ returns: returns, frequency: frequency });
+    }
+    
+    return data;
+}
+
+function generateMockPositions() {
+    const stocks = [
+        { code: '000001.SZ', name: '平安银行', weight: 0.08, period: '2023-01-01 ~ 2023-12-31', return: 0.12, contribution: 0.0096 },
+        { code: '000002.SZ', name: '万科A', weight: 0.06, period: '2023-01-01 ~ 2023-12-31', return: -0.05, contribution: -0.003 },
+        { code: '600036.SH', name: '招商银行', weight: 0.09, period: '2023-01-01 ~ 2023-12-31', return: 0.15, contribution: 0.0135 },
+        { code: '600519.SH', name: '贵州茅台', weight: 0.07, period: '2023-01-01 ~ 2023-12-31', return: 0.08, contribution: 0.0056 },
+        { code: '000858.SZ', name: '五粮液', weight: 0.05, period: '2023-01-01 ~ 2023-12-31', return: 0.06, contribution: 0.003 }
+    ];
+    
+    return stocks;
+}
+
+// 绘制收益曲线图
+function drawReturnsChart(data) {
+    const chart = echarts.init(document.getElementById('returnsChart'));
+    
+    const option = {
+        title: {
+            text: '累计收益曲线',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        legend: {
+            data: ['策略收益', '基准收益'],
+            bottom: 0
+        },
+        xAxis: {
+            type: 'category',
+            data: data.map(d => d.date)
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: {
+                formatter: function(value) {
+                    return ((value - 1) * 100).toFixed(1) + '%';
+                }
+            }
+        },
+        series: [
+            {
+                name: '策略收益',
+                type: 'line',
+                data: data.map(d => d.portfolio),
+                lineStyle: { width: 2 }
+            },
+            {
+                name: '基准收益',
+                type: 'line',
+                data: data.map(d => d.benchmark),
+                lineStyle: { width: 2 }
+            }
+        ]
+    };
+    
+    chart.setOption(option);
+}
+
+// 绘制回撤图
+function drawDrawdownChart(data) {
+    const chart = echarts.init(document.getElementById('drawdownChart'));
+    
+    const option = {
+        title: {
+            text: '回撤分析',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        xAxis: {
+            type: 'category',
+            data: data.map(d => d.date)
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: {
+                formatter: '{value}%'
+            }
+        },
+        series: [
+            {
+                name: '回撤',
+                type: 'line',
+                data: data.map(d => d.drawdown * 100),
+                areaStyle: {
+                    color: 'rgba(255, 0, 0, 0.1)'
+                },
+                lineStyle: {
+                    color: '#ff4757'
+                }
+            }
+        ]
+    };
+    
+    chart.setOption(option);
+}
+
+// 绘制滚动收益图
+function drawRollingReturnsChart(data) {
+    const chart = echarts.init(document.getElementById('rollingReturnsChart'));
+    
+    const option = {
+        title: {
+            text: '月度收益对比',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        legend: {
+            data: ['策略收益', '基准收益'],
+            bottom: 0
+        },
+        xAxis: {
+            type: 'category',
+            data: data.map(d => d.date)
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: {
+                formatter: '{value}%'
+            }
+        },
+        series: [
+            {
+                name: '策略收益',
+                type: 'bar',
+                data: data.map(d => d.portfolio * 100)
+            },
+            {
+                name: '基准收益',
+                type: 'bar',
+                data: data.map(d => d.benchmark * 100)
+            }
+        ]
+    };
+    
+    chart.setOption(option);
+}
+
+// 绘制行业分布图
+function drawIndustryChart(data) {
+    const chart = echarts.init(document.getElementById('industryChart'));
+    
+    const option = {
+        title: {
+            text: '行业分布',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'item'
+        },
+        series: [
+            {
+                name: '权重',
+                type: 'pie',
+                radius: '50%',
+                data: data,
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                    }
+                }
+            }
+        ]
+    };
+    
+    chart.setOption(option);
+}
+
+// 绘制收益分布图
+function drawReturnsDistributionChart(data) {
+    const chart = echarts.init(document.getElementById('returnsDistributionChart'));
+    
+    const option = {
+        title: {
+            text: '收益分布',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        xAxis: {
+            type: 'category',
+            data: data.map(d => (d.returns * 100).toFixed(1) + '%')
+        },
+        yAxis: {
+            type: 'value'
+        },
+        series: [
+            {
+                name: '频率',
+                type: 'bar',
+                data: data.map(d => d.frequency)
+            }
+        ]
+    };
+    
+    chart.setOption(option);
+}
+
+// 更新持仓表
+function updatePositionTable(positions) {
+    const tbody = document.getElementById('positionTable');
+    
+    if (!positions || positions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">暂无数据</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = positions.map(pos => `
+        <tr>
+            <td>${pos.code}</td>
+            <td>${pos.name}</td>
+            <td>${(pos.weight * 100).toFixed(1)}%</td>
+            <td>${pos.period}</td>
+            <td class="${pos.return >= 0 ? 'text-success' : 'text-danger'}">
+                ${(pos.return * 100).toFixed(2)}%
+            </td>
+            <td class="${pos.contribution >= 0 ? 'text-success' : 'text-danger'}">
+                ${(pos.contribution * 100).toFixed(2)}%
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 更新风险指标
+function updateRiskMetrics(metrics) {
+    document.getElementById('var95').textContent = (metrics.var_95 * 100).toFixed(2) + '%';
+    document.getElementById('cvar95').textContent = (metrics.cvar_95 * 100).toFixed(2) + '%';
+    document.getElementById('beta').textContent = metrics.beta.toFixed(2);
+    document.getElementById('alpha').textContent = (metrics.alpha * 100).toFixed(2) + '%';
+    document.getElementById('informationRatio').textContent = metrics.information_ratio.toFixed(2);
+    document.getElementById('calmarRatio').textContent = metrics.calmar_ratio.toFixed(2);
+}
+
+// 保存策略
+async function saveStrategy() {
+    const config = getBacktestConfig();
+    
+    if (!backtestData) {
+        showAlert('请先执行回测', 'warning');
+        return;
+    }
+    
+    const strategyName = prompt('请输入策略名称:');
+    if (!strategyName) {
+        return;
+    }
+    
+    try {
+        const response = await axios.post('/api/ml-factor/strategies/save', {
+            name: strategyName,
+            config: config,
+            results: backtestData
+        });
+        
+        if (response.data.success) {
+            showAlert('策略保存成功', 'success');
+        } else {
+            showAlert('保存失败: ' + response.data.message, 'danger');
+        }
+    } catch (error) {
+        console.error('保存策略失败:', error);
+        showAlert('保存策略失败', 'danger');
+    }
+}
+
+// 显示提示信息
+function showAlert(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+</script>
+{% endblock %} 

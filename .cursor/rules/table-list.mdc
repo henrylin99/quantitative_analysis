@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# stock_cursor 数据库中有以下表
+```
+ factor_definition      自定义因子定义表
+ factor_values          因子计算结果表
+ ml_model_definition    机器学习模型定义表
+ ml_predictions         模型预测结果表
+ stock_balance_sheet    资产负债表
+ stock_basic            股票公司基本信息表
+ stock_business         股票业务大宽表(所有主要表的字段合并)
+ stock_cash_flow        现金流量表
+ stock_cyq_perf         每日筹码及胜率数据表
+ stock_daily_basic      股票日线基本数据表
+ stock_daily_history    股票日线行情历史数据表
+ stock_factor           股票技术面因子数据表
+ stock_income_statement 利润表
+ stock_ma_data          股票移动平均线数据表
+ stock_moneyflow        个股资金流向数据表
+ stock_moneyflow_ths    同花顺个股资金流向数据表
+ stock_trade_calendar   交易日期表
+ ```
+ 
+# 表数据介绍
+stock_basic  存放了5000多条上市公司的基本信息
+
+stock_cash_flow 存储了2020-2025年的现金流量表数据
+stock_income_statement 存储了2020-2025年的利润表数据
+stock_balance_sheet 存储了2020-2025年的资产负债表数据
+
+stock_business 汇总了stock_basic、stock_moneyflow、stock_ma_data、stock_daily_basic、stock_factor的最新数据，只有一天
+
+stock_daily_history 存储了2023年开始的日线数据
+
+stock_factor 存储了2025年所有的指标数据
+
+stock_moneyflow 存储了2025年所有数据
+
+stock_cyq_perf 稍后补全2025年所有数据
+
+# 模型预测相关表
+factor_definition      自定义因子定义表
+factor_values          因子计算结果表
+ml_model_definition    机器学习模型定义表
+ml_predictions         模型预测结果表

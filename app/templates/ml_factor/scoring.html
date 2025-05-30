@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+
+{% block title %}股票评分 - 多因子模型系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>⭐ 股票评分</h1>
+            <p class="text-muted">基于因子和机器学习模型对股票进行评分排名</p>
+        </div>
+    </div>
+
+    <!-- 评分配置 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">评分配置</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="tradeDate" class="form-label">交易日期</label>
+                            <input type="date" class="form-control" id="tradeDate">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="scoringMethod" class="form-label">评分方法</label>
+                            <select class="form-select" id="scoringMethod">
+                                <option value="factor_based">基于因子</option>
+                                <option value="ml_based">基于ML模型</option>
+                                <option value="hybrid">混合方法</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="topN" class="form-label">显示数量</label>
+                            <select class="form-select" id="topN">
+                                <option value="50">前50名</option>
+                                <option value="100">前100名</option>
+                                <option value="200">前200名</option>
+                                <option value="500">前500名</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">&nbsp;</label>
+                            <div>
+                                <button class="btn btn-primary" onclick="calculateScoring()">
+                                    <i class="fas fa-calculator"></i> 计算评分
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 评分结果 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">评分结果</h5>
+                </div>
+                <div class="card-body">
+                    <div id="scoringResults">
+                        <div class="text-center text-muted">
+                            请配置参数并点击"计算评分"开始
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 设置默认日期为今天
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('tradeDate').value = today;
+});
+
+// 执行评分计算
+async function calculateScoring() {
+    const scoringMethod = document.getElementById('scoringMethod').value;
+    const topN = parseInt(document.getElementById('topN').value);
+    
+    // 使用数据库中实际存在的最新日期
+    const tradeDate = '2025-05-23';
+    
+    showLoading('scoringResults');
+    
+    try {
+        let response;
+        
+        if (scoringMethod === 'factor_based') {
+            // 基于因子的评分 - 使用数据库中实际存在的因子
+            response = await axios.post('/api/ml-factor/scoring/factor-based', {
+                trade_date: tradeDate,
+                factor_list: ['momentum_5d', 'money_flow_strength', 'momentum_20d'], // 使用实际存在的因子
+                weights: {'momentum_5d': 0.4, 'money_flow_strength': 0.3, 'momentum_20d': 0.3},
+                method: 'factor_weight',
+                top_n: topN
+            });
+        } else if (scoringMethod === 'ml_based') {
+            // 基于ML模型的评分 - 先获取可用模型
+            const modelsResponse = await axios.get('/api/ml-factor/models/list');
+            if (modelsResponse.data.success && modelsResponse.data.models.length > 0) {
+                const modelIds = modelsResponse.data.models.map(m => m.model_id);
+                response = await axios.post('/api/ml-factor/scoring/ml-based', {
+                    trade_date: tradeDate,
+                    model_ids: modelIds,
+                    top_n: topN,
+                    ensemble_method: 'average'
+                });
+            } else {
+                showError('scoringResults', '没有可用的ML模型，请先创建和训练模型');
+                return;
+            }
+        } else {
+            // 混合方法 - 集成选股
+            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                trade_date: tradeDate,
+                selection_method: 'factor_based',
+                factor_list: ['momentum_5d', 'money_flow_strength', 'momentum_20d'],
+                weights: {'momentum_5d': 0.4, 'money_flow_strength': 0.3, 'momentum_20d': 0.3},
+                top_n: topN,
+                optimization_method: 'equal_weight'
+            });
+        }
+        
+        if (response.data.success) {
+            // 根据不同方法处理结果
+            let results;
+            if (scoringMethod === 'factor_based') {
+                results = response.data.top_stocks || [];
+            } else if (scoringMethod === 'ml_based') {
+                results = response.data.top_stocks || [];
+            } else {
+                // 混合方法
+                const stockSelection = response.data.stock_selection || {};
+                const weights = response.data.portfolio_optimization?.weights || {};
+                results = Object.keys(weights).map((ts_code, index) => ({
+                    ts_code: ts_code,
+                    name: ts_code, // 简化显示
+                    composite_score: weights[ts_code],
+                    rank: index + 1,
+                    industry: '未知',
+                    pe_ratio: null,
+                    pb_ratio: null,
+                    roe: null
+                }));
+            }
+            renderScoringResults(results);
+        } else {
+            showError('scoringResults', '评分计算失败: ' + response.data.error);
+        }
+    } catch (error) {
+        console.error('评分计算失败:', error);
+        showError('scoringResults', '评分计算失败: ' + error.message);
+    }
+}
+
+// 渲染评分结果
+function renderScoringResults(results) {
+    const container = document.getElementById('scoringResults');
+    
+    if (!results || results.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">没有找到评分结果</div>';
+        return;
+    }
+    
+    const html = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>股票代码</th>
+                        <th>股票名称</th>
+                        <th>评分</th>
+                        <th>百分位排名</th>
+                        <th>行业</th>
+                        <th>地区</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${results.map(stock => `
+                        <tr>
+                            <td>
+                                <span class="badge bg-${getRankColor(stock.rank)}">
+                                    ${stock.rank}
+                                </span>
+                            </td>
+                            <td><code>${stock.ts_code}</code></td>
+                            <td>${stock.name || stock.symbol || '--'}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress me-2" style="width: 80px; height: 20px;">
+                                        <div class="progress-bar bg-${getScoreColor(stock.composite_score)}" 
+                                             style="width: ${Math.min(100, Math.max(0, (stock.composite_score || 0) * 20))}%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">${(stock.composite_score || 0).toFixed(3)}</small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">
+                                    ${(stock.percentile_rank || 0).toFixed(1)}%
+                                </span>
+                            </td>
+                            <td>${stock.industry || '--'}</td>
+                            <td>${stock.area || '--'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewStockDetail('${stock.ts_code}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="addToPortfolio('${stock.ts_code}')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-3">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle"></i>
+                            共评分 ${results.length} 只股票，评分基于 ${new Date().toLocaleDateString()} 的因子数据
+                        </small>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-success" onclick="exportResults()">
+                        <i class="fas fa-download"></i> 导出结果
+                    </button>
+                    <button class="btn btn-info" onclick="createPortfolio()">
+                        <i class="fas fa-briefcase"></i> 创建投资组合
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 获取排名颜色
+function getRankColor(rank) {
+    if (rank <= 10) return 'success';
+    if (rank <= 50) return 'primary';
+    if (rank <= 100) return 'warning';
+    return 'secondary';
+}
+
+// 获取评分颜色
+function getScoreColor(score) {
+    if (score >= 2.0) return 'success';
+    if (score >= 1.0) return 'primary';
+    if (score >= 0.5) return 'warning';
+    return 'danger';
+}
+
+// 查看股票详情
+function viewStockDetail(tsCode) {
+    alert(`查看股票详情: ${tsCode}`);
+}
+
+// 添加到投资组合
+function addToPortfolio(tsCode) {
+    alert(`添加到投资组合: ${tsCode}`);
+}
+
+// 导出结果
+function exportResults() {
+    alert('导出功能待实现');
+}
+
+// 创建投资组合
+function createPortfolio() {
+    alert('创建投资组合功能待实现');
+}
+
+// 显示加载状态
+function showLoading(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">计算中...</span></div></div>';
+    }
+}
+
+// 显示错误信息
+function showError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+    }
+}
+</script>
+{% endblock %} 

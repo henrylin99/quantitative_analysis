@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时监控面板 - 多因子模型系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        .monitor-card {
+            transition: transform 0.2s;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .monitor-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .metric-change {
+            font-size: 0.9rem;
+        }
+        .positive { color: #dc3545; }
+        .negative { color: #198754; }
+        .neutral { color: #6c757d; }
+        .chart-container {
+            height: 300px;
+            margin: 10px 0;
+        }
+        .stock-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        .stock-item:hover {
+            background-color: #f8f9fa;
+        }
+        .auto-refresh {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <!-- 自动刷新控制 -->
+    <div class="auto-refresh">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                    <label class="form-check-label" for="autoRefresh">
+                        <small>自动刷新 (30s)</small>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid py-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2><i class="bi bi-speedometer2"></i> 实时监控面板</h2>
+                        <p class="text-muted mb-0">实时行情监控、板块表现、异动检测和市场情绪分析</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" onclick="refreshAllData()">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新数据
+                        </button>
+                        <a href="/realtime-analysis/" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> 返回
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 监控概览 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card monitor-card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> 监控概览</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="overviewMetrics">
+                            <!-- 概览指标将在这里动态加载 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要功能区域 -->
+        <div class="row">
+            <!-- 左侧：实时行情和异动股票 -->
+            <div class="col-lg-6">
+                <!-- 实时行情 -->
+                <div class="card monitor-card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart-line"></i> 实时行情</h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="loadQuotes('1min')">1分钟</button>
+                            <button class="btn btn-outline-primary" onclick="loadQuotes('5min')">5分钟</button>
+                            <button class="btn btn-outline-primary" onclick="loadQuotes('15min')">15分钟</button>
+                        </div>
+                    </div>
+                    <div class="card-body position-relative">
+                        <div id="quotesLoading" class="loading-overlay d-none">
+                            <div class="spinner-border text-primary"></div>
+                        </div>
+                        <div id="quotesContainer" style="max-height: 400px; overflow-y: auto;">
+                            <!-- 行情数据将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 异动股票 -->
+                <div class="card monitor-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> 异动股票</h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-warning" onclick="loadAnomalies(3.0, 2.0)">轻度</button>
+                            <button class="btn btn-outline-warning" onclick="loadAnomalies(5.0, 3.0)">中度</button>
+                            <button class="btn btn-outline-warning" onclick="loadAnomalies(8.0, 5.0)">重度</button>
+                        </div>
+                    </div>
+                    <div class="card-body position-relative">
+                        <div id="anomaliesLoading" class="loading-overlay d-none">
+                            <div class="spinner-border text-warning"></div>
+                        </div>
+                        <div id="anomaliesContainer" style="max-height: 400px; overflow-y: auto;">
+                            <!-- 异动数据将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：板块表现和市场情绪 -->
+            <div class="col-lg-6">
+                <!-- 板块表现 -->
+                <div class="card monitor-card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-pie-chart"></i> 板块表现</h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-info" onclick="loadSectors(1)">1小时</button>
+                            <button class="btn btn-outline-info" onclick="loadSectors(4)">4小时</button>
+                            <button class="btn btn-outline-info" onclick="loadSectors(24)">1天</button>
+                        </div>
+                    </div>
+                    <div class="card-body position-relative">
+                        <div id="sectorsLoading" class="loading-overlay d-none">
+                            <div class="spinner-border text-info"></div>
+                        </div>
+                        <div id="sectorsChart" class="chart-container"></div>
+                    </div>
+                </div>
+
+                <!-- 市场情绪 -->
+                <div class="card monitor-card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-heart-pulse"></i> 市场情绪</h5>
+                    </div>
+                    <div class="card-body position-relative">
+                        <div id="sentimentLoading" class="loading-overlay d-none">
+                            <div class="spinner-border text-success"></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div id="sentimentGauge" class="chart-container"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="sentimentStats">
+                                    <!-- 情绪统计将在这里显示 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 涨跌幅排行 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card monitor-card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-trophy"></i> 涨跌幅排行</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6 class="text-danger"><i class="bi bi-arrow-up"></i> 涨幅榜</h6>
+                                <div id="topGainers" style="max-height: 300px; overflow-y: auto;">
+                                    <!-- 涨幅榜数据 -->
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-success"><i class="bi bi-arrow-down"></i> 跌幅榜</h6>
+                                <div id="topLosers" style="max-height: 300px; overflow-y: auto;">
+                                    <!-- 跌幅榜数据 -->
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-primary"><i class="bi bi-activity"></i> 活跃榜</h6>
+                                <div id="mostActive" style="max-height: 300px; overflow-y: auto;">
+                                    <!-- 活跃榜数据 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let autoRefreshInterval;
+        let sectorsChart, sentimentChart;
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            loadAllData();
+            setupAutoRefresh();
+        });
+
+        // 初始化图表
+        function initializeCharts() {
+            sectorsChart = echarts.init(document.getElementById('sectorsChart'));
+            sentimentChart = echarts.init(document.getElementById('sentimentGauge'));
+        }
+
+        // 设置自动刷新
+        function setupAutoRefresh() {
+            const autoRefreshCheckbox = document.getElementById('autoRefresh');
+            
+            function startAutoRefresh() {
+                if (autoRefreshCheckbox.checked) {
+                    autoRefreshInterval = setInterval(loadAllData, 30000); // 30秒刷新
+                }
+            }
+
+            function stopAutoRefresh() {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                }
+            }
+
+            autoRefreshCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            });
+
+            startAutoRefresh();
+        }
+
+        // 加载所有数据
+        function loadAllData() {
+            loadOverview();
+            loadQuotes('1min');
+            loadSectors(1);
+            loadAnomalies(5.0, 3.0);
+            loadSentiment(1);
+            loadTopMovers();
+        }
+
+        // 刷新所有数据
+        function refreshAllData() {
+            loadAllData();
+            showToast('数据刷新完成', 'success');
+        }
+
+        // 加载监控概览
+        function loadOverview() {
+            fetch('/api/realtime-analysis/monitor/overview')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayOverview(data.data);
+                    } else {
+                        console.error('加载概览失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('加载概览错误:', error);
+                });
+        }
+
+        // 显示监控概览
+        function displayOverview(data) {
+            const container = document.getElementById('overviewMetrics');
+            const delay = data.data_delay || 0;
+            const delayColor = delay < 5 ? 'success' : delay < 15 ? 'warning' : 'danger';
+            
+            container.innerHTML = `
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="metric-value text-primary">${data.total_stocks || 0}</div>
+                        <div class="text-muted">总股票数</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="metric-value text-success">${data.active_stocks || 0}</div>
+                        <div class="text-muted">活跃股票</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="metric-value text-info">${(data.today_records || 0).toLocaleString()}</div>
+                        <div class="text-muted">今日数据量</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="metric-value text-${delayColor}">${delay}分钟</div>
+                        <div class="text-muted">数据延迟</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 加载实时行情
+        function loadQuotes(periodType = '1min') {
+            const loading = document.getElementById('quotesLoading');
+            loading.classList.remove('d-none');
+
+            fetch(`/api/realtime-analysis/monitor/quotes?period_type=${periodType}&limit=20`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('d-none');
+                    if (data.success) {
+                        displayQuotes(data.data.quotes);
+                    } else {
+                        console.error('加载行情失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    loading.classList.add('d-none');
+                    console.error('加载行情错误:', error);
+                });
+        }
+
+        // 显示实时行情
+        function displayQuotes(quotes) {
+            const container = document.getElementById('quotesContainer');
+            
+            if (!quotes || quotes.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无行情数据</div>';
+                return;
+            }
+
+            const html = quotes.map(quote => {
+                const changeClass = quote.change_pct > 0 ? 'positive' : quote.change_pct < 0 ? 'negative' : 'neutral';
+                const changeIcon = quote.change_pct > 0 ? 'bi-arrow-up' : quote.change_pct < 0 ? 'bi-arrow-down' : 'bi-dash';
+                
+                return `
+                    <div class="stock-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${quote.name}</strong>
+                                <small class="text-muted">(${quote.ts_code})</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="metric-value ${changeClass}">¥${quote.current_price.toFixed(2)}</div>
+                                <div class="metric-change ${changeClass}">
+                                    <i class="bi ${changeIcon}"></i>
+                                    ${quote.change_pct.toFixed(2)}%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-4">
+                                <small class="text-muted">成交量: ${(quote.volume / 10000).toFixed(1)}万</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted">量比: ${quote.volume_ratio.toFixed(2)}</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted">换手: ${quote.turnover_rate.toFixed(2)}%</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        // 加载板块表现
+        function loadSectors(periodHours = 1) {
+            const loading = document.getElementById('sectorsLoading');
+            loading.classList.remove('d-none');
+
+            fetch(`/api/realtime-analysis/monitor/sectors?period_hours=${periodHours}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('d-none');
+                    if (data.success) {
+                        displaySectorsChart(data.data.sectors);
+                    } else {
+                        console.error('加载板块失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    loading.classList.add('d-none');
+                    console.error('加载板块错误:', error);
+                });
+        }
+
+        // 显示板块表现图表
+        function displaySectorsChart(sectors) {
+            if (!sectors || sectors.length === 0) {
+                sectorsChart.setOption({
+                    title: { text: '暂无板块数据', left: 'center', top: 'middle' }
+                });
+                return;
+            }
+
+            const option = {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function(params) {
+                        const data = params.data;
+                        return `
+                            ${data.name}<br/>
+                            涨跌幅: ${data.value.toFixed(2)}%<br/>
+                            上涨比例: ${data.rising_ratio.toFixed(1)}%<br/>
+                            股票数量: ${data.stock_count}
+                        `;
+                    }
+                },
+                series: [{
+                    type: 'bar',
+                    data: sectors.slice(0, 10).map(sector => ({
+                        name: sector.sector_name,
+                        value: sector.avg_change_pct,
+                        rising_ratio: sector.rising_ratio,
+                        stock_count: sector.stock_count,
+                        itemStyle: {
+                            color: sector.avg_change_pct > 0 ? '#dc3545' : '#198754'
+                        }
+                    })),
+                    label: {
+                        show: true,
+                        position: 'right',
+                        formatter: '{c}%'
+                    }
+                }],
+                xAxis: {
+                    type: 'value',
+                    axisLabel: {
+                        formatter: '{value}%'
+                    }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: sectors.slice(0, 10).map(sector => sector.sector_name)
+                },
+                grid: {
+                    left: '20%',
+                    right: '15%',
+                    top: '5%',
+                    bottom: '5%'
+                }
+            };
+
+            sectorsChart.setOption(option);
+        }
+
+        // 加载异动股票
+        function loadAnomalies(changeThreshold = 5.0, volumeThreshold = 3.0) {
+            const loading = document.getElementById('anomaliesLoading');
+            loading.classList.remove('d-none');
+
+            fetch(`/api/realtime-analysis/monitor/anomalies?change_threshold=${changeThreshold}&volume_threshold=${volumeThreshold}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('d-none');
+                    if (data.success) {
+                        displayAnomalies(data.data.anomalies);
+                    } else {
+                        console.error('加载异动失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    loading.classList.add('d-none');
+                    console.error('加载异动错误:', error);
+                });
+        }
+
+        // 显示异动股票
+        function displayAnomalies(anomalies) {
+            const container = document.getElementById('anomaliesContainer');
+            
+            if (!anomalies || anomalies.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无异动股票</div>';
+                return;
+            }
+
+            const html = anomalies.map(anomaly => {
+                const changeClass = anomaly.change_pct > 0 ? 'positive' : 'negative';
+                const badges = anomaly.anomaly_types.map(type => 
+                    `<span class="badge bg-warning me-1">${type}</span>`
+                ).join('');
+                
+                return `
+                    <div class="stock-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${anomaly.name}</strong>
+                                <small class="text-muted">(${anomaly.ts_code})</small>
+                                <div class="mt-1">${badges}</div>
+                            </div>
+                            <div class="text-end">
+                                <div class="metric-value ${changeClass}">¥${anomaly.current_price.toFixed(2)}</div>
+                                <div class="metric-change ${changeClass}">
+                                    ${anomaly.change_pct.toFixed(2)}%
+                                </div>
+                                <small class="text-muted">评分: ${anomaly.anomaly_score.toFixed(1)}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        // 加载市场情绪
+        function loadSentiment(periodHours = 1) {
+            const loading = document.getElementById('sentimentLoading');
+            loading.classList.remove('d-none');
+
+            fetch(`/api/realtime-analysis/monitor/sentiment?period_hours=${periodHours}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('d-none');
+                    if (data.success) {
+                        displaySentiment(data.data);
+                    } else {
+                        console.error('加载情绪失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    loading.classList.add('d-none');
+                    console.error('加载情绪错误:', error);
+                });
+        }
+
+        // 显示市场情绪
+        function displaySentiment(data) {
+            // 情绪仪表盘
+            const gaugeOption = {
+                series: [{
+                    type: 'gauge',
+                    startAngle: 180,
+                    endAngle: 0,
+                    center: ['50%', '75%'],
+                    radius: '90%',
+                    min: 0,
+                    max: 100,
+                    splitNumber: 5,
+                    axisLine: {
+                        lineStyle: {
+                            width: 6,
+                            color: [
+                                [0.3, '#dc3545'],
+                                [0.7, '#ffc107'],
+                                [1, '#198754']
+                            ]
+                        }
+                    },
+                    pointer: {
+                        icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
+                        length: '12%',
+                        width: 20,
+                        offsetCenter: [0, '-60%'],
+                        itemStyle: {
+                            color: 'auto'
+                        }
+                    },
+                    axisTick: {
+                        length: 12,
+                        lineStyle: {
+                            color: 'auto',
+                            width: 2
+                        }
+                    },
+                    splitLine: {
+                        length: 20,
+                        lineStyle: {
+                            color: 'auto',
+                            width: 5
+                        }
+                    },
+                    axisLabel: {
+                        color: '#464646',
+                        fontSize: 12,
+                        distance: -60,
+                        formatter: function(value) {
+                            if (value === 0) return '弱势';
+                            if (value === 50) return '震荡';
+                            if (value === 100) return '强势';
+                            return '';
+                        }
+                    },
+                    title: {
+                        offsetCenter: [0, '-20%'],
+                        fontSize: 16
+                    },
+                    detail: {
+                        fontSize: 20,
+                        offsetCenter: [0, '-35%'],
+                        valueAnimation: true,
+                        formatter: function(value) {
+                            return Math.round(value);
+                        },
+                        color: 'auto'
+                    },
+                    data: [{
+                        value: data.sentiment_score,
+                        name: data.market_status
+                    }]
+                }]
+            };
+
+            sentimentChart.setOption(gaugeOption);
+
+            // 情绪统计
+            const statsContainer = document.getElementById('sentimentStats');
+            statsContainer.innerHTML = `
+                <div class="mb-3">
+                    <h6>市场状态</h6>
+                    <span class="badge bg-${data.status_color} fs-6">${data.market_status}</span>
+                </div>
+                <div class="mb-3">
+                    <h6>涨跌统计</h6>
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="text-danger">上涨: ${data.rising_stocks}</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-success">下跌: ${data.falling_stocks}</div>
+                        </div>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar bg-danger" style="width: ${data.rising_ratio}%"></div>
+                        <div class="progress-bar bg-success" style="width: ${100 - data.rising_ratio}%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <h6>市场指标</h6>
+                    <small class="text-muted">
+                        平均涨跌: ${data.avg_change_pct.toFixed(2)}%<br>
+                        波动率: ${data.volatility.toFixed(2)}%<br>
+                        总成交量: ${(data.total_volume / 100000000).toFixed(1)}亿
+                    </small>
+                </div>
+            `;
+        }
+
+        // 加载涨跌幅排行
+        function loadTopMovers() {
+            fetch('/api/realtime-analysis/monitor/top-movers?limit=10')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayTopMovers(data.data);
+                    } else {
+                        console.error('加载排行失败:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('加载排行错误:', error);
+                });
+        }
+
+        // 显示涨跌幅排行
+        function displayTopMovers(data) {
+            displayMoversList('topGainers', data.top_gainers, 'positive');
+            displayMoversList('topLosers', data.top_losers, 'negative');
+            displayMoversList('mostActive', data.most_active, 'primary');
+        }
+
+        // 显示排行列表
+        function displayMoversList(containerId, stocks, colorClass) {
+            const container = document.getElementById(containerId);
+            
+            if (!stocks || stocks.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无数据</div>';
+                return;
+            }
+
+            const html = stocks.map((stock, index) => {
+                const value = containerId === 'mostActive' ? 
+                    `${(stock.volume / 10000).toFixed(1)}万` : 
+                    `${stock.change_pct.toFixed(2)}%`;
+                
+                return `
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div>
+                            <span class="badge bg-secondary me-2">${index + 1}</span>
+                            <strong>${stock.name}</strong>
+                            <small class="text-muted d-block">${stock.ts_code}</small>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-${colorClass}">${value}</div>
+                            <small class="text-muted">¥${stock.current_price.toFixed(2)}</small>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        // 显示提示消息
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', () => {
+                toast.remove();
+            });
+        }
+
+        // 创建提示容器
+        function createToastContainer() {
+            const container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            container.style.zIndex = '1055';
+            document.body.appendChild(container);
+            return container;
+        }
+
+        // 窗口大小改变时重新调整图表
+        window.addEventListener('resize', function() {
+            if (sectorsChart) sectorsChart.resize();
+            if (sentimentChart) sentimentChart.resize();
+        });
+    </script>
+</body>
+</html> 

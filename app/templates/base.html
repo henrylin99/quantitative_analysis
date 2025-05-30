@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{% block title %}股票分析系统{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- 专业金融主题样式 -->
+    <link href="{{ url_for('static', filename='css/financial-theme.css') }}" rel="stylesheet">
+    <!-- 移动端响应式样式 -->
+    <link href="{{ url_for('static', filename='css/responsive-financial.css') }}" rel="stylesheet">
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+    
+    <style>
+        /* 基础样式 */
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border: 1px solid rgba(0, 0, 0, 0.125);
+        }
+        .chart-container {
+            height: 400px;
+            margin: 20px 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+        }
+        .stock-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .metric-card {
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .text-purple {
+            color: #6f42c1 !important;
+        }
+        .btn-purple {
+            background-color: #6f42c1;
+            border-color: #6f42c1;
+            color: white;
+        }
+        .btn-purple:hover {
+            background-color: #5a359a;
+            border-color: #5a359a;
+            color: white;
+        }
+
+        /* 移动端适配样式 */
+        @media (max-width: 768px) {
+            /* 导航栏适配 */
+            .navbar-brand {
+                font-size: 1.1rem;
+            }
+            
+            .navbar-nav .nav-link {
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            .dropdown-menu {
+                border: none;
+                box-shadow: none;
+                background-color: rgba(0,0,0,0.05);
+            }
+            
+            /* 容器适配 */
+            .container-fluid {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            /* 卡片适配 */
+            .card {
+                margin-bottom: 1rem;
+                border-radius: 8px;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+            
+            /* 表格适配 */
+            .table-responsive {
+                border: none;
+            }
+            
+            .table {
+                font-size: 0.875rem;
+            }
+            
+            .table th,
+            .table td {
+                padding: 0.5rem 0.25rem;
+                white-space: nowrap;
+            }
+            
+            /* 按钮适配 */
+            .btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.875rem;
+            }
+            
+            .btn-group .btn {
+                padding: 0.375rem 0.75rem;
+                font-size: 0.8rem;
+            }
+            
+            /* 表单适配 */
+            .form-control,
+            .form-select {
+                font-size: 16px; /* 防止iOS缩放 */
+                padding: 0.75rem;
+            }
+            
+            .form-label {
+                font-size: 0.9rem;
+                font-weight: 600;
+            }
+            
+            /* 图表适配 */
+            .chart-container {
+                height: 300px;
+                margin: 15px 0;
+            }
+            
+            /* 指标卡片适配 */
+            .metric-card {
+                margin-bottom: 1rem;
+            }
+            
+            .metric-card .card-body {
+                padding: 0.75rem;
+                text-align: center;
+            }
+            
+            .metric-card h5 {
+                font-size: 1rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            .metric-card .display-6 {
+                font-size: 1.5rem;
+            }
+            
+            /* 模态框适配 */
+            .modal-dialog {
+                margin: 0.5rem;
+                max-width: calc(100% - 1rem);
+            }
+            
+            .modal-body {
+                padding: 1rem;
+            }
+            
+            /* 分页适配 */
+            .pagination {
+                justify-content: center;
+            }
+            
+            .page-link {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.875rem;
+            }
+            
+            /* 警告框适配 */
+            .alert {
+                padding: 0.75rem;
+                font-size: 0.875rem;
+                margin-bottom: 1rem;
+            }
+            
+            /* 进度条适配 */
+            .progress {
+                height: 1.5rem;
+                margin-bottom: 1rem;
+            }
+            
+            /* 标签页适配 */
+            .nav-tabs .nav-link {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.875rem;
+            }
+            
+            /* 面包屑适配 */
+            .breadcrumb {
+                padding: 0.5rem 0;
+                margin-bottom: 1rem;
+                font-size: 0.875rem;
+            }
+            
+            /* 列表组适配 */
+            .list-group-item {
+                padding: 0.75rem;
+                font-size: 0.875rem;
+            }
+            
+            /* 徽章适配 */
+            .badge {
+                font-size: 0.75rem;
+                padding: 0.35em 0.65em;
+            }
+            
+            /* 工具提示适配 */
+            .tooltip {
+                font-size: 0.8rem;
+            }
+            
+            /* 页脚适配 */
+            footer {
+                margin-top: 2rem;
+                padding: 1rem 0;
+            }
+            
+            footer p {
+                font-size: 0.8rem;
+                margin-bottom: 0;
+            }
+        }
+
+        /* 超小屏幕适配 (小于576px) */
+        @media (max-width: 576px) {
+            .navbar-brand {
+                font-size: 1rem;
+            }
+            
+            .container-fluid {
+                padding-left: 5px;
+                padding-right: 5px;
+            }
+            
+            .card-body {
+                padding: 0.75rem;
+            }
+            
+            .btn {
+                padding: 0.375rem 0.75rem;
+                font-size: 0.8rem;
+            }
+            
+            .chart-container {
+                height: 250px;
+                margin: 10px 0;
+            }
+            
+            .table {
+                font-size: 0.8rem;
+            }
+            
+            .table th,
+            .table td {
+                padding: 0.375rem 0.2rem;
+            }
+            
+            .metric-card .display-6 {
+                font-size: 1.25rem;
+            }
+            
+            .modal-dialog {
+                margin: 0.25rem;
+                max-width: calc(100% - 0.5rem);
+            }
+        }
+
+        /* 横屏适配 */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .chart-container {
+                height: 200px;
+            }
+            
+            .navbar-nav .nav-link {
+                padding: 0.5rem 1rem;
+            }
+        }
+
+        /* 触摸优化 */
+        @media (hover: none) and (pointer: coarse) {
+            .btn,
+            .nav-link,
+            .dropdown-item,
+            .page-link,
+            .list-group-item-action {
+                min-height: 44px; /* iOS推荐的最小触摸目标 */
+                display: flex;
+                align-items: center;
+            }
+            
+            .table-responsive {
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* 高DPI屏幕优化 */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+            .card {
+                border-width: 0.5px;
+            }
+            
+            .table {
+                border-width: 0.5px;
+            }
+        }
+
+        /* 深色模式支持 */
+        @media (prefers-color-scheme: dark) {
+            .card {
+                background-color: #2d3748;
+                border-color: #4a5568;
+                color: #e2e8f0;
+            }
+            
+            .table {
+                color: #e2e8f0;
+            }
+            
+            .table-striped > tbody > tr:nth-of-type(odd) > td {
+                background-color: rgba(255, 255, 255, 0.05);
+            }
+        }
+
+        /* 可访问性增强 */
+        @media (prefers-reduced-motion: reduce) {
+            .metric-card {
+                transition: none;
+            }
+            
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* 自定义滚动条 (移动端) */
+        @media (max-width: 768px) {
+            .table-responsive::-webkit-scrollbar {
+                height: 4px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 2px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-thumb {
+                background: #c1c1c1;
+                border-radius: 2px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-financial fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
+                <i class="fas fa-chart-line me-2"></i>
+                <span>股票分析系统</span>
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon">
+                    <i class="fas fa-bars text-white"></i>
+                </span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.index') }}">
+                            <i class="fas fa-home me-1"></i>首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.stocks') }}">
+                            <i class="fas fa-list me-1"></i>股票列表
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.analysis') }}">
+                            <i class="fas fa-chart-area me-1"></i>技术分析
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.screen') }}">
+                            <i class="fas fa-filter me-1"></i>选股筛选
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-brain me-1"></i>多因子模型
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/ml-factor">因子管理</a></li>
+                            <li><a class="dropdown-item" href="/ml-factor/models">模型管理</a></li>
+                            <li><a class="dropdown-item" href="/ml-factor/scoring">股票评分</a></li>
+                            <li><a class="dropdown-item" href="/ml-factor/portfolio">投资组合</a></li>
+                            <li><a class="dropdown-item" href="/ml-factor/analysis">分析报告</a></li>
+                            <li><a class="dropdown-item" href="/ml-factor/backtest">回测验证</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bolt me-1"></i>实时分析
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/realtime-analysis">数据管理</a></li>
+                            <li><a class="dropdown-item" href="/realtime-analysis/indicators">技术指标</a></li>
+                            <li><a class="dropdown-item" href="/realtime-analysis/signals">交易信号</a></li>
+                            <li><a class="dropdown-item" href="/realtime-analysis/monitor">实时监控</a></li>
+                            <li><a class="dropdown-item" href="/realtime-analysis/risk">风险管理</a></li>
+                            <li><a class="dropdown-item" href="/realtime-analysis/reports">分析报告</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <!-- 实时状态指示器 -->
+                <div class="navbar-nav">
+                    <div class="nav-item d-flex align-items-center me-3">
+                        <span class="real-time-indicator">实时数据</span>
+                    </div>
+                    <div class="nav-item">
+                        <button class="btn btn-outline-light btn-sm" onclick="location.reload()">
+                            <i class="fas fa-sync-alt me-1"></i>刷新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="main-content" style="margin-top: 76px; min-height: calc(100vh - 76px);">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 全局JavaScript -->
+    <script>
+        // API请求函数
+        async function apiRequest(url, options = {}) {
+            try {
+                const response = await axios({
+                    url: `/api${url}`,
+                    method: options.method || 'GET',
+                    data: options.data,
+                    params: options.params,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                return response.data;
+            } catch (error) {
+                console.error('API请求失败:', error);
+                throw error;
+            }
+        }
+
+        // 显示加载状态
+        function showLoading(containerId) {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = `
+                    <div class="loading-content">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">加载中...</div>
+                    </div>
+                `;
+            }
+        }
+
+        // 隐藏加载状态
+        function hideLoading(containerId) {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = '';
+            }
+        }
+
+        // 显示错误信息
+        function showError(containerId, message) {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-danger-financial">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        ${message}
+                    </div>
+                `;
+            }
+        }
+
+        // ECharts主题配置
+        const financialTheme = {
+            color: ['#3b82f6', '#059669', '#dc2626', '#d97706', '#0891b2', '#7c3aed'],
+            backgroundColor: 'transparent',
+            textStyle: {
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif',
+                color: '#374151'
+            },
+            title: {
+                textStyle: {
+                    color: '#1f2937',
+                    fontWeight: 600
+                }
+            },
+            legend: {
+                textStyle: {
+                    color: '#6b7280'
+                }
+            },
+            grid: {
+                borderColor: '#e5e7eb'
+            },
+            categoryAxis: {
+                axisLine: {
+                    lineStyle: {
+                        color: '#d1d5db'
+                    }
+                },
+                axisTick: {
+                    lineStyle: {
+                        color: '#d1d5db'
+                    }
+                },
+                axisLabel: {
+                    color: '#6b7280'
+                },
+                splitLine: {
+                    lineStyle: {
+                        color: '#f3f4f6'
+                    }
+                }
+            },
+            valueAxis: {
+                axisLine: {
+                    lineStyle: {
+                        color: '#d1d5db'
+                    }
+                },
+                axisTick: {
+                    lineStyle: {
+                        color: '#d1d5db'
+                    }
+                },
+                axisLabel: {
+                    color: '#6b7280'
+                },
+                splitLine: {
+                    lineStyle: {
+                        color: '#f3f4f6'
+                    }
+                }
+            }
+        };
+
+        // 注册ECharts主题
+        if (typeof echarts !== 'undefined') {
+            echarts.registerTheme('financial', financialTheme);
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎨 专业金融主题已加载');
+            
+            // 设置当前页面的导航高亮
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html> 

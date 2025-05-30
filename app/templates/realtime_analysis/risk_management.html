@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时风险管理 - 多因子模型系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        .risk-card {
+            border-left: 4px solid #007bff;
+            transition: all 0.3s ease;
+        }
+        .risk-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .risk-high { border-left-color: #dc3545; }
+        .risk-medium { border-left-color: #ffc107; }
+        .risk-low { border-left-color: #28a745; }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .chart-container {
+            height: 400px;
+            margin: 20px 0;
+        }
+        
+        .alert-item {
+            border-left: 4px solid;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .alert-high { border-left-color: #dc3545; background-color: #f8d7da; }
+        .alert-medium { border-left-color: #ffc107; background-color: #fff3cd; }
+        .alert-low { border-left-color: #28a745; background-color: #d1eddd; }
+        
+        .position-row:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-online { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-offline { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2><i class="fas fa-shield-alt text-primary"></i> 实时风险管理</h2>
+                        <p class="text-muted">投资组合风险监控、预警管理和止损止盈控制</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" onclick="refreshAllData()">
+                            <i class="fas fa-sync-alt"></i> 刷新数据
+                        </button>
+                        <button class="btn btn-success" onclick="showCreatePortfolioModal()">
+                            <i class="fas fa-plus"></i> 创建组合
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 组合选择器 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">选择投资组合</h6>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="portfolioId" 
+                                   placeholder="输入组合ID" value="demo_portfolio">
+                            <button class="btn btn-outline-primary" onclick="loadPortfolioData()">
+                                <i class="fas fa-search"></i> 加载
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">系统状态</h6>
+                        <div>
+                            <span class="status-indicator status-online"></span>
+                            <span>风险监控系统</span>
+                            <span class="badge bg-success ms-2">运行中</span>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">最后更新: <span id="lastUpdateTime">--</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 风险概览卡片 -->
+        <div class="row mb-4" id="riskOverview">
+            <div class="col-md-3">
+                <div class="card risk-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-2x text-primary mb-2"></i>
+                        <h6 class="card-title">组合价值</h6>
+                        <div class="metric-value text-primary" id="portfolioValue">--</div>
+                        <small class="text-muted">总市值</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card risk-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-percentage fa-2x text-success mb-2"></i>
+                        <h6 class="card-title">总收益率</h6>
+                        <div class="metric-value text-success" id="totalReturn">--</div>
+                        <small class="text-muted">浮动盈亏</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card risk-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                        <h6 class="card-title">风险评级</h6>
+                        <div class="metric-value text-warning" id="riskLevel">--</div>
+                        <small class="text-muted">整体风险</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card risk-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-bell fa-2x text-danger mb-2"></i>
+                        <h6 class="card-title">活跃预警</h6>
+                        <div class="metric-value text-danger" id="activeAlerts">--</div>
+                        <small class="text-muted">预警数量</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要功能标签页 -->
+        <div class="row">
+            <div class="col-12">
+                <ul class="nav nav-tabs" id="riskTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="portfolio-tab" data-bs-toggle="tab" 
+                                data-bs-target="#portfolio" type="button" role="tab">
+                            <i class="fas fa-briefcase"></i> 持仓管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="risk-analysis-tab" data-bs-toggle="tab" 
+                                data-bs-target="#risk-analysis" type="button" role="tab">
+                            <i class="fas fa-chart-area"></i> 风险分析
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="alerts-tab" data-bs-toggle="tab" 
+                                data-bs-target="#alerts" type="button" role="tab">
+                            <i class="fas fa-bell"></i> 预警管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="stop-loss-tab" data-bs-toggle="tab" 
+                                data-bs-target="#stop-loss" type="button" role="tab">
+                            <i class="fas fa-hand-paper"></i> 止损止盈
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="stress-test-tab" data-bs-toggle="tab" 
+                                data-bs-target="#stress-test" type="button" role="tab">
+                            <i class="fas fa-vial"></i> 压力测试
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="riskTabContent">
+                    <!-- 持仓管理标签页 -->
+                    <div class="tab-pane fade show active" id="portfolio" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">投资组合持仓</h6>
+                                <button class="btn btn-sm btn-primary" onclick="showAddPositionModal()">
+                                    <i class="fas fa-plus"></i> 添加持仓
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>股票代码</th>
+                                                <th>持仓数量</th>
+                                                <th>成本价</th>
+                                                <th>当前价</th>
+                                                <th>市值</th>
+                                                <th>盈亏</th>
+                                                <th>权重</th>
+                                                <th>风险等级</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="positionsTable">
+                                            <tr>
+                                                <td colspan="9" class="text-center text-muted">
+                                                    <div class="loading">
+                                                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 行业分布图表 -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">行业分布</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="sectorChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 风险分析标签页 -->
+                    <div class="tab-pane fade" id="risk-analysis" role="tabpanel">
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">风险指标</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="riskMetricsTable">
+                                            <div class="loading">
+                                                <i class="fas fa-spinner fa-spin"></i> 计算中...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">VaR分析</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="varChart" class="chart-container"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">相关性热力图</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="correlationChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 预警管理标签页 -->
+                    <div class="tab-pane fade" id="alerts" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">风险预警</h6>
+                                <div>
+                                    <select class="form-select form-select-sm" id="alertLevelFilter" 
+                                            onchange="filterAlerts()">
+                                        <option value="">全部级别</option>
+                                        <option value="high">高风险</option>
+                                        <option value="medium">中风险</option>
+                                        <option value="low">低风险</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="alertsList">
+                                    <div class="loading">
+                                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 止损止盈标签页 -->
+                    <div class="tab-pane fade" id="stop-loss" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">止损止盈设置</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>止损设置</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">止损方式</label>
+                                            <select class="form-select" id="stopLossMethod">
+                                                <option value="percentage">百分比</option>
+                                                <option value="atr">ATR倍数</option>
+                                                <option value="fixed">固定金额</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">止损值</label>
+                                            <input type="number" class="form-control" id="stopLossValue" 
+                                                   value="0.10" step="0.01" min="0">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>止盈设置</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">止盈方式</label>
+                                            <select class="form-select" id="takeProfitMethod">
+                                                <option value="percentage">百分比</option>
+                                                <option value="atr">ATR倍数</option>
+                                                <option value="fixed">固定金额</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">止盈值</label>
+                                            <input type="number" class="form-control" id="takeProfitValue" 
+                                                   value="0.20" step="0.01" min="0">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <button class="btn btn-primary" onclick="updateStopLossTakeProfit()">
+                                        <i class="fas fa-save"></i> 更新设置
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">触发订单</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="triggeredOrdersList">
+                                    <div class="text-center text-muted">
+                                        暂无触发的订单
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 压力测试标签页 -->
+                    <div class="tab-pane fade" id="stress-test" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">压力测试</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <button class="btn btn-warning" onclick="runStressTest()">
+                                            <i class="fas fa-play"></i> 运行压力测试
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="stressTestResults">
+                                    <div class="text-center text-muted">
+                                        点击运行压力测试查看结果
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加持仓模态框 -->
+    <div class="modal fade" id="addPositionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加持仓</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addPositionForm">
+                        <div class="mb-3">
+                            <label class="form-label">股票代码</label>
+                            <input type="text" class="form-control" id="newTsCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">持仓数量</label>
+                            <input type="number" class="form-control" id="newPositionSize" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">平均成本</label>
+                            <input type="number" class="form-control" id="newAvgCost" step="0.01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">行业</label>
+                            <input type="text" class="form-control" id="newSector">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addPosition()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentPortfolioId = 'demo_portfolio';
+        let portfolioData = {};
+        let riskData = {};
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPortfolioData();
+            updateLastUpdateTime();
+            
+            // 每30秒自动刷新数据
+            setInterval(function() {
+                if (currentPortfolioId) {
+                    loadPortfolioData();
+                }
+            }, 30000);
+        });
+
+        // 加载组合数据
+        function loadPortfolioData() {
+            const portfolioId = document.getElementById('portfolioId').value.trim();
+            if (!portfolioId) {
+                alert('请输入组合ID');
+                return;
+            }
+            
+            currentPortfolioId = portfolioId;
+            
+            // 加载持仓数据
+            loadPositions();
+            // 加载风险监控数据
+            loadRiskMonitor();
+            // 加载预警数据
+            loadAlerts();
+        }
+
+        // 加载持仓数据
+        function loadPositions() {
+            fetch(`/api/realtime-analysis/risk/portfolio/${currentPortfolioId}/positions`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        portfolioData = data.data;
+                        updatePositionsTable(data.data.positions);
+                        loadPortfolioMetrics();
+                    } else {
+                        console.error('加载持仓失败:', data.message);
+                        document.getElementById('positionsTable').innerHTML = 
+                            '<tr><td colspan="9" class="text-center text-muted">暂无持仓数据</td></tr>';
+                    }
+                })
+                .catch(error => {
+                    console.error('加载持仓失败:', error);
+                    document.getElementById('positionsTable').innerHTML = 
+                        '<tr><td colspan="9" class="text-center text-danger">加载失败</td></tr>';
+                });
+        }
+
+        // 加载组合指标
+        function loadPortfolioMetrics() {
+            fetch(`/api/realtime-analysis/risk/portfolio/${currentPortfolioId}/metrics`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateRiskOverview(data.data);
+                        updateSectorChart(data.data.sector_distribution);
+                    }
+                })
+                .catch(error => console.error('加载组合指标失败:', error));
+        }
+
+        // 加载风险监控数据
+        function loadRiskMonitor() {
+            fetch(`/api/realtime-analysis/risk/position-monitor?portfolio_id=${currentPortfolioId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        riskData = data.data;
+                        updateRiskAnalysis(data.data);
+                    }
+                })
+                .catch(error => console.error('加载风险监控失败:', error));
+        }
+
+        // 加载预警数据
+        function loadAlerts() {
+            fetch(`/api/realtime-analysis/risk/alerts?portfolio_id=${currentPortfolioId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateAlertsList(data.data);
+                    }
+                })
+                .catch(error => console.error('加载预警失败:', error));
+        }
+
+        // 更新持仓表格
+        function updatePositionsTable(positions) {
+            const tbody = document.getElementById('positionsTable');
+            
+            if (!positions || positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无持仓数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = positions.map(pos => {
+                const pnlPercentage = pos.avg_cost > 0 ? 
+                    ((pos.current_price - pos.avg_cost) / pos.avg_cost * 100) : 0;
+                const pnlClass = pnlPercentage >= 0 ? 'text-success' : 'text-danger';
+                const riskClass = getRiskClass(Math.abs(pnlPercentage));
+                
+                return `
+                    <tr class="position-row">
+                        <td><strong>${pos.ts_code}</strong></td>
+                        <td>${formatNumber(pos.position_size)}</td>
+                        <td>¥${formatNumber(pos.avg_cost, 2)}</td>
+                        <td>¥${formatNumber(pos.current_price, 2)}</td>
+                        <td>¥${formatNumber(pos.market_value, 2)}</td>
+                        <td class="${pnlClass}">
+                            ¥${formatNumber(pos.unrealized_pnl, 2)}<br>
+                            <small>(${pnlPercentage.toFixed(2)}%)</small>
+                        </td>
+                        <td>${formatNumber(pos.weight, 1)}%</td>
+                        <td><span class="badge bg-${riskClass}">${getRiskLevel(Math.abs(pnlPercentage))}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editPosition(${pos.id})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deletePosition(${pos.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 更新风险概览
+        function updateRiskOverview(metrics) {
+            document.getElementById('portfolioValue').textContent = 
+                '¥' + formatNumber(metrics.total_market_value, 2);
+            document.getElementById('totalReturn').textContent = 
+                formatNumber(metrics.total_pnl_percentage, 2) + '%';
+            
+            // 根据风险评分设置风险等级
+            const riskScore = metrics.risk_score || 0;
+            let riskLevel = '低';
+            let riskClass = 'success';
+            
+            if (riskScore > 10) {
+                riskLevel = '高';
+                riskClass = 'danger';
+            } else if (riskScore > 5) {
+                riskLevel = '中';
+                riskClass = 'warning';
+            }
+            
+            document.getElementById('riskLevel').textContent = riskLevel;
+            document.getElementById('riskLevel').className = `metric-value text-${riskClass}`;
+        }
+
+        // 更新行业分布图表
+        function updateSectorChart(sectorData) {
+            const chart = echarts.init(document.getElementById('sectorChart'));
+            
+            const data = Object.entries(sectorData || {}).map(([sector, weight]) => ({
+                name: sector,
+                value: weight
+            }));
+
+            const option = {
+                title: {
+                    text: '行业权重分布',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{a} <br/>{b}: {c}% ({d}%)'
+                },
+                series: [{
+                    name: '行业权重',
+                    type: 'pie',
+                    radius: '50%',
+                    data: data,
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }]
+            };
+
+            chart.setOption(option);
+        }
+
+        // 更新风险分析
+        function updateRiskAnalysis(riskData) {
+            // 更新风险指标表格
+            const metricsHtml = `
+                <table class="table table-sm">
+                    <tr><td>高风险持仓</td><td class="text-end">${riskData.risk_summary?.high_risk_positions || 0}</td></tr>
+                    <tr><td>中风险持仓</td><td class="text-end">${riskData.risk_summary?.medium_risk_positions || 0}</td></tr>
+                    <tr><td>风险评分</td><td class="text-end">${riskData.risk_summary?.risk_score || 0}</td></tr>
+                    <tr><td>整体风险等级</td><td class="text-end">
+                        <span class="badge bg-${getRiskClassByLevel(riskData.risk_summary?.overall_risk_level)}">
+                            ${riskData.risk_summary?.overall_risk_level || '未知'}
+                        </span>
+                    </td></tr>
+                </table>
+            `;
+            document.getElementById('riskMetricsTable').innerHTML = metricsHtml;
+        }
+
+        // 更新预警列表
+        function updateAlertsList(alertsData) {
+            const alertsContainer = document.getElementById('alertsList');
+            const alerts = alertsData.active_alerts || [];
+            
+            // 更新活跃预警数量
+            document.getElementById('activeAlerts').textContent = alerts.length;
+            
+            if (alerts.length === 0) {
+                alertsContainer.innerHTML = '<div class="text-center text-muted">暂无活跃预警</div>';
+                return;
+            }
+
+            alertsContainer.innerHTML = alerts.map(alert => `
+                <div class="alert-item alert-${alert.alert_level}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${alert.ts_code}</strong> - ${alert.alert_type}
+                            <div class="mt-1">${alert.message}</div>
+                            <small class="text-muted">
+                                创建时间: ${new Date(alert.created_at).toLocaleString()}
+                            </small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-success" onclick="resolveAlert(${alert.id})">
+                            <i class="fas fa-check"></i> 解决
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 显示添加持仓模态框
+        function showAddPositionModal() {
+            const modal = new bootstrap.Modal(document.getElementById('addPositionModal'));
+            modal.show();
+        }
+
+        // 添加持仓
+        function addPosition() {
+            const formData = {
+                portfolio_id: currentPortfolioId,
+                ts_code: document.getElementById('newTsCode').value,
+                position_size: parseFloat(document.getElementById('newPositionSize').value),
+                avg_cost: parseFloat(document.getElementById('newAvgCost').value),
+                sector: document.getElementById('newSector').value
+            };
+
+            fetch('/api/realtime-analysis/risk/portfolio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('持仓添加成功');
+                    bootstrap.Modal.getInstance(document.getElementById('addPositionModal')).hide();
+                    loadPositions();
+                    // 清空表单
+                    document.getElementById('addPositionForm').reset();
+                } else {
+                    alert('添加失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('添加持仓失败:', error);
+                alert('添加失败');
+            });
+        }
+
+        // 更新止损止盈
+        function updateStopLossTakeProfit() {
+            const data = {
+                portfolio_id: currentPortfolioId,
+                stop_loss_method: document.getElementById('stopLossMethod').value,
+                stop_loss_value: parseFloat(document.getElementById('stopLossValue').value),
+                take_profit_method: document.getElementById('takeProfitMethod').value,
+                take_profit_value: parseFloat(document.getElementById('takeProfitValue').value)
+            };
+
+            fetch('/api/realtime-analysis/risk/stop-loss-take-profit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('止损止盈设置更新成功');
+                    // 显示触发的订单
+                    if (data.data.triggered_orders.length > 0) {
+                        updateTriggeredOrders(data.data.triggered_orders);
+                    }
+                } else {
+                    alert('更新失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('更新止损止盈失败:', error);
+                alert('更新失败');
+            });
+        }
+
+        // 更新触发订单列表
+        function updateTriggeredOrders(orders) {
+            const container = document.getElementById('triggeredOrdersList');
+            
+            if (orders.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">暂无触发的订单</div>';
+                return;
+            }
+
+            container.innerHTML = orders.map(order => `
+                <div class="alert alert-warning">
+                    <strong>${order.ts_code}</strong> - ${order.order_type === 'stop_loss' ? '止损' : '止盈'}触发
+                    <br>触发价格: ¥${formatNumber(order.trigger_price, 2)}
+                    <br>持仓数量: ${formatNumber(order.position_size)}
+                    <br>盈亏: ¥${formatNumber(order.unrealized_pnl, 2)}
+                </div>
+            `).join('');
+        }
+
+        // 运行压力测试
+        function runStressTest() {
+            const data = {
+                portfolio_id: currentPortfolioId
+            };
+
+            fetch('/api/realtime-analysis/risk/stress-test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateStressTestResults(data.data);
+                } else {
+                    alert('压力测试失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('压力测试失败:', error);
+                alert('压力测试失败');
+            });
+        }
+
+        // 更新压力测试结果
+        function updateStressTestResults(results) {
+            const container = document.getElementById('stressTestResults');
+            
+            const html = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>测试结果</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>场景</th>
+                                        <th>原始价值</th>
+                                        <th>压力价值</th>
+                                        <th>盈亏变化</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${results.scenarios.map(scenario => `
+                                        <tr>
+                                            <td>${scenario.scenario_name}</td>
+                                            <td>¥${formatNumber(scenario.original_value, 2)}</td>
+                                            <td>¥${formatNumber(scenario.stressed_value, 2)}</td>
+                                            <td class="${scenario.pnl_percentage >= 0 ? 'text-success' : 'text-danger'}">
+                                                ${formatNumber(scenario.pnl_percentage, 2)}%
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>极端情况</h6>
+                        <div class="alert alert-danger">
+                            <strong>最坏情况:</strong> ${results.worst_case.scenario_name}<br>
+                            盈亏变化: ${formatNumber(results.worst_case.pnl_percentage, 2)}%
+                        </div>
+                        <div class="alert alert-success">
+                            <strong>最好情况:</strong> ${results.best_case.scenario_name}<br>
+                            盈亏变化: ${formatNumber(results.best_case.pnl_percentage, 2)}%
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        // 解决预警
+        function resolveAlert(alertId) {
+            fetch(`/api/realtime-analysis/risk/alerts/${alertId}/resolve`, {
+                method: 'PUT'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAlerts(); // 重新加载预警列表
+                } else {
+                    alert('解决预警失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('解决预警失败:', error);
+                alert('解决预警失败');
+            });
+        }
+
+        // 刷新所有数据
+        function refreshAllData() {
+            if (currentPortfolioId) {
+                loadPortfolioData();
+                updateLastUpdateTime();
+            }
+        }
+
+        // 更新最后更新时间
+        function updateLastUpdateTime() {
+            document.getElementById('lastUpdateTime').textContent = 
+                new Date().toLocaleString();
+        }
+
+        // 工具函数
+        function formatNumber(num, decimals = 0) {
+            if (num === null || num === undefined) return '--';
+            return Number(num).toLocaleString('zh-CN', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        function getRiskClass(pnlPercentage) {
+            if (pnlPercentage > 15) return 'danger';
+            if (pnlPercentage > 8) return 'warning';
+            return 'success';
+        }
+
+        function getRiskLevel(pnlPercentage) {
+            if (pnlPercentage > 15) return '高风险';
+            if (pnlPercentage > 8) return '中风险';
+            return '低风险';
+        }
+
+        function getRiskClassByLevel(level) {
+            switch(level) {
+                case 'high': return 'danger';
+                case 'medium': return 'warning';
+                case 'low': return 'success';
+                default: return 'secondary';
+            }
+        }
+    </script>
+</body>
+</html> 

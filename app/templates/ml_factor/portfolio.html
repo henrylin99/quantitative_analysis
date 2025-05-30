@@ -1,0 +1,965 @@
+{% extends "base.html" %}
+
+{% block title %}投资组合 - 多因子模型系统{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>💼 投资组合</h1>
+                    <p class="text-muted">智能构建和优化投资组合</p>
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPortfolioModal">
+                    <i class="fas fa-plus"></i> 创建组合
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 组合优化工具 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">组合优化工具</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="optimizationMethod" class="form-label">优化方法</label>
+                            <select class="form-select" id="optimizationMethod">
+                                <option value="mean_variance">均值方差优化</option>
+                                <option value="risk_parity">风险平价</option>
+                                <option value="max_sharpe">最大夏普比率</option>
+                                <option value="min_variance">最小方差</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="riskLevel" class="form-label">风险水平</label>
+                            <select class="form-select" id="riskLevel">
+                                <option value="conservative">保守型</option>
+                                <option value="moderate">稳健型</option>
+                                <option value="aggressive">积极型</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="maxStocks" class="form-label">最大持股数</label>
+                            <input type="number" class="form-control" id="maxStocks" value="20" min="5" max="50">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">&nbsp;</label>
+                            <div>
+                                <button class="btn btn-success" onclick="optimizePortfolio()">
+                                    <i class="fas fa-chart-line"></i> 优化组合
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 组合列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">我的投资组合</h5>
+                </div>
+                <div class="card-body">
+                    <div id="portfolioList">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 创建组合模态框 -->
+<div class="modal fade" id="createPortfolioModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建投资组合</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createPortfolioForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="portfolioName" class="form-label">组合名称 *</label>
+                                <input type="text" class="form-control" id="portfolioName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="initialCapital" class="form-label">初始资金 *</label>
+                                <input type="number" class="form-control" id="initialCapital" value="1000000" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="portfolioDescription" class="form-label">组合描述</label>
+                        <textarea class="form-control" id="portfolioDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">选股策略</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="selectionStrategy" 
+                                           id="factorStrategy" value="factor_based" checked>
+                                    <label class="form-check-label" for="factorStrategy">
+                                        基于因子选股
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="selectionStrategy" 
+                                           id="mlStrategy" value="ml_based">
+                                    <label class="form-check-label" for="mlStrategy">
+                                        基于ML模型选股
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createPortfolio()">创建组合</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 组合详情模态框 -->
+<div class="modal fade" id="portfolioDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="portfolioDetailTitle">组合详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="portfolioDetailContent">
+                    <!-- 组合详情内容 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let portfolios = [];
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadPortfolios();
+});
+
+// 加载投资组合列表
+async function loadPortfolios() {
+    try {
+        // 模拟数据
+        portfolios = [
+            {
+                id: 'portfolio_001',
+                name: '价值投资组合',
+                description: '基于价值因子的长期投资组合',
+                initial_capital: 1000000,
+                current_value: 1150000,
+                return_rate: 0.15,
+                volatility: 0.12,
+                sharpe_ratio: 1.25,
+                max_drawdown: 0.08,
+                created_at: '2024-01-01',
+                status: 'active',
+                holdings: [
+                    {ts_code: '000001.SZ', name: '平安银行', weight: 0.15, value: 172500},
+                    {ts_code: '600036.SH', name: '招商银行', weight: 0.12, value: 138000},
+                    {ts_code: '000002.SZ', name: '万科A', weight: 0.10, value: 115000}
+                ]
+            },
+            {
+                id: 'portfolio_002',
+                name: '成长投资组合',
+                description: '基于成长因子的投资组合',
+                initial_capital: 500000,
+                current_value: 580000,
+                return_rate: 0.16,
+                volatility: 0.18,
+                sharpe_ratio: 0.89,
+                max_drawdown: 0.15,
+                created_at: '2024-02-01',
+                status: 'active',
+                holdings: []
+            }
+        ];
+        
+        renderPortfolios();
+    } catch (error) {
+        console.error('加载投资组合失败:', error);
+        showError('portfolioList', '加载投资组合失败');
+    }
+}
+
+// 渲染投资组合列表
+function renderPortfolios() {
+    const container = document.getElementById('portfolioList');
+    
+    if (portfolios.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">暂无投资组合，点击"创建组合"开始</div>';
+        return;
+    }
+    
+    const html = portfolios.map(portfolio => `
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="card-title">
+                            ${portfolio.name}
+                            <span class="badge bg-${portfolio.status === 'active' ? 'success' : 'secondary'} ms-2">
+                                ${portfolio.status === 'active' ? '活跃' : '非活跃'}
+                            </span>
+                        </h5>
+                        <p class="card-text text-muted">${portfolio.description}</p>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <small class="text-muted">初始资金</small>
+                                <div class="fw-bold">${formatAmount(portfolio.initial_capital)}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">当前价值</small>
+                                <div class="fw-bold text-${portfolio.current_value > portfolio.initial_capital ? 'success' : 'danger'}">
+                                    ${formatAmount(portfolio.current_value)}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">收益率</small>
+                                <div class="fw-bold text-${portfolio.return_rate > 0 ? 'success' : 'danger'}">
+                                    ${formatPercent(portfolio.return_rate)}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">夏普比率</small>
+                                <div class="fw-bold">${portfolio.sharpe_ratio.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary" onclick="viewPortfolioDetail('${portfolio.id}')">
+                                <i class="fas fa-eye"></i> 详情
+                            </button>
+                            <button class="btn btn-outline-success" onclick="rebalancePortfolio('${portfolio.id}')">
+                                <i class="fas fa-balance-scale"></i> 再平衡
+                            </button>
+                            <button class="btn btn-outline-warning" onclick="editPortfolio('${portfolio.id}')">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deletePortfolio('${portfolio.id}')">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">创建于 ${portfolio.created_at}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// 优化投资组合
+async function optimizePortfolio() {
+    const method = document.getElementById('optimizationMethod').value;
+    const riskLevel = document.getElementById('riskLevel').value;
+    const maxStocks = parseInt(document.getElementById('maxStocks').value);
+    
+    // 显示加载状态
+    const button = document.querySelector('button[onclick="optimizePortfolio()"]');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 优化中...';
+    button.disabled = true;
+    
+    try {
+        // 根据风险水平设置优化参数
+        const riskParams = getRiskParameters(riskLevel);
+        const tradeDate = new Date().toISOString().split('T')[0];
+        
+        // 首先尝试使用选择的优化方法
+        let response;
+        try {
+            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                trade_date: tradeDate,
+                selection_method: 'factor_based',
+                factor_list: ['momentum_5d', 'pe_percentile', 'money_flow_strength'],
+                weights: {'momentum_5d': 0.4, 'pe_percentile': 0.3, 'money_flow_strength': 0.3},
+                top_n: Math.max(maxStocks * 2, 20), // 选择更大的股票池进行优化
+                optimization_method: method,
+                constraints: {
+                    max_weight: riskParams.max_weight,
+                    min_weight: riskParams.min_weight,
+                    max_stocks: maxStocks,
+                    target_return: riskParams.target_return,
+                    risk_tolerance: riskParams.risk_tolerance
+                }
+            });
+        } catch (error) {
+            console.warn(`${method} 优化失败，尝试等权重方法:`, error.message);
+            response = null;
+        }
+        
+        // 如果主要方法失败，回退到等权重方法
+        if (!response || !response.data.success) {
+            console.log('回退到等权重优化方法...');
+            
+            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                trade_date: tradeDate,
+                selection_method: 'factor_based',
+                factor_list: ['momentum_5d', 'pe_percentile'],
+                weights: {'momentum_5d': 0.6, 'pe_percentile': 0.4},
+                top_n: maxStocks,
+                optimization_method: 'equal_weight'
+            });
+            
+            if (response.data.success) {
+                // 显示警告信息
+                showOptimizationWarning(method, 'equal_weight');
+            }
+        }
+        
+        if (response.data.success) {
+            // 显示优化结果
+            showOptimizationResults(response.data.portfolio_optimization, method, riskLevel, maxStocks, response.data);
+        } else {
+            throw new Error('所有优化方法都失败了: ' + (response.data.error || '未知错误'));
+        }
+        
+    } catch (error) {
+        console.error('投资组合优化失败:', error);
+        alert('投资组合优化失败: ' + error.message + '\n\n请检查是否有足够的因子数据，或尝试减少最大持股数。');
+    } finally {
+        // 恢复按钮状态
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// 根据风险水平获取参数
+function getRiskParameters(riskLevel) {
+    const params = {
+        'conservative': {
+            max_weight: 0.08,      // 单只股票最大权重8%
+            min_weight: 0.02,      // 单只股票最小权重2%
+            target_return: 0.08,   // 目标年化收益率8%
+            risk_tolerance: 0.12   // 风险容忍度12%
+        },
+        'moderate': {
+            max_weight: 0.12,      // 单只股票最大权重12%
+            min_weight: 0.01,      // 单只股票最小权重1%
+            target_return: 0.12,   // 目标年化收益率12%
+            risk_tolerance: 0.18   // 风险容忍度18%
+        },
+        'aggressive': {
+            max_weight: 0.20,      // 单只股票最大权重20%
+            min_weight: 0.005,     // 单只股票最小权重0.5%
+            target_return: 0.18,   // 目标年化收益率18%
+            risk_tolerance: 0.25   // 风险容忍度25%
+        }
+    };
+    
+    return params[riskLevel] || params['moderate'];
+}
+
+// 显示优化结果
+function showOptimizationResults(data, method, riskLevel, maxStocks, responseData) {
+    const weights = data.weights || {};
+    const stats = data.portfolio_stats || {};
+    
+    // 创建结果模态框
+    const modalHtml = `
+        <div class="modal fade" id="optimizationResultModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-chart-line"></i> 投资组合优化结果
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- 优化参数 -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <h6><i class="fas fa-cog"></i> 优化参数</h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <strong>优化方法:</strong> ${getMethodLabel(method)}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>风险水平:</strong> ${getRiskLabel(riskLevel)}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>最大持股数:</strong> ${maxStocks}只
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>实际持股数:</strong> ${Object.keys(weights).length}只
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 组合统计 -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h4 class="text-primary">${formatPercent(stats.expected_return || 0)}</h4>
+                                        <p class="card-text">预期收益率</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h4 class="text-warning">${formatPercent(stats.volatility || 0)}</h4>
+                                        <p class="card-text">组合波动率</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h4 class="text-success">${(stats.sharpe_ratio || 0).toFixed(2)}</h4>
+                                        <p class="card-text">夏普比率</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h4 class="text-info">${formatPercent(stats.max_weight || 0)}</h4>
+                                        <p class="card-text">最大权重</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 权重分布 -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6><i class="fas fa-chart-pie"></i> 权重分布</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>股票代码</th>
+                                                <th>权重</th>
+                                                <th>权重可视化</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${Object.entries(weights)
+                                                .sort(([,a], [,b]) => b - a)
+                                                .map(([ts_code, weight], index) => `
+                                                    <tr>
+                                                        <td>
+                                                            <span class="badge bg-${getWeightBadgeColor(index + 1)}">
+                                                                ${index + 1}
+                                                            </span>
+                                                        </td>
+                                                        <td><code>${ts_code}</code></td>
+                                                        <td><strong>${formatPercent(weight)}</strong></td>
+                                                        <td>
+                                                            <div class="progress" style="height: 20px;">
+                                                                <div class="progress-bar bg-${getWeightProgressColor(weight)}" 
+                                                                     style="width: ${(weight * 100 / Math.max(...Object.values(weights))) * 100}%">
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 风险分析 -->
+                        <div class="row">
+                            <div class="col-12">
+                                <h6><i class="fas fa-shield-alt"></i> 风险分析</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">权重集中度</h6>
+                                                <p class="card-text">
+                                                    前5大持仓权重: <strong>${formatPercent(
+                                                        Object.values(weights)
+                                                            .sort((a, b) => b - a)
+                                                            .slice(0, 5)
+                                                            .reduce((sum, w) => sum + w, 0)
+                                                    )}</strong>
+                                                </p>
+                                                <p class="card-text">
+                                                    权重标准差: <strong>${formatPercent(calculateWeightStd(weights))}</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">分散化程度</h6>
+                                                <p class="card-text">
+                                                    有效股票数: <strong>${calculateEffectiveStocks(weights).toFixed(1)}只</strong>
+                                                </p>
+                                                <p class="card-text">
+                                                    分散化比率: <strong>${formatPercent(calculateEffectiveStocks(weights) / Object.keys(weights).length)}</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                        <button type="button" class="btn btn-success" onclick="saveOptimizedPortfolio()">
+                            <i class="fas fa-save"></i> 保存为投资组合
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="exportOptimizationResults()">
+                            <i class="fas fa-download"></i> 导出结果
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 移除已存在的模态框
+    const existingModal = document.getElementById('optimizationResultModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // 添加新模态框到页面
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // 保存优化结果到全局变量
+    window.currentOptimizationResult = {
+        weights: weights,
+        stats: stats,
+        method: method,
+        riskLevel: riskLevel,
+        maxStocks: maxStocks
+    };
+    
+    // 显示模态框
+    new bootstrap.Modal(document.getElementById('optimizationResultModal')).show();
+}
+
+// 获取方法标签
+function getMethodLabel(method) {
+    const labels = {
+        'mean_variance': '均值方差优化',
+        'risk_parity': '风险平价',
+        'max_sharpe': '最大夏普比率',
+        'min_variance': '最小方差'
+    };
+    return labels[method] || method;
+}
+
+// 获取风险标签
+function getRiskLabel(riskLevel) {
+    const labels = {
+        'conservative': '保守型',
+        'moderate': '稳健型',
+        'aggressive': '积极型'
+    };
+    return labels[riskLevel] || riskLevel;
+}
+
+// 获取权重徽章颜色
+function getWeightBadgeColor(rank) {
+    if (rank <= 3) return 'success';
+    if (rank <= 10) return 'primary';
+    if (rank <= 20) return 'warning';
+    return 'secondary';
+}
+
+// 获取权重进度条颜色
+function getWeightProgressColor(weight) {
+    if (weight >= 0.15) return 'danger';
+    if (weight >= 0.10) return 'warning';
+    if (weight >= 0.05) return 'primary';
+    return 'success';
+}
+
+// 计算权重标准差
+function calculateWeightStd(weights) {
+    const values = Object.values(weights);
+    const mean = values.reduce((sum, w) => sum + w, 0) / values.length;
+    const variance = values.reduce((sum, w) => sum + Math.pow(w - mean, 2), 0) / values.length;
+    return Math.sqrt(variance);
+}
+
+// 计算有效股票数
+function calculateEffectiveStocks(weights) {
+    const sumSquaredWeights = Object.values(weights).reduce((sum, w) => sum + w * w, 0);
+    return 1 / sumSquaredWeights;
+}
+
+// 保存优化后的投资组合
+function saveOptimizedPortfolio() {
+    if (!window.currentOptimizationResult) {
+        alert('没有优化结果可保存');
+        return;
+    }
+    
+    const result = window.currentOptimizationResult;
+    const name = prompt('请输入投资组合名称:', `${getMethodLabel(result.method)}_${getRiskLabel(result.riskLevel)}_${new Date().toISOString().split('T')[0]}`);
+    
+    if (!name) return;
+    
+    // 构造组合数据
+    const portfolioData = {
+        id: 'portfolio_' + Date.now(),
+        name: name,
+        description: `基于${getMethodLabel(result.method)}的${getRiskLabel(result.riskLevel)}投资组合`,
+        initial_capital: 1000000, // 默认100万
+        current_value: 1000000,
+        return_rate: result.stats.expected_return || 0,
+        volatility: result.stats.volatility || 0,
+        sharpe_ratio: result.stats.sharpe_ratio || 0,
+        max_drawdown: 0,
+        created_at: new Date().toISOString().split('T')[0],
+        status: 'active',
+        holdings: Object.entries(result.weights).map(([ts_code, weight]) => ({
+            ts_code: ts_code,
+            name: ts_code,
+            weight: weight,
+            value: 1000000 * weight
+        }))
+    };
+    
+    // 添加到组合列表
+    portfolios.push(portfolioData);
+    
+    alert('投资组合保存成功！');
+    bootstrap.Modal.getInstance(document.getElementById('optimizationResultModal')).hide();
+    renderPortfolios();
+}
+
+// 导出优化结果
+function exportOptimizationResults() {
+    if (!window.currentOptimizationResult) {
+        alert('没有优化结果可导出');
+        return;
+    }
+    
+    const result = window.currentOptimizationResult;
+    
+    // 创建CSV内容
+    const headers = ['股票代码', '权重(%)', '权重(小数)', '排名'];
+    const csvContent = [
+        `# 投资组合优化结果`,
+        `# 优化方法: ${getMethodLabel(result.method)}`,
+        `# 风险水平: ${getRiskLabel(result.riskLevel)}`,
+        `# 预期收益率: ${formatPercent(result.stats.expected_return || 0)}`,
+        `# 组合波动率: ${formatPercent(result.stats.volatility || 0)}`,
+        `# 夏普比率: ${(result.stats.sharpe_ratio || 0).toFixed(2)}`,
+        `# 生成时间: ${new Date().toLocaleString()}`,
+        '',
+        headers.join(','),
+        ...Object.entries(result.weights)
+            .sort(([,a], [,b]) => b - a)
+            .map(([ts_code, weight], index) => [
+                ts_code,
+                (weight * 100).toFixed(2),
+                weight.toFixed(6),
+                index + 1
+            ].join(','))
+    ].join('\n');
+    
+    // 创建下载链接
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `投资组合优化结果_${result.method}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 查看组合详情
+function viewPortfolioDetail(portfolioId) {
+    const portfolio = portfolios.find(p => p.id === portfolioId);
+    if (!portfolio) return;
+    
+    document.getElementById('portfolioDetailTitle').textContent = portfolio.name;
+    
+    const detailHtml = `
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h4 class="text-primary">${formatAmount(portfolio.current_value)}</h4>
+                        <p class="card-text">当前价值</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h4 class="text-success">${formatPercent(portfolio.return_rate)}</h4>
+                        <p class="card-text">总收益率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h4 class="text-warning">${formatPercent(portfolio.volatility)}</h4>
+                        <p class="card-text">波动率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h4 class="text-info">${portfolio.sharpe_ratio.toFixed(2)}</h4>
+                        <p class="card-text">夏普比率</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <h6>持仓明细</h6>
+                ${portfolio.holdings.length > 0 ? `
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>股票代码</th>
+                                    <th>股票名称</th>
+                                    <th>权重</th>
+                                    <th>市值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${portfolio.holdings.map(holding => `
+                                    <tr>
+                                        <td><code>${holding.ts_code}</code></td>
+                                        <td>${holding.name}</td>
+                                        <td>${formatPercent(holding.weight)}</td>
+                                        <td>${formatAmount(holding.value)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<p class="text-muted">暂无持仓</p>'}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('portfolioDetailContent').innerHTML = detailHtml;
+    new bootstrap.Modal(document.getElementById('portfolioDetailModal')).show();
+}
+
+// 再平衡组合
+function rebalancePortfolio(portfolioId) {
+    alert('再平衡功能待实现');
+}
+
+// 编辑组合
+function editPortfolio(portfolioId) {
+    alert('编辑功能待实现');
+}
+
+// 删除组合
+function deletePortfolio(portfolioId) {
+    if (confirm('确定要删除这个投资组合吗？')) {
+        alert('删除功能待实现');
+    }
+}
+
+// 格式化金额
+function formatAmount(amount) {
+    if (amount >= 100000000) {
+        return (amount / 100000000).toFixed(2) + '亿';
+    } else if (amount >= 10000) {
+        return (amount / 10000).toFixed(2) + '万';
+    }
+    return amount.toFixed(2);
+}
+
+// 格式化百分比
+function formatPercent(value) {
+    return (value * 100).toFixed(2) + '%';
+}
+
+// 显示错误信息
+function showError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+    }
+}
+
+// 创建投资组合
+async function createPortfolio() {
+    const name = document.getElementById('portfolioName').value;
+    const capital = parseFloat(document.getElementById('initialCapital').value);
+    const description = document.getElementById('portfolioDescription').value;
+    const strategy = document.querySelector('input[name="selectionStrategy"]:checked').value;
+    
+    if (!name || !capital) {
+        alert('请填写必填字段');
+        return;
+    }
+    
+    try {
+        const tradeDate = new Date().toISOString().split('T')[0];
+        
+        // 根据选择的策略创建投资组合
+        let response;
+        if (strategy === 'factor_based') {
+            // 基于因子的策略
+            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                trade_date: tradeDate,
+                selection_method: 'factor_based',
+                factor_list: ['momentum_5d', 'pe_percentile', 'money_flow_strength'],
+                weights: {'momentum_5d': 0.4, 'pe_percentile': 0.3, 'money_flow_strength': 0.3},
+                top_n: 20,
+                optimization_method: 'mean_variance',
+                constraints: {
+                    max_weight: 0.1,  // 单只股票最大权重10%
+                    min_weight: 0.01  // 单只股票最小权重1%
+                }
+            });
+        } else if (strategy === 'ml_based') {
+            // 基于ML模型的策略
+            const modelsResponse = await axios.get('/api/ml-factor/models/list');
+            if (modelsResponse.data.success && modelsResponse.data.models.length > 0) {
+                const modelIds = modelsResponse.data.models.map(m => m.model_id);
+                response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                    trade_date: tradeDate,
+                    selection_method: 'ml_based',
+                    model_ids: modelIds,
+                    top_n: 20,
+                    optimization_method: 'mean_variance'
+                });
+            } else {
+                alert('没有可用的ML模型，请先创建和训练模型');
+                return;
+            }
+        } else {
+            // 等权重策略
+            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+                trade_date: tradeDate,
+                selection_method: 'factor_based',
+                factor_list: ['momentum_5d', 'pe_percentile'],
+                top_n: 10,
+                optimization_method: 'equal_weight'
+            });
+        }
+        
+        if (response.data.success) {
+            // 构造组合数据
+            const portfolioData = {
+                id: 'portfolio_' + Date.now(),
+                name: name,
+                description: description,
+                initial_capital: capital,
+                current_value: capital,
+                return_rate: 0,
+                volatility: response.data.portfolio_optimization?.portfolio_stats?.volatility || 0.15,
+                sharpe_ratio: response.data.portfolio_optimization?.portfolio_stats?.sharpe_ratio || 1.0,
+                max_drawdown: 0,
+                created_at: tradeDate,
+                status: 'active',
+                holdings: []
+            };
+            
+            // 转换持仓数据
+            const weights = response.data.portfolio_optimization?.weights || {};
+            portfolioData.holdings = Object.entries(weights).map(([ts_code, weight]) => ({
+                ts_code: ts_code,
+                name: ts_code, // 简化显示
+                weight: weight,
+                value: capital * weight
+            }));
+            
+            // 添加到组合列表
+            portfolios.push(portfolioData);
+            
+            alert('投资组合创建成功！');
+            bootstrap.Modal.getInstance(document.getElementById('createPortfolioModal')).hide();
+            document.getElementById('createPortfolioForm').reset();
+            renderPortfolios();
+            
+        } else {
+            alert('创建失败: ' + response.data.error);
+        }
+        
+    } catch (error) {
+        console.error('创建投资组合失败:', error);
+        alert('创建投资组合失败，可能是因为缺少因子数据。请先计算因子值。错误: ' + error.message);
+    }
+}
+
+// 显示优化警告
+function showOptimizationWarning(originalMethod, fallbackMethod) {
+    const warningHtml = `
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>优化方法回退:</strong> ${getMethodLabel(originalMethod)} 优化失败，已自动切换到 ${getMethodLabel(fallbackMethod)}。
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // 在页面顶部显示警告
+    const container = document.querySelector('.container');
+    container.insertAdjacentHTML('afterbegin', warningHtml);
+    
+    // 5秒后自动隐藏
+    setTimeout(() => {
+        const alert = document.querySelector('.alert-warning');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %} 
