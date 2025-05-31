@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API测试页面</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>API测试页面</h1>
+    <div id="results"></div>
+    
+    <script>
+        // API请求函数
+        async function apiRequest(url, options = {}) {
+            try {
+                console.log('发起API请求:', `/api${url}`);
+                const response = await axios({
+                    url: `/api${url}`,
+                    method: options.method || 'GET',
+                    data: options.data,
+                    params: options.params,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                console.log('API响应:', response.data);
+                return response.data;
+            } catch (error) {
+                console.error('API请求失败:', error);
+                throw error;
+            }
+        }
+
+        // 测试API调用
+        async function testAPI() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>正在测试API...</p>';
+            
+            try {
+                // 测试股票基本信息
+                console.log('=== 测试股票基本信息 ===');
+                const stockInfo = await apiRequest('/stocks/000001.SZ');
+                console.log('股票信息:', stockInfo);
+                
+                // 测试历史数据
+                console.log('=== 测试历史数据 ===');
+                const historyData = await apiRequest('/stocks/000001.SZ/history?limit=5');
+                console.log('历史数据:', historyData);
+                
+                // 测试技术因子
+                console.log('=== 测试技术因子 ===');
+                const factorsData = await apiRequest('/stocks/000001.SZ/factors?limit=5');
+                console.log('技术因子:', factorsData);
+                
+                // 测试资金流向
+                console.log('=== 测试资金流向 ===');
+                const moneyflowData = await apiRequest('/stocks/000001.SZ/moneyflow?limit=5');
+                console.log('资金流向:', moneyflowData);
+                
+                // 测试筹码分布
+                console.log('=== 测试筹码分布 ===');
+                const cyqData = await apiRequest('/stocks/000001.SZ/cyq?limit=5');
+                console.log('筹码分布:', cyqData);
+                
+                resultsDiv.innerHTML = `
+                    <h2>测试结果</h2>
+                    <h3>股票信息</h3>
+                    <pre>${JSON.stringify(stockInfo, null, 2)}</pre>
+                    <h3>历史数据 (${historyData.data ? historyData.data.length : 0}条)</h3>
+                    <pre>${JSON.stringify(historyData, null, 2)}</pre>
+                    <h3>技术因子 (${factorsData.data ? factorsData.data.length : 0}条)</h3>
+                    <pre>${JSON.stringify(factorsData, null, 2)}</pre>
+                    <h3>资金流向 (${moneyflowData.data ? moneyflowData.data.length : 0}条)</h3>
+                    <pre>${JSON.stringify(moneyflowData, null, 2)}</pre>
+                    <h3>筹码分布 (${cyqData.data ? cyqData.data.length : 0}条)</h3>
+                    <pre>${JSON.stringify(cyqData, null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                console.error('测试失败:', error);
+                resultsDiv.innerHTML = `<p style="color: red;">测试失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 页面加载后自动测试
+        window.onload = testAPI;
+    </script>
+</body>
+</html> 

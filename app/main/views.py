@@ -73,6 +73,11 @@ def test_simple_chart():
     with open('test_simple_chart.html', 'r', encoding='utf-8') as f:
         return f.read()
 
+@main_bp.route('/api-test')
+def api_test():
+    """API测试页面"""
+    return render_template('api_test.html')
+
 
 
 

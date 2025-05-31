@@ -1016,3 +1016,86 @@ with app.app_context(). See the documentation for more information.
 2025-05-30 11:17:00 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
 2025-05-30 11:17:00 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
 2025-05-30 16:54:24 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义
+2025-05-31 09:46:35 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '元器件', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:46:35 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 295 只股票，返回 200 只
+2025-05-31 09:46:46 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '深圳', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:46:46 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 25 只股票，返回 25 只
+2025-05-31 09:48:26 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '', 'area': '', 'market': '', 'pe_min': '', 'pe_max': '30'}
+2025-05-31 09:48:26 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 1530 只股票，返回 200 只
+2025-05-31 09:50:00 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:50:00 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 283 只股票，返回 200 只
+2025-05-31 09:50:19 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '银行', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:50:20 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 42 只股票，返回 42 只
+2025-05-31 09:51:28 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:51:28 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 283 只股票，返回 200 只
+2025-05-31 09:51:42 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '福建', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:51:42 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 12 只股票，返回 12 只
+2025-05-31 09:52:07 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '银行', 'area': '深圳', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:52:07 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 2 只股票，返回 2 只
+2025-05-31 09:52:15 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '银行', 'area': '北京', 'market': '', 'trade_date': '', 'pe_min': '', 'pe_max': '', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 09:52:15 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 10 只股票，返回 10 只
+2025-05-31 09:52:32 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义
+2025-05-31 09:53:22 | WARNING  | app.services.ml_models:prepare_training_data:147 - 指定日期范围 2023-01-01 至 2024-01-01 没有因子数据，尝试获取所有可用数据
+2025-05-31 09:53:36 | INFO     | app.services.ml_models:prepare_training_data:157 - 找到因子数据: 881707 条记录，日期范围: 2024-09-03 至 2025-05-23
+2025-05-31 09:57:25 | INFO     | app.services.ml_models:load_model:534 - 成功加载模型: enhanced_xgb_model
+2025-05-31 09:57:26 | INFO     | app.services.ml_models:predict:644 - 预测完成: enhanced_xgb_model, 99 只股票
+2025-05-31 09:57:26 | INFO     | app.services.ml_models:save_predictions:684 - 成功保存 99 条预测结果
+2025-05-31 09:57:49 | INFO     | app.services.stock_scoring:calculate_factor_scores:50 - 计算因子分数完成: 5122 只股票, 3 个因子
+2025-05-31 09:57:49 | INFO     | app.services.stock_scoring:calculate_composite_score:89 - 计算综合分数完成: 5122 只股票
+2025-05-31 09:57:49 | INFO     | app.services.stock_scoring:rank_stocks:164 - 股票排名完成: 选出 50 只股票
+2025-05-31 09:58:13 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义
+2025-05-31 09:58:26 | INFO     | app.services.ml_models:load_model:534 - 成功加载模型: enhanced_rf_model
+2025-05-31 09:58:26 | INFO     | app.services.ml_models:predict:644 - 预测完成: enhanced_rf_model, 99 只股票
+2025-05-31 09:58:26 | INFO     | app.services.ml_models:save_predictions:684 - 成功保存 99 条预测结果
+2025-05-31 09:59:24 | INFO     | app.services.backtest_engine:run_backtest:68 - 开始回测: 2023-01-01 to 2024-05-28
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-01-03
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-01-03
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-01-03 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-02-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-02-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-02-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-03-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-03-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-03-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-04-03
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-04-03
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-04-03 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-05-04
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-05-04
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-05-04 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-06-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-06-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-06-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-07-03
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-07-03
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-07-03 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-08-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-08-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-08-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-09-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-09-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-09-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-10-09
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-10-09
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-10-09 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-11-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-11-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-11-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2023-12-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2023-12-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2023-12-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-01-02
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-01-02
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-01-02 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-02-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-02-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-02-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-03-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-03-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-03-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-04-01
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-04-01
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-04-01 没有选出股票
+2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-05-06
+2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-05-06
+2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-05-06 没有选出股票
