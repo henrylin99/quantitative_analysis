@@ -1099,3 +1099,62 @@ with app.app_context(). See the documentation for more information.
 2025-05-31 09:59:30 | INFO     | app.services.backtest_engine:run_backtest:85 - 处理交易日: 2024-05-06
 2025-05-31 09:59:30 | WARNING  | app.services.stock_scoring:ml_based_selection:260 - 未找到预测数据: 2024-05-06
 2025-05-31 09:59:30 | WARNING  | app.services.backtest_engine:run_backtest:92 - 日期 2024-05-06 没有选出股票
+2025-05-31 14:17:00 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '10', 'pe_max': '30', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 14:17:00 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 6 只股票，返回 6 只
+2025-05-31 14:17:46 | INFO     | app.api.analysis_api:backtest_strategy:37 - 收到回测请求: {'ts_code': '000001.SZ', 'strategy_type': 'ma_cross', 'start_date': '2024-01-01', 'end_date': '2025-05-31', 'initial_capital': 100000, 'commission_rate': 0.001, 'params': {'ma_short': 5, 'ma_long': 20}}
+2025-05-31 14:17:46 | INFO     | app.services.stock_service:get_stock_factors:116 - stock_factor表数据不足(92条)，基于历史数据计算技术指标
+2025-05-31 14:24:10 | INFO     | app.api.analysis_api:backtest_strategy:37 - 收到回测请求: {'ts_code': '000011.SZ', 'strategy_type': 'ma_cross', 'start_date': '2024-01-01', 'end_date': '2025-05-31', 'initial_capital': 100000, 'commission_rate': 0.001, 'params': {'ma_short': 5, 'ma_long': 20}}
+2025-05-31 14:24:10 | INFO     | app.services.stock_service:get_stock_factors:116 - stock_factor表数据不足(92条)，基于历史数据计算技术指标
+2025-05-31 14:24:34 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义
+2025-05-31 14:30:16 | INFO     | app.services.ml_models:_calculate_target_returns:323 - 计算目标变量完成: 172789 条记录
+2025-05-31 14:30:16 | INFO     | app.services.ml_models:prepare_training_data:184 - 准备训练数据完成: 99 样本, 7 特征
+2025-05-31 14:30:16 | INFO     | app.services.ml_models:_feature_engineering:486 - 特征工程完成: 7 特征
+2025-05-31 14:30:16 | INFO     | app.services.ml_models:train_model:438 - 模型训练完成: enhanced_xgb_model, 测试R²: -0.0610
+2025-05-31 14:31:01 | INFO     | app.services.ml_models:predict:644 - 预测完成: enhanced_xgb_model, 99 只股票
+2025-05-31 14:31:01 | INFO     | app.services.ml_models:save_predictions:684 - 成功保存 99 条预测结果
+2025-05-31 14:31:59 | INFO     | app.services.stock_scoring:calculate_factor_scores:50 - 计算因子分数完成: 5122 只股票, 3 个因子
+2025-05-31 14:31:59 | INFO     | app.services.stock_scoring:calculate_composite_score:89 - 计算综合分数完成: 5122 只股票
+2025-05-31 14:31:59 | INFO     | app.services.stock_scoring:rank_stocks:164 - 股票排名完成: 选出 50 只股票
+2025-05-31 14:34:12 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:12 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:12 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:12 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:24 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:24 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:24 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:24 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:36 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:36 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:36 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:36 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:37 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:89 - 开始清理JSON结果，原始结果类型: <class 'dict'>
+2025-05-31 14:34:45 | INFO     | app.services.realtime_indicator_engine:_clean_results_for_json:176 - JSON清理完成，清理后结果类型: <class 'dict'>
+2025-05-31 14:38:28 | INFO     | app.api.analysis_api:screen_stocks:14 - 收到筛选请求: {'industry': '软件服务', 'area': '', 'market': '', 'trade_date': '', 'pe_min': '10', 'pe_max': '30', 'pb_min': '', 'pb_max': '', 'ps_min': '', 'ps_max': '', 'dv_min': '', 'dv_max': '', 'mv_min': '', 'mv_max': '', 'circ_mv_min': '', 'circ_mv_max': '', 'turnover_min': '', 'turnover_max': '', 'volume_ratio_min': '', 'volume_ratio_max': '', 'rsi6_min': '', 'rsi6_max': '', 'kdj_k_min': '', 'kdj_k_max': '', 'macd_min': '', 'macd_max': '', 'cci_min': '', 'cci_max': '', 'net_amount_min': '', 'net_amount_max': '', 'lg_buy_rate_min': '', 'lg_buy_rate_max': '', 'net_d5_amount_min': '', 'net_d5_amount_max': '', 'dynamic_conditions': []}
+2025-05-31 14:38:28 | INFO     | app.services.stock_service:screen_stocks:434 - 股票筛选完成，共找到 6 只股票，返回 6 只
+2025-05-31 14:40:12 | INFO     | app.api.analysis_api:backtest_strategy:37 - 收到回测请求: {'ts_code': '000001.SZ', 'strategy_type': 'ma_cross', 'start_date': '2024-01-01', 'end_date': '2025-05-31', 'initial_capital': 100000, 'commission_rate': 0.001, 'params': {'ma_short': 5, 'ma_long': 20}}
+2025-05-31 14:40:12 | INFO     | app.services.stock_service:get_stock_factors:116 - stock_factor表数据不足(92条)，基于历史数据计算技术指标
+2025-05-31 14:42:45 | INFO     | app.services.ml_models:predict:644 - 预测完成: enhanced_xgb_model, 99 只股票
+2025-05-31 14:42:45 | INFO     | app.services.ml_models:save_predictions:684 - 成功保存 99 条预测结果
+2025-05-31 14:43:10 | INFO     | app.services.stock_scoring:calculate_factor_scores:50 - 计算因子分数完成: 5122 只股票, 3 个因子
+2025-05-31 14:43:10 | INFO     | app.services.stock_scoring:calculate_composite_score:89 - 计算综合分数完成: 5122 只股票
+2025-05-31 14:43:10 | INFO     | app.services.stock_scoring:rank_stocks:164 - 股票排名完成: 选出 50 只股票
+2025-06-01 19:47:49 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义
+2025-06-02 13:33:51 | INFO     | app.services.factor_engine:load_factor_definitions:62 - 加载了 18 个自定义因子定义

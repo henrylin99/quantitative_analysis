@@ -1608,3 +1608,21 @@
 **测试验证**: ✅ API测试通过，筛选功能正常，结果表格显示正常
 **影响范围**: 选股筛选页面的结果表格数字显示
 **状态**: ✅ 修复完成，功能正常
+
+### 策略回测页面formatNumber函数修复 ✅已完成
+**修复时间**: 2025-01-27
+**问题描述**: 策略回测页面点击"开始回测"按钮后提示"回测失败，错误信息: formatNumber is not defined"
+**问题原因**: `app/templates/backtest.html`文件中使用了`formatNumber`和`formatPercent`函数但未定义这些函数
+**解决方案**: 
+- 在`backtest.html`文件的JavaScript部分添加`formatNumber`和`formatPercent`工具函数
+- 确保回测结果能正确格式化数字显示（收益率、资金金额等）
+**修复内容**:
+- ✅ 添加`formatNumber(num, decimals = 2)`函数
+- ✅ 添加`formatPercent(num)`函数  
+- ✅ 处理null、undefined、NaN值的边界情况
+- ✅ 支持中文本地化数字格式
+**影响范围**: 
+- 策略回测结果的数字格式化显示
+- 收益指标、交易统计、风险指标等数据展示
+- 交易记录表格的数字格式化
+**状态**: ✅ 修复完成，功能正常

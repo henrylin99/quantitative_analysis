@@ -98,4 +98,48 @@ function formatPercent(num) {
 
 **状态**: ✅ 修复完成，功能正常
 
+### 🐛 策略回测页面formatNumber函数未定义问题修复
+
+**问题发现时间**: 2025-01-27  
+**问题描述**: 策略回测页面点击"开始回测"按钮后提示"回测失败，错误信息: formatNumber is not defined"
+
+**问题分析**:
+- 策略回测页面`app/templates/backtest.html`在`renderBacktestResults`函数中使用了`formatNumber`和`formatPercent`函数
+- 这些函数用于格式化回测结果中的数字显示（如收益率、资金金额等）
+- 但该页面没有定义这些工具函数，导致JavaScript运行时错误
+- 影响回测结果的正常显示
+
+**修复方案**:
+在`app/templates/backtest.html`的JavaScript部分添加工具函数定义
+
+**修复内容**:
+```javascript
+// 工具函数
+function formatNumber(num, decimals = 2) {
+    if (num === null || num === undefined || isNaN(num)) return '--';
+    return Number(num).toLocaleString('zh-CN', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined || isNaN(num)) return '--';
+    const sign = num >= 0 ? '+' : '';
+    return sign + Number(num).toFixed(2) + '%';
+}
+```
+
+**影响范围**: 
+- 策略回测结果的数字格式化显示
+- 收益指标、交易统计、风险指标等数据展示
+- 交易记录表格的数字格式化
+
+**修复状态**: ✅ 已完成
+
+**验证要点**:
+- 回测配置表单正常提交
+- 回测结果能正确显示格式化的数字
+- 支持中文本地化数字格式和边界情况处理
+
 --- 

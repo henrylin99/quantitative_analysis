@@ -157,3 +157,248 @@
 - ✅ 综合分析（多条件组合查询）
 
 **🎉 Text2SQL功能开发完成，所有核心功能测试通过！** 
+
+
+# Text2SQL调用流程分析
+
+## 📋 整体架构概览
+
+Text2SQL功能采用了模块化的分层架构设计，主要包含以下几个核心组件：
+
+```
+用户界面 → API接口 → 核心引擎 → 处理模块 → 数据库
+```
+
+## 🔄 详细调用流程
+
+### 1. 用户请求入口
+**文件位置**: `app/templates/text2sql/index.html` → `app/api/text2sql_api.py`
+
+```javascript
+// 前端发起请求
+fetch('/api/text2sql/query', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({query: userQuery})
+})
+```
+
+### 2. API接口层处理
+**文件位置**: `app/api/text2sql_api.py`
+
+```python
+@text2sql_bp.route('/query', methods=['POST'])
+def process_query():
+    # 1. 参数验证
+    user_query = data.get('query', '').strip()
+    
+    # 2. 调用核心引擎
+    engine = get_text2sql_engine()
+    result = engine.process_query(user_query)
+    
+    # 3. 返回结果
+    return jsonify(result)
+```
+
+### 3. 核心引擎处理
+**文件位置**: `app/services/text2sql_engine.py`
+
+```python
+class Text2SQLEngine:
+    def process_query(self, user_query: str):
+        # 步骤1: 自然语言理解
+        intent_result = self.nlp_processor.parse_intent(user_query)
+        
+        # 步骤2: SQL生成
+        sql_result = self.sql_generator.generate_sql(intent_result)
+        
+        # 步骤3: 大模型增强（如果需要）
+        if not sql_result['success']:
+            enhanced_sql = self._try_llm_enhancement(user_query, intent_result)
+        
+        # 步骤4: 执行查询
+        execution_result = self.query_executor.execute(sql_result['sql'])
+        
+        # 步骤5: 结果格式化
+        formatted_result = self.result_formatter.format(execution_result['data'])
+        
+        # 步骤6: 记录查询历史
+        self._save_query_history(...)
+```
+
+### 4. 自然语言处理模块
+**文件位置**: `app/services/nlp_processor.py`
+
+```python
+class NLPProcessor:
+    def parse_intent(self, user_query: str):
+        # 1. 预处理：清理文本、统一格式
+        cleaned_query = self._preprocess(user_query)
+        
+        # 2. 意图分类：识别查询类型
+        intent = self.intent_classifier.classify(cleaned_query)
+        
+        # 3. 实体抽取：提取关键信息
+        entities = self.entity_extractor.extract(cleaned_query)
+        
+        # 4. 业务术语标准化
+        normalized_entities = self.business_dict.normalize(entities)
+```
+
+**支持的意图类型**:
+- `stock_screening`: 股票筛选
+- `technical_indicator`: 技术指标分析  
+- `fundamental_analysis`: 基本面分析
+- `money_flow`: 资金流向分析
+- `ranking`: 排名查询
+- `factor_analysis`: 因子分析
+
+### 5. SQL生成模块
+**文件位置**: `app/services/sql_generator.py`
+
+```python
+class SQLGenerator:
+    def generate_sql(self, intent_result):
+        # 1. 检查多条件查询
+        if 'conditions' in entities and len(entities['conditions']) > 1:
+            sql = self._build_multi_condition_sql(entities)
+        else:
+            # 2. 尝试模板匹配
+            template_result = self.template_manager.generate_from_template(intent, entities)
+            
+            if template_result['success']:
+                sql = template_result['sql']
+            else:
+                # 3. 动态SQL构建
+                sql = self.query_builder.build_dynamic_sql(intent, entities)
+        
+        # 4. SQL优化和验证
+        optimized_sql = self._optimize_sql(sql)
+        validation_result = self._validate_sql(optimized_sql)
+```
+
+### 6. 查询执行和结果处理
+**文件位置**: `app/services/text2sql_engine.py`
+
+```python
+class QueryExecutor:
+    def execute(self, sql: str):
+        # 1. SQL执行
+        result = db.session.execute(text(sql))
+        
+        # 2. 数据转换
+        data = [dict(row) for row in result.fetchall()]
+        
+        # 3. 结果限制检查
+        if len(data) > self.max_result_count:
+            return {'success': False, 'error': '结果过多'}
+
+class ResultFormatter:
+    def format(self, data, intent, entities):
+        # 1. 数据格式化
+        formatted_data = self._format_data(data)
+        
+        # 2. 生成摘要
+        summary = self._generate_summary(data, intent, entities)
+        
+        # 3. 图表配置
+        chart_config = self._generate_chart_config(data, intent, entities)
+```
+
+## 🗄️ 数据库设计
+
+### 元数据表结构
+**文件位置**: `app/models/text2sql_metadata.py`
+
+```python
+# 表元数据
+class TableMetadata(db.Model):
+    table_name = db.Column(db.String(100), primary_key=True)
+    description = db.Column(db.Text)
+    business_domain = db.Column(db.String(50))
+
+# 字段元数据  
+class FieldMetadata(db.Model):
+    table_name = db.Column(db.String(100), primary_key=True)
+    field_name = db.Column(db.String(100), primary_key=True)
+    field_alias = db.Column(db.String(100))
+    synonyms = db.Column(db.JSON)
+
+# 查询模板
+class QueryTemplate(db.Model):
+    template_id = db.Column(db.String(50), primary_key=True)
+    intent_pattern = db.Column(db.Text)
+    sql_template = db.Column(db.Text)
+    parameters = db.Column(db.JSON)
+
+# 查询历史
+class QueryHistory(db.Model):
+    query_text = db.Column(db.Text)
+    intent_name = db.Column(db.String(50))
+    sql_query = db.Column(db.Text)
+    is_successful = db.Column(db.Boolean)
+    execution_time = db.Column(db.Float)
+```
+
+## 🚀 调用示例
+
+### 简单查询示例
+```
+用户输入: "找出涨幅超过5%的股票"
+
+1. NLP处理:
+   - 意图: stock_screening
+   - 实体: {field: 'pct_change', comparison: 'greater_than', value: 5}
+
+2. SQL生成:
+   SELECT ts_code, stock_name, factor_pct_change 
+   FROM stock_business 
+   WHERE factor_pct_change > 5.0 
+   ORDER BY factor_pct_change DESC 
+   LIMIT 20;
+
+3. 执行结果: 返回20条符合条件的股票数据
+```
+
+### 复杂多条件查询示例
+```
+用户输入: "市盈率小于20，换手率大于10，MACD金叉的股票"
+
+1. NLP处理:
+   - 意图: stock_screening
+   - 实体: {
+       conditions: [
+         {field: 'pe_ttm', comparison: 'less_than', value: 20},
+         {field: 'turnover_rate_f', comparison: 'greater_than', value: 10},
+         {field: 'MACD', comparison: 'golden_cross'}
+       ]
+     }
+
+2. SQL生成:
+   SELECT sb.ts_code, sb.stock_name, sb.pe_ttm, sb.turnover_rate_f, 
+          sf.macd_dif, sf.macd_dea
+   FROM stock_business sb
+   JOIN stock_factor sf ON sb.ts_code = sf.ts_code
+   WHERE sb.pe_ttm < 20.0 
+     AND sb.turnover_rate_f > 10.0 
+     AND sf.macd_dif > sf.macd_dea
+     AND sf.trade_date = (SELECT MAX(trade_date) FROM stock_factor WHERE ts_code = sb.ts_code)
+   ORDER BY sb.pe_ttm ASC
+   LIMIT 20;
+
+3. 执行结果: 返回14条符合条件的股票数据
+```
+
+## 🔧 关键特性
+
+1. **模块化设计**: 各组件职责分离，便于维护和扩展
+2. **中文支持**: 使用jieba分词，支持中文自然语言查询
+3. **模板+动态**: 结合预定义模板和动态SQL构建
+4. **大模型增强**: 集成ollama qwen2.5-coder模型作为备选方案
+5. **元数据驱动**: 通过元数据实现灵活的字段映射
+6. **完整的Web界面**: 提供用户友好的查询界面
+7. **查询历史**: 支持查询历史记录和统计分析
+8. **错误处理**: 完善的错误处理和用户反馈机制
+
+这个Text2SQL系统已经完全集成到您的股票分析项目中，支持多种查询类型和复杂的多条件查询，是一个功能完整的智能查询系统。
+
