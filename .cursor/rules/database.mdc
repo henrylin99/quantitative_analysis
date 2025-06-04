@@ -1,10 +1,4 @@
----
-description: 
-globs: 
-alwaysApply: false
----
-我想做一个基于Python的股票分析系统，目前我有以下数据库表，我能基于这些表做什么，请帮我规划一个项目需求
-```
+
 CREATE TABLE `stock_basic` (
   `ts_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'TS代码',
   `symbol` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '股票代码',
@@ -615,15 +609,3 @@ CREATE TABLE `ml_predictions` (
   INDEX `idx_model_date` (`model_id`,`trade_date`),
   INDEX `idx_date_rank` (`trade_date`,`rank_score`)
 ) COMMENT='模型预测结果表';
-```
-
-# 数据库连接配置
-```
-# 数据库连接信息
-    _host = 'localhost'       # MySQL主机
-    _user = 'root'   # MySQL用户名
-    _password = 'root'  # MySQL密码
-    _database = 'stock_cursor'  # MySQL数据库名
-    _charset = 'utf8mb4'
-```
-
