@@ -4,6 +4,10 @@
 
 ### 本系统仅限于学习交流，需要二次开发或定制化开发，请联系 39189996@qq.com
 
+### 数据库下载地址：
+-- 通过网盘分享的文件：stock_cursor.sql.zip
+-- 链接: https://pan.baidu.com/s/1vOtkLP8pQEU8k0pGRaYwUw?pwd=q4mg 提取码: q4mg
+
 ![系统主界面](./images/1-2.png)
 
 ## 🌟 系统特色
