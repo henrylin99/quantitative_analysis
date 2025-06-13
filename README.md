@@ -39,7 +39,7 @@
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd stock_analysis
+cd quantitative_analysis
 
 # 安装依赖
 pip install -r requirements.txt
