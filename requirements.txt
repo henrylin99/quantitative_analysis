@@ -66,3 +66,7 @@ joblib>=1.3.0
 
 # 组合优化
 cvxpy>=1.4.0 
+
+#金融数据获取
+baostock>=0.8.9
+tushare>=1.3.0
