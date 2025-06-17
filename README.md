@@ -53,6 +53,14 @@ python run_system.py
 # 或者直接运行
 python app.py
 ```
+# 遇到以下问题
+```
+Traceback (most recent call last):
+  File "/root/stock/run.py", line 9, in <module>
+    app = create_app(os.getenv('FLASK_ENV', 'default'))
+
+执行：pip install eventlet
+```
 
 ![系统启动界面](./images/1-4.png)
 
