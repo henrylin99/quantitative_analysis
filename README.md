@@ -65,7 +65,7 @@ Traceback (most recent call last):
 ![系统启动界面](./images/1-4.png)
 
 ### 4. 访问系统
-- Web界面: http://localhost:5000/ml-factor
+- Web界面: http://localhost:5000
 - API文档: http://localhost:5000/api
 
 ## 📖 使用指南
