@@ -47,10 +47,10 @@ pip install -r requirements.txt
 
 ### 3. 启动系统
 ```bash
-# 使用启动脚本（推荐）
+# 使用启动脚本
 python run_system.py
 
-# 或者直接运行
+# 或者直接运行（推荐）
 python app.py
 ```
 # 遇到以下问题
