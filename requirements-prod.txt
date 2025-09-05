@@ -1,0 +1,33 @@
+# 生产环境依赖包
+-r requirements-ml.txt
+
+# 生产级Web服务器
+gunicorn>=21.0.0
+gevent>=23.0.0
+
+# 缓存
+redis>=5.0.0
+hiredis>=2.2.0  # Redis客户端加速
+
+# 任务队列
+celery>=5.3.0
+flower>=2.0.0  # Celery监控
+
+# 监控和日志
+prometheus-client>=0.17.0
+sentry-sdk[flask]>=1.32.0
+
+# 数据可视化增强
+matplotlib>=3.7.0
+mplfinance==0.12.10b0
+plotly>=5.17.0
+
+# 定时任务
+APScheduler>=3.10.0
+
+# 数据处理加速
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# 生产级配置
+uwsgi>=2.0.21  # 备选WSGI服务器

@@ -1,0 +1,33 @@
+# 机器学习依赖包
+-r requirements-base.txt
+
+# 机器学习框架
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+lightgbm>=4.0.0
+
+# 数值计算增强
+statsmodels>=0.14.0
+
+# 表达式解析
+sympy>=1.12
+
+# 并行计算
+joblib>=1.3.0
+
+# 组合优化
+cvxpy>=1.4.0
+
+# 因子计算和金融分析
+# empyrical>=0.5.5  # 风险指标计算，有兼容性问题时使用替代方案
+# quantlib-python>=1.32  # 金融工程库
+
+# 技术指标
+# TA-Lib==0.4.28  # 技术分析库，需要预编译，可选
+
+# 数据获取
+baostock>=0.8.9
+tushare>=1.3.0
+
+# 自然语言处理
+jieba>=0.42.1
