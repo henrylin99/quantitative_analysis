@@ -1,4 +1,4 @@
-from utils.db_utils import DatabaseUtils
+from db_utils import DatabaseUtils
 import pandas as pd
 import time
 # 重复了，暂时不用

@@ -1,4 +1,4 @@
-from utils.db_utils import DatabaseUtils
+from db_utils import DatabaseUtils
 import pandas as pd
 import numpy as np
 
