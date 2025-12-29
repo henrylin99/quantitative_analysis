@@ -1,9 +1,0 @@
-多因子模型系统状态报告
-==================================================
-
-timestamp: 2025-05-28 11:47:40
-stock_count: 5415
-history_records: 3048087
-factor_records: 881707
-model_count: 6
-prediction_records: 20686

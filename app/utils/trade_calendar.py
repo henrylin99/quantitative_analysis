@@ -1,4 +1,4 @@
-from utils.db_utils_aliyun import DatabaseUtils
+from db_utils import DatabaseUtils
 
 # 初始化Tushare API
 pro = DatabaseUtils.init_tushare_api()
