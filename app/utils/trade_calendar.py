@@ -8,7 +8,7 @@ conn, cursor = DatabaseUtils.connect_to_mysql()
 
 # 获取交易日历数据
 data = pro.trade_cal(exchange='', start_date='20240101', end_date='20251231', fields='exchange,cal_date,is_open,pretrade_date')
-cursor.execute('''truncate table stock_trade_calendar;''')
+
 # 创建表
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS stock_trade_calendar (
@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS stock_trade_calendar (
     pretrade_date DATE COMMENT '上一个交易日'
 )
 ''')
+
+cursor.execute('''truncate table stock_trade_calendar;''')
+
 conn.commit()
 
 # 准备批量插入的数据
