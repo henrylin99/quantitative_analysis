@@ -7,6 +7,24 @@
 ### 数据库下载地址：
 -- 通过网盘分享的文件：stock_cursor.sql.zip
 -- 链接: https://pan.baidu.com/s/1vOtkLP8pQEU8k0pGRaYwUw?pwd=q4mg 提取码: q4mg
+-- 如果有tushare接口，可以直接通过 quantitative_analysis/app/utils 目录下的文件直接下载，例如：
+```
+# 下载历史行情数据：
+# 首先进入下载工具的目录
+cd app/utils
+
+# 先下载交易日期数据，所有下载数据接口都依赖这个文件
+python trade_calendar.py
+
+# 下载所有股票列表，所有按股票代码下载的数据接口都依赖这个文件
+python stock_basic.py
+
+# 运行历史数据，根据自己的需要，修改下载日期，代码在第33-34行，例如：
+   and cal_date >= '2025-01-01' 
+    and cal_date <= '2025-12-31'
+# 然后运行，下载天数越多，下载时间越长
+python daily_history_by_date.py
+```
 
 ![系统主界面](./images/1-2.png)
 
