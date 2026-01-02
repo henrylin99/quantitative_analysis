@@ -3,13 +3,21 @@ import pandas as pd
 from db_utils import DatabaseUtils
 import time
 from datetime import datetime
-
+'''
+可以通过参数设置获取日k线、周k线、月k线，以及5分钟、15分钟、30分钟和60分钟k线数据
+code：股票代码，sh或sz.+6位数字代码，或者指数代码，如：sh.601398。sh：上海；sz：深圳。此参数不可为空；
+fields：指示简称，支持多指标输入，以半角逗号分隔，填写内容作为返回类型的列。详细指标列表见历史行情指标参数章节，日线与分钟线参数不同。此参数不可为空；
+start：开始日期（包含），格式“YYYY-MM-DD”，为空时取2015-01-01；
+end：结束日期（包含），格式“YYYY-MM-DD”，为空时取最近一个交易日；
+frequency：数据类型，默认为d，日k线；d=日k线、w=周、m=月、5=5分钟、15=15分钟、30=30分钟、60=60分钟k线数据，不区分大小写；指数没有分钟线数据；周线每周最后一个交易日才可以获取，月线每月最后一个交易日才可以获取。
+adjustflag：复权类型，默认不复权：3；1：后复权；2：前复权。已支持分钟线、日线、周线、月线前后复权。 BaoStock提供的是涨跌幅复权算法复权因子，具体介绍见BaoStock复权因子简介。
+'''
 # 连接到MySQL数据库
 conn, cursor = DatabaseUtils.connect_to_mysql()
 
 # 创建表结构
 cursor.execute('''
-    CREATE TABLE IF NOT EXISTS `stock_1min_history` (
+    CREATE TABLE IF NOT EXISTS `baostock_daily_history` (
       `ts_code` varchar(20) NOT NULL COMMENT '股票代码',
       `timestamp` datetime NOT NULL COMMENT '交易时间',
       `open` decimal(10,4) DEFAULT NULL COMMENT '开盘价',
@@ -19,12 +27,12 @@ cursor.execute('''
       `volume` bigint DEFAULT NULL COMMENT '成交量 （手）',
       `amount` decimal(20,4) DEFAULT NULL COMMENT '成交额 （千元）',
       PRIMARY KEY (`ts_code`,`timestamp`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票1分钟线行情数据表';
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票60分钟线行情数据表';
 ''')
 
-def get_15min_stock_data_bs(stock_code, start_date, end_date):
+def get_60min_stock_data_bs(stock_code, start_date, end_date):
     """
-    使用Baostock获取股票1分钟线数据
+    使用Baostock获取股票60分钟线数据
     :param stock_code: 股票代码，如 'sh.600519'
     :param start_date: 开始日期，格式 'YYYY-MM-DD'
     :param end_date: 结束日期，格式 'YYYY-MM-DD'
@@ -34,7 +42,7 @@ def get_15min_stock_data_bs(stock_code, start_date, end_date):
     rs = bs.query_history_k_data_plus(stock_code,
                                       "date,time,code,open,high,low,close,volume,amount",
                                       start_date=start_date, end_date=end_date,
-                                      frequency="1", adjustflag="3")
+                                      frequency="d", adjustflag="2")
 
     data_list = []
     while (rs.error_code == '0') & rs.next():
@@ -66,9 +74,9 @@ def main():
                 else:
                     bs_code = 'sh.' + ts_code.split('.')[0]
                 
-                # 获取1分钟数据
+                # 获取60分钟数据
                 print(bs_code)
-                df = get_15min_stock_data_bs(bs_code, '2025-05-21', '2025-05-29')
+                df = get_60min_stock_data_bs(bs_code, '2025-01-01', '2025-05-29')
                 if df is not None and not df.empty:
                     data_list.append(df)
 
@@ -100,7 +108,7 @@ def main():
                         # print(f"Generated datetime: {timestamp}")
                         
                         cursor.execute('''
-                        INSERT IGNORE INTO stock_1min_history (ts_code, timestamp, open, high, low, close, volume, amount)
+                        INSERT IGNORE INTO baostock_daily_history (ts_code, timestamp, open, high, low, close, volume, amount)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                         ''', (row['code'], timestamp, row['open'], row['high'], row['low'], 
                               row['close'], row['volume'], row['amount']))

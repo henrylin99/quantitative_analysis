@@ -34,7 +34,7 @@ def get_60min_stock_data_bs(stock_code, start_date, end_date):
     rs = bs.query_history_k_data_plus(stock_code,
                                       "date,time,code,open,high,low,close,volume,amount",
                                       start_date=start_date, end_date=end_date,
-                                      frequency="60", adjustflag="3")
+                                      frequency="60", adjustflag="2")
 
     data_list = []
     while (rs.error_code == '0') & rs.next():

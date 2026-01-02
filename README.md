@@ -13,6 +13,7 @@
 # 首先进入下载工具的目录
 cd app/utils
 
+# tushare数据下载
 # 先下载交易日期数据，所有下载数据接口都依赖这个文件
 python trade_calendar.py
 
@@ -24,6 +25,14 @@ python stock_basic.py
     and cal_date <= '2025-12-31'
 # 然后运行，下载天数越多，下载时间越长
 python daily_history_by_date.py
+
+# baostock 数据下载
+
+# 日线
+python baostock_daily.py
+
+# 分钟线 min5.py min15.py min30.py min60.py
+python min5.py
 ```
 
 ![系统主界面](./images/1-2.png)
