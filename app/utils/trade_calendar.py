@@ -7,7 +7,7 @@ pro = DatabaseUtils.init_tushare_api()
 conn, cursor = DatabaseUtils.connect_to_mysql()
 
 # 获取交易日历数据
-data = pro.trade_cal(exchange='', start_date='20240101', end_date='20251231', fields='exchange,cal_date,is_open,pretrade_date')
+data = pro.trade_cal(exchange='', start_date='20240101', end_date='20261231', fields='exchange,cal_date,is_open,pretrade_date')
 
 # 创建表
 cursor.execute('''
@@ -37,4 +37,5 @@ conn.commit()
 
 # 关闭数据库连接
 cursor.close()
+
 conn.close() 
