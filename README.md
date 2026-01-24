@@ -413,8 +413,6 @@ python quick_start_fixed.py
 pip install -r requirements_minimal.txt
 ```
 
-详细解决方案请查看：[安装指南](INSTALL_GUIDE.md)
-
 ### 常见问题
 
 1. **依赖包安装失败**
