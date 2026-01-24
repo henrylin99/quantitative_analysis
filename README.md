@@ -334,10 +334,10 @@ stock_analysis/
 在 `config.py` 中修改数据库连接：
 
 ```python
-# SQLite (默认)
+# SQLite（不建议使用，数据太大，速度较慢）
 SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
 
-# MySQL
+# MySQL (默认，建议用MySQL)
 SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
 ```
 
