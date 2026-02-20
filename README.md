@@ -11,8 +11,9 @@
 - 缺少实时数据接口，实时监测部分暂时开发不了
 
 ### 数据库下载地址：
--- 通过网盘分享的文件：stock_cursor.sql.zip
--- 链接: https://pan.baidu.com/s/1vOtkLP8pQEU8k0pGRaYwUw?pwd=q4mg 提取码: q4mg
+-- 数据更新到2026年02月13日，包含历史行情、基本面、技术面、资金流入、筹码分布。
+-- 通过网盘分享的文件：stock_data_20260213.zip
+链接: https://pan.baidu.com/s/1XYMvl_OAnFycV8bOBkyQ0g?pwd=ctfq 提取码: ctfq
 -- 如果有tushare接口，可以直接通过 quantitative_analysis/app/utils 目录下的文件直接下载，例如：
 ```
 # 下载历史行情数据：
