@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from app.services.data_jobs.schemas import JobDefinition
 
@@ -8,6 +8,18 @@ class JobRegistry:
     """Central registry for data job definitions mapped from app/utils scripts."""
 
     def __init__(self) -> None:
+        # 仅向页面暴露的任务（按用户确认保留）
+        self._visible_job_types: Set[str] = {
+            "stock_basic",            # 1
+            "trade_calendar",         # 2
+            "stock_company",          # 3
+            "daily_history_by_date",  # 5
+            "daily_basic",            # 6
+            "moneyflow",              # 15
+            "stk_factor",             # 17
+            "cyq_perf",               # 18
+        }
+
         self._jobs: Dict[str, JobDefinition] = {
             "stock_basic": JobDefinition("stock_basic", "基础资料", "app/utils/stock_basic.py"),
             "trade_calendar": JobDefinition("trade_calendar", "基础资料", "app/utils/trade_calendar.py"),
@@ -64,6 +76,9 @@ class JobRegistry:
 
     def list_jobs(self) -> List[JobDefinition]:
         return list(self._jobs.values())
+
+    def list_visible_jobs(self) -> List[JobDefinition]:
+        return [job for job in self._jobs.values() if job.job_type in self._visible_job_types]
 
     def grouped_jobs(self) -> Dict[str, List[JobDefinition]]:
         groups: Dict[str, List[JobDefinition]] = defaultdict(list)

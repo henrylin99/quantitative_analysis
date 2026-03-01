@@ -40,7 +40,11 @@ def submit_job():
 
 @data_jobs_bp.route("/jobs", methods=["GET"])
 def list_jobs():
-    jobs = [j.__dict__ for j in get_data_job_service().list_job_definitions()]
+    include_hidden = (request.args.get("include_hidden") or "").lower() in {"1", "true", "yes"}
+    jobs = [
+        j.__dict__
+        for j in get_data_job_service().list_job_definitions(visible_only=not include_hidden)
+    ]
     return jsonify({"success": True, "jobs": jobs, "count": len(jobs)})
 
 
