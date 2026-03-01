@@ -23,11 +23,14 @@ class _LocalTaskWrapper:
 class _LocalCelery:
     def __init__(self):
         self.conf = SimpleNamespace(update=lambda **kwargs: None)
+        self.tasks = {}
 
     def task(self, name=None):
         def _decorator(func):
             wrapper = _LocalTaskWrapper(func)
-            wrapper.name = name or func.__name__
+            task_name = name or func.__name__
+            wrapper.name = task_name
+            self.tasks[task_name] = wrapper
             return wrapper
 
         return _decorator
@@ -52,3 +55,6 @@ def make_celery(config_name: str = "default"):
 
 
 celery = make_celery()
+
+# Ensure all task modules are imported so worker can discover registered tasks.
+from app.tasks import data_jobs_tasks  # noqa: E402,F401
