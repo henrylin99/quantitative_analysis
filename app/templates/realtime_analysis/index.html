@@ -334,6 +334,43 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 日频数据中心 -->
+                <div class="row">
+                    <div class="col-12 mb-4">
+                        <div class="card" id="data-jobs-panel">
+                            <div class="card-header">
+                                <h5><i class="fas fa-tasks"></i> 日频数据中心</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label for="jobTypeSelect" class="form-label">任务类型</label>
+                                        <select id="jobTypeSelect" class="form-select">
+                                            <option value="stock_basic">基础资料 - stock_basic</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="jobStartDate" class="form-label">开始日期</label>
+                                        <input type="date" id="jobStartDate" class="form-control">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="jobEndDate" class="form-label">结束日期</label>
+                                        <input type="date" id="jobEndDate" class="form-control">
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button id="submitDataJobBtn" class="btn btn-primary w-100">
+                                            <i class="fas fa-play"></i> 启动任务
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="dataJobResult" class="alert alert-secondary mt-3 mb-0">
+                                    尚未启动任务
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 实时监控标签 -->
@@ -789,6 +826,7 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/data_jobs.js') }}"></script>
     
     <script>
         // 页面加载时初始化
