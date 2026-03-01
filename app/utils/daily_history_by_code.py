@@ -1,66 +1,114 @@
-from db_utils import DatabaseUtils
 import pandas as pd
-import time
 
-# 初始化Tushare API
-pro = DatabaseUtils.init_tushare_api()
+from db_utils import DatabaseUtils
+from job_env import resolve_date_window, delete_trade_date_range
 
-# 连接到MySQL数据库
-conn, cursor = DatabaseUtils.connect_to_mysql()
 
-# 创建表结构（如果还没有创建）
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS `stock_daily_history` (
-      `ts_code` varchar(20) NOT NULL COMMENT '股票代码',
-      `trade_date` date NOT NULL COMMENT '交易日期',
-      `open` decimal(10,4) DEFAULT NULL COMMENT '开盘价',
-      `high` decimal(10,4) DEFAULT NULL COMMENT '最高价',
-      `low` decimal(10,4) DEFAULT NULL COMMENT '最低价',
-      `close` decimal(10,4) DEFAULT NULL COMMENT '收盘价',
-      `pre_close` decimal(10,4) DEFAULT NULL COMMENT '昨收价【除权价，前复权】',
-      `change_c` decimal(10,4) DEFAULT NULL COMMENT '涨跌额',
-      `pct_chg` decimal(10,4) DEFAULT NULL COMMENT '涨跌幅 【基于除权后的昨收计算的涨跌幅：（今收-除权昨收）/除权昨收】',
-      `vol` bigint DEFAULT NULL COMMENT '成交量 （手）',
-      `amount` decimal(20,4) DEFAULT NULL COMMENT '成交额 （千元）',
-      PRIMARY KEY (`ts_code`,`trade_date`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票日线行情数据表';
-''')
+def ensure_table(cursor):
+    cursor.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS `stock_daily_history` (
+          `ts_code` varchar(20) NOT NULL COMMENT '股票代码',
+          `trade_date` date NOT NULL COMMENT '交易日期',
+          `open` decimal(10,4) DEFAULT NULL COMMENT '开盘价',
+          `high` decimal(10,4) DEFAULT NULL COMMENT '最高价',
+          `low` decimal(10,4) DEFAULT NULL COMMENT '最低价',
+          `close` decimal(10,4) DEFAULT NULL COMMENT '收盘价',
+          `pre_close` decimal(10,4) DEFAULT NULL COMMENT '昨收价【除权价，前复权】',
+          `change_c` decimal(10,4) DEFAULT NULL COMMENT '涨跌额',
+          `pct_chg` decimal(10,4) DEFAULT NULL COMMENT '涨跌幅',
+          `vol` bigint DEFAULT NULL COMMENT '成交量（手）',
+          `amount` decimal(20,4) DEFAULT NULL COMMENT '成交额（千元）',
+          PRIMARY KEY (`ts_code`,`trade_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票日线行情数据表';
+        '''
+    )
 
-# 获取A股日线行情数据（简单日线行情）
-cursor.execute('''
-SELECT ts_code FROM stock_basic;
-''')
-stock_list = cursor.fetchall()
 
-batch_size = 100
-data_list = []
+def upsert_batch(cursor, rows):
+    if not rows:
+        return
 
-for i in range(0, len(stock_list), batch_size):
-    batch_stock_list = stock_list[i:i + batch_size]
-    for stock in batch_stock_list:
-        ts_code = stock[0]
-        data = pro.daily(ts_code=ts_code, start_date='20250101', end_date='20250326')
-        data_list.append(data)
+    cursor.executemany(
+        '''
+        INSERT INTO stock_daily_history (
+            ts_code, trade_date, open, high, low, close, pre_close, change_c, pct_chg, vol, amount
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            open = VALUES(open),
+            high = VALUES(high),
+            low = VALUES(low),
+            close = VALUES(close),
+            pre_close = VALUES(pre_close),
+            change_c = VALUES(change_c),
+            pct_chg = VALUES(pct_chg),
+            vol = VALUES(vol),
+            amount = VALUES(amount)
+        ''',
+        rows,
+    )
 
-    # 合并当前批次的数据
-    combined_data = pd.concat(data_list, ignore_index=True)
-    time.sleep(0.1)
-    print(i)
 
-    # 插入数据
-    for index, row in combined_data.iterrows():
-        cursor.execute('''
-        INSERT INTO stock_daily_history (ts_code, trade_date, open, high, low, close, pre_close, change_c, pct_chg, vol, amount)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-        ''', (row['ts_code'], row['trade_date'], row['open'], row['high'], row['low'], row['close'],
-              row['pre_close'], row['change'], row['pct_chg'], row['vol'], row['amount']))
+def main():
+    pro = DatabaseUtils.init_tushare_api()
+    conn, cursor = DatabaseUtils.connect_to_mysql()
 
-    # 提交事务
-    conn.commit()
+    try:
+        ensure_table(cursor)
 
-    # 清空当前批次的数据列表，为下一个批次做准备
-    data_list.clear()
+        start_date, end_date, full_refresh = resolve_date_window(cursor, "stock_daily_history")
+        if not start_date or not end_date or start_date > end_date:
+            print("[daily_history_by_code] 没有可执行的日期区间，跳过。")
+            return
 
-# 关闭连接
-cursor.close()
-conn.close()
+        if full_refresh:
+            delete_trade_date_range(cursor, "stock_daily_history", start_date, end_date)
+            conn.commit()
+
+        cursor.execute("SELECT ts_code FROM stock_basic")
+        stock_list = [row[0] for row in cursor.fetchall()]
+
+        total_saved = 0
+        batch_size = 50
+        for i in range(0, len(stock_list), batch_size):
+            batch = stock_list[i:i + batch_size]
+            rows = []
+            for ts_code in batch:
+                df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+                if df is None or df.empty:
+                    continue
+                df = df.replace({pd.NA: None, float("nan"): None})
+                rows.extend(
+                    (
+                        row["ts_code"],
+                        row["trade_date"],
+                        row["open"],
+                        row["high"],
+                        row["low"],
+                        row["close"],
+                        row["pre_close"],
+                        row["change"],
+                        row["pct_chg"],
+                        row["vol"],
+                        row["amount"],
+                    )
+                    for _, row in df.iterrows()
+                )
+
+            upsert_batch(cursor, rows)
+            conn.commit()
+            total_saved += len(rows)
+            print(f"[daily_history_by_code] batch={i // batch_size + 1}, upsert={len(rows)}")
+
+        print(
+            f"[daily_history_by_code] 完成，start={start_date}, end={end_date}, "
+            f"total_upsert={total_saved}"
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()
