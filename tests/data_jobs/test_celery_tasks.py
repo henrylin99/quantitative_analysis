@@ -19,6 +19,7 @@ def test_run_data_job_marks_success():
         id=10,
         job_type="stock_basic",
         status="queued",
+        params_json={},
         result_json=None,
         error_message=None,
     )
@@ -43,5 +44,6 @@ def test_run_data_job_marks_success():
         result = run_data_job(10)
 
     assert result["status"] == "success"
+    assert fake_runner.run_script.call_args.kwargs["params"] == {}
     assert fake_store.update_run_status.call_args_list[0].args[1] == "running"
     assert fake_store.update_run_status.call_args_list[-1].args[1] == "success"
