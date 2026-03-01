@@ -17,7 +17,7 @@ class DataJobService:
     def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None) -> DataJobRun:
         self.registry.get_job(job_type)
         run = self.state_store.create_run(job_type, params or {})
-        run.status = "queued"
+        run = self.state_store.update_run_status(run, "queued", progress=0.0)
         run_data_job.delay(run.id)
         return run
 

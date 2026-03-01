@@ -17,6 +17,9 @@ class DataJobStateStore:
         self.session.commit()
         return run
 
+    def get_run(self, run_id: int) -> Optional[DataJobRun]:
+        return self.session.query(DataJobRun).filter_by(id=run_id).first()
+
     def update_run_status(
         self,
         run: DataJobRun,
@@ -33,6 +36,11 @@ class DataJobStateStore:
             run.started_at = datetime.utcnow()
         if status in {"success", "failed", "cancelled"}:
             run.finished_at = datetime.utcnow()
+        self.session.commit()
+        return run
+
+    def save_run(self, run: DataJobRun) -> DataJobRun:
+        self.session.add(run)
         self.session.commit()
         return run
 
