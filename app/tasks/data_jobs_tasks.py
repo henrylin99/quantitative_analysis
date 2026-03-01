@@ -39,7 +39,7 @@ def run_data_job(run_id: int):
         definition = registry.get_job(run.job_type)
         runner = _build_runner()
 
-        completed = runner.run_script(definition.script_path)
+        completed = runner.run_script(definition.script_path, params=run.params_json or {})
         run.result_json = {
             "returncode": completed.returncode,
             "stdout": completed.stdout[-4000:] if completed.stdout else "",
