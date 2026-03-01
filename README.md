@@ -483,3 +483,25 @@ pip install -r requirements_minimal.txt
 ---
 
 **多因子选股系统** - 让量化投资更简单！ 
+
+## 日频数据中心（新增）
+
+现在可以在页面直接触发 `app/utils` 中的数据下载脚本，无需手工进入目录执行。
+
+- 页面入口：`/realtime-analysis` -> `日频数据中心`
+- API 前缀：`/api/data-jobs`
+- 任务能力：提交、查询、重试
+
+### 运行要求
+1. 启动 Redis
+2. 启动 Flask 服务
+3. 启动 Celery Worker
+
+```bash
+celery -A app.celery_app.celery worker -l info
+```
+
+### 快速验证
+```bash
+bash scripts/validation/validate_data_jobs_flow.sh
+```
