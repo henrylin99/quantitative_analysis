@@ -13,6 +13,8 @@ from .ml_predictions import MLPredictions
 from .stock_income_statement import StockIncomeStatement
 from .stock_balance_sheet import StockBalanceSheet
 from .text2sql_metadata import TableMetadata, FieldMetadata, QueryTemplate, QueryHistory, BusinessDictionary
+from .data_job_run import DataJobRun
+from .data_job_cursor import DataJobCursor
 
 __all__ = [
     'StockBasic',
@@ -29,6 +31,8 @@ __all__ = [
     'MLPredictions',
     'StockIncomeStatement',
     'StockBalanceSheet',
+    'DataJobRun',
+    'DataJobCursor',
     'TableMetadata',
     'FieldMetadata', 
     'QueryTemplate',
