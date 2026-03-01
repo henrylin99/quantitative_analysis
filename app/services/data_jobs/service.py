@@ -27,7 +27,9 @@ class DataJobService:
             raise ValueError(f"job run not found: {run_id}")
         return self.submit(run.job_type, run.params_json or {})
 
-    def list_job_definitions(self):
+    def list_job_definitions(self, visible_only: bool = True):
+        if visible_only:
+            return self.registry.list_visible_jobs()
         return self.registry.list_jobs()
 
     def list_runs(self, limit: int = 50):
