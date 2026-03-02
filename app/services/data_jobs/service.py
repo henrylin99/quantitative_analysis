@@ -32,12 +32,11 @@ class DataJobService:
             return self.registry.list_visible_jobs()
         return self.registry.list_jobs()
 
-    def list_runs(self, limit: int = 50):
-        return (
-            DataJobRun.query.order_by(DataJobRun.id.desc())
-            .limit(limit)
-            .all()
-        )
+    def list_runs(self, limit: int = 50, status: Optional[str] = None):
+        query = DataJobRun.query.order_by(DataJobRun.id.desc())
+        if status:
+            query = query.filter(DataJobRun.status == status)
+        return query.limit(limit).all()
 
     def get_run(self, run_id: int) -> Optional[DataJobRun]:
         return DataJobRun.query.filter_by(id=run_id).first()
