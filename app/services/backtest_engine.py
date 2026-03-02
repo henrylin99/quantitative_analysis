@@ -423,9 +423,59 @@ class BacktestEngine:
     def _get_benchmark_returns(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
         """获取基准收益率 (使用沪深300指数)"""
         try:
-            # 这里可以实现获取基准指数数据的逻辑
-            # 暂时返回空列表
-            return []
+            benchmark_codes = ["000300.SH", "399300.SZ"]
+            benchmark_rows: List[Tuple[Any, Any]] = []
+
+            for benchmark_code in benchmark_codes:
+                query = db.session.query(
+                    StockDailyHistory.trade_date,
+                    StockDailyHistory.close
+                ).filter(
+                    StockDailyHistory.ts_code == benchmark_code,
+                    StockDailyHistory.trade_date >= start_date,
+                    StockDailyHistory.trade_date <= end_date
+                ).order_by(StockDailyHistory.trade_date)
+
+                benchmark_rows = query.all()
+                if benchmark_rows:
+                    break
+
+            if not benchmark_rows:
+                return []
+
+            returns = []
+            prev_close = None
+            base_close = None
+
+            for trade_date, close in benchmark_rows:
+                if close is None:
+                    continue
+
+                close_price = float(close)
+                if close_price <= 0:
+                    continue
+
+                if base_close is None:
+                    base_close = close_price
+
+                if prev_close is None or prev_close <= 0:
+                    daily_return = 0.0
+                else:
+                    daily_return = (close_price - prev_close) / prev_close
+
+                cumulative_return = (close_price / base_close - 1.0) if base_close else 0.0
+                date_text = trade_date.isoformat() if hasattr(trade_date, "isoformat") else str(trade_date)
+
+                returns.append({
+                    "date": date_text,
+                    "close": close_price,
+                    "daily_return": daily_return,
+                    "cumulative_return": cumulative_return
+                })
+
+                prev_close = close_price
+
+            return returns
             
         except Exception as e:
             logger.error(f"获取基准收益率失败: {e}")
