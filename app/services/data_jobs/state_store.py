@@ -17,6 +17,17 @@ class DataJobStateStore:
         self.session.commit()
         return run
 
+    def find_active_duplicate(self, job_type: str, params: Dict[str, Any]) -> Optional[DataJobRun]:
+        return (
+            self.session.query(DataJobRun)
+            .filter(
+                DataJobRun.job_type == job_type,
+                DataJobRun.status.in_(["pending", "queued", "running"]),
+                DataJobRun.params_json == (params or {}),
+            )
+            .first()
+        )
+
     def get_run(self, run_id: int) -> Optional[DataJobRun]:
         return self.session.query(DataJobRun).filter_by(id=run_id).first()
 

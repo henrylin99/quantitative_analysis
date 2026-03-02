@@ -16,7 +16,14 @@ class DataJobService:
 
     def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None) -> DataJobRun:
         self.registry.get_job(job_type)
-        run = self.state_store.create_run(job_type, params or {})
+        params = params or {}
+        find_active_duplicate = getattr(self.state_store, "find_active_duplicate", None)
+        if callable(find_active_duplicate):
+            duplicate_run = find_active_duplicate(job_type, params)
+            if duplicate_run is not None:
+                raise ValueError(f"duplicate running job: {duplicate_run.id}")
+
+        run = self.state_store.create_run(job_type, params)
         run = self.state_store.update_run_status(run, "queued", progress=0.0)
         run_data_job.delay(run.id)
         return run
