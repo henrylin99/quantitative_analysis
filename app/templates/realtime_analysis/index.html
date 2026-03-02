@@ -367,6 +367,33 @@
                                 <div id="dataJobResult" class="alert alert-secondary mt-3 mb-0">
                                     尚未启动任务
                                 </div>
+                                <div class="row g-3 mt-1">
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <strong>任务进度</strong>
+                                                <span id="dataJobProgressBadge" class="badge bg-secondary">idle</span>
+                                            </div>
+                                            <div id="dataJobProgress" class="small text-muted">
+                                                暂无运行任务
+                                            </div>
+                                            <pre id="dataJobRunLog" class="small mt-2 mb-0" style="max-height: 180px; overflow-y: auto; white-space: pre-wrap;"></pre>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <strong>最近任务</strong>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshDataJobHistoryBtn">
+                                                    刷新
+                                                </button>
+                                            </div>
+                                            <div id="dataJobHistory" class="small text-muted">
+                                                暂无任务历史
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
