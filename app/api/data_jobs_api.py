@@ -53,7 +53,8 @@ def list_jobs():
 @data_jobs_bp.route("/list", methods=["GET"])
 def list_runs():
     limit = int(request.args.get("limit", 50))
-    runs = [run.to_dict() for run in get_data_job_service().list_runs(limit=limit)]
+    status = request.args.get("status")
+    runs = [run.to_dict() for run in get_data_job_service().list_runs(limit=limit, status=status)]
     return jsonify({"success": True, "runs": runs, "count": len(runs)})
 
 
