@@ -61,8 +61,8 @@ class StockScoringEngine:
             if factor_scores.empty:
                 return pd.DataFrame()
             
-            # 检查权重
-            if method != 'equal_weight' and not weights:
+            # 检查权重（仅因子权重法强制要求传入权重）
+            if method == 'factor_weight' and not weights:
                 logger.warning("未提供权重，使用等权重方法")
                 method = 'equal_weight'
             
@@ -114,15 +114,72 @@ class StockScoringEngine:
     
     def _ml_ensemble_scoring(self, factor_scores: pd.DataFrame, weights: Dict[str, float]) -> pd.Series:
         """机器学习集成评分"""
-        # TODO: 实现基于多个ML模型的集成评分
-        # 目前使用等权重作为占位符
-        return self._equal_weight_scoring(factor_scores, weights)
+        if factor_scores.empty:
+            return pd.Series(dtype=float)
+
+        normalized_scores = self._normalize_columns(factor_scores)
+        selected_weights = {
+            factor_id: float(weight)
+            for factor_id, weight in (weights or {}).items()
+            if factor_id in normalized_scores.columns
+        }
+
+        if not selected_weights:
+            return normalized_scores.mean(axis=1)
+
+        total_weight = sum(abs(weight) for weight in selected_weights.values())
+        if total_weight <= 0:
+            return normalized_scores.mean(axis=1)
+
+        ensemble_scores = pd.Series(0.0, index=normalized_scores.index)
+        for factor_id, weight in selected_weights.items():
+            ensemble_scores += normalized_scores[factor_id] * (weight / total_weight)
+        return ensemble_scores
     
     def _rank_ic_scoring(self, factor_scores: pd.DataFrame, weights: Dict[str, float]) -> pd.Series:
         """基于Rank IC的评分"""
-        # TODO: 实现基于历史Rank IC的动态权重评分
-        # 目前使用等权重作为占位符
-        return self._equal_weight_scoring(factor_scores, weights)
+        if factor_scores.empty:
+            return pd.Series(dtype=float)
+
+        ranks = factor_scores.rank(axis=0, method='average', pct=True)
+        consensus = ranks.mean(axis=1)
+
+        dynamic_weights = {}
+        for factor_id in ranks.columns:
+            ic_value = ranks[factor_id].corr(consensus, method='spearman')
+            if pd.isna(ic_value):
+                ic_value = 0.0
+
+            magnitude = abs(float(ic_value))
+            if weights and factor_id in weights:
+                magnitude *= abs(float(weights[factor_id]))
+
+            sign = 1.0 if ic_value >= 0 else -1.0
+            dynamic_weights[factor_id] = (magnitude, sign)
+
+        total_magnitude = sum(item[0] for item in dynamic_weights.values())
+        if total_magnitude <= 0:
+            return self._equal_weight_scoring(factor_scores, weights)
+
+        rank_ic_scores = pd.Series(0.0, index=factor_scores.index)
+        for factor_id, (magnitude, sign) in dynamic_weights.items():
+            if magnitude <= 0:
+                continue
+            rank_ic_scores += factor_scores[factor_id] * sign * (magnitude / total_magnitude)
+
+        return rank_ic_scores
+
+    def _normalize_columns(self, factor_scores: pd.DataFrame) -> pd.DataFrame:
+        """按列做标准化，避免不同因子量纲影响融合结果。"""
+        normalized = factor_scores.copy()
+        for column in normalized.columns:
+            series = pd.to_numeric(normalized[column], errors='coerce')
+            std = series.std()
+            if std and std > 0:
+                normalized[column] = (series - series.mean()) / std
+            else:
+                normalized[column] = 0.0
+        return normalized.fillna(0.0)
     
     def rank_stocks(self, scores: pd.DataFrame, top_n: int = 50, 
                    filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -320,18 +377,46 @@ class StockScoringEngine:
                 
             elif method == 'weighted_average':
                 # 加权平均（基于模型历史表现）
-                # TODO: 实现基于模型历史表现的加权平均
-                ensemble_result = predictions.groupby('ts_code').agg({
-                    'predicted_return': 'mean',
+                model_stats = predictions.groupby('model_id').agg({
                     'probability_score': 'mean',
-                    'rank_score': 'mean',
-                    'model_id': 'count'
-                }).reset_index()
-                
-                ensemble_result = ensemble_result.rename(columns={
-                    'predicted_return': 'ensemble_score',
-                    'model_id': 'model_count'
+                    'rank_score': 'mean'
+                }).rename(columns={
+                    'probability_score': 'avg_probability',
+                    'rank_score': 'avg_rank'
                 })
+
+                model_stats['weight'] = model_stats['avg_probability'].fillna(0.0) / (
+                    model_stats['avg_rank'].replace(0, np.nan).fillna(1.0)
+                )
+
+                if (model_stats['weight'] <= 0).all():
+                    model_stats['weight'] = 1.0
+
+                model_stats['weight'] = model_stats['weight'] / model_stats['weight'].sum()
+                weighted_predictions = predictions.merge(
+                    model_stats[['weight']],
+                    left_on='model_id',
+                    right_index=True,
+                    how='left'
+                )
+                weighted_predictions['weight'] = weighted_predictions['weight'].fillna(0.0)
+
+                def _weighted_avg(group: pd.DataFrame, value_col: str) -> float:
+                    value_series = pd.to_numeric(group[value_col], errors='coerce').fillna(0.0)
+                    weight_series = pd.to_numeric(group['weight'], errors='coerce').fillna(0.0)
+                    weight_sum = weight_series.sum()
+                    if weight_sum <= 0:
+                        return float(value_series.mean())
+                    return float(np.average(value_series, weights=weight_series))
+
+                ensemble_result = weighted_predictions.groupby('ts_code').apply(
+                    lambda g: pd.Series({
+                        'ensemble_score': _weighted_avg(g, 'predicted_return'),
+                        'probability_score': _weighted_avg(g, 'probability_score'),
+                        'rank_score': _weighted_avg(g, 'rank_score'),
+                        'model_count': int(g['model_id'].nunique())
+                    })
+                ).reset_index()
                 
             elif method == 'rank_average':
                 # 排名平均
