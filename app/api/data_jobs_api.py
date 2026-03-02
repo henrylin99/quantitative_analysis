@@ -25,6 +25,8 @@ def submit_job():
     params = payload.get("params", {})
     try:
         run = get_data_job_service().submit(job_type, params)
+    except (KeyError, ValueError) as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 500
 
