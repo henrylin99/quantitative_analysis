@@ -24,6 +24,7 @@ from app.models import (
 
 class MLModelManager:
     """机器学习模型管理器"""
+    SUPPORTED_TARGET_TYPES = {"return_1d", "return_5d", "return_20d", "ranking"}
     
     def __init__(self):
         self.models = {}  # 缓存已加载的模型
@@ -73,12 +74,20 @@ class MLModelManager:
         # 创建模型存储目录
         self.model_dir = 'models'
         os.makedirs(self.model_dir, exist_ok=True)
+
+    @classmethod
+    def is_supported_target_type(cls, target_type: str) -> bool:
+        return target_type in cls.SUPPORTED_TARGET_TYPES
     
     def create_model_definition(self, model_id: str, model_name: str, model_type: str,
                               factor_list: List[str], target_type: str,
                               model_params: dict = None, training_config: dict = None) -> bool:
         """创建模型定义"""
         try:
+            if not self.is_supported_target_type(target_type):
+                logger.warning(f"不支持的目标类型: {target_type}")
+                return False
+
             # 检查模型是否已存在
             existing = MLModelDefinition.query.filter_by(model_id=model_id).first()
             if existing:
@@ -128,10 +137,9 @@ class MLModelManager:
             model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
             if not model_def:
                 raise ValueError(f"未找到模型定义: {model_id}")
-            
-            # 检查是否为简化演示模型
-            if model_def.target_type == 'simulated_return':
-                return self._prepare_simulated_training_data(model_def)
+
+            if not self.is_supported_target_type(model_def.target_type):
+                raise ValueError(f"不支持的目标类型: {model_def.target_type}")
             
             # 获取因子数据 - 先尝试指定日期范围
             factor_query = FactorValues.query.filter(
@@ -186,67 +194,6 @@ class MLModelManager:
             
         except Exception as e:
             logger.error(f"准备训练数据失败: {model_id}, 错误: {e}")
-            return pd.DataFrame(), pd.Series()
-    
-    def _prepare_simulated_training_data(self, model_def) -> Tuple[pd.DataFrame, pd.Series]:
-        """为简化演示模型准备模拟训练数据"""
-        try:
-            import numpy as np
-            from sklearn.preprocessing import RobustScaler
-            
-            # 获取因子数据
-            factor_query = FactorValues.query.filter(
-                FactorValues.factor_id.in_(model_def.factor_list)
-            )
-            
-            factor_data = pd.read_sql(factor_query.statement, db.engine)
-            
-            if factor_data.empty:
-                raise ValueError("未找到因子数据")
-            
-            # 创建透视表
-            feature_df = factor_data.pivot_table(
-                index='ts_code',
-                columns='factor_id',
-                values='factor_value',
-                aggfunc='first'
-            ).reset_index()
-            
-            # 删除缺失值
-            feature_df = feature_df.dropna()
-            
-            if len(feature_df) < 50:
-                raise ValueError("数据量太少，无法训练模型")
-            
-            # 创建模拟目标变量
-            np.random.seed(42)
-            X = feature_df[model_def.factor_list].values
-            
-            # 标准化特征
-            scaler = RobustScaler()
-            X_scaled = scaler.fit_transform(X)
-            
-            # 创建有意义的目标变量（模拟未来收益率）
-            if len(model_def.factor_list) == 2:
-                weights = np.array([0.3, 0.5])  # 两个因子的权重
-            else:
-                # 为多个因子创建随机权重
-                weights = np.random.random(len(model_def.factor_list))
-                weights = weights / weights.sum()  # 归一化
-            
-            signal = np.dot(X_scaled, weights)
-            noise = np.random.normal(0, 0.02, len(signal))  # 2%的噪声
-            y = signal * 0.05 + noise  # 缩放到合理的收益率范围
-            
-            # 返回特征和目标变量
-            X_df = feature_df[model_def.factor_list]
-            y_series = pd.Series(y, index=X_df.index)
-            
-            logger.info(f"准备模拟训练数据完成: {len(X_df)} 样本, {len(model_def.factor_list)} 特征")
-            return X_df, y_series
-            
-        except Exception as e:
-            logger.error(f"准备模拟训练数据失败: {e}")
             return pd.DataFrame(), pd.Series()
     
     def _calculate_target_returns(self, feature_df: pd.DataFrame, target_type: str) -> pd.DataFrame:

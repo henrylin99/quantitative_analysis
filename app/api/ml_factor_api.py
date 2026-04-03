@@ -263,6 +263,11 @@ def create_ml_model():
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'缺少必需参数: {field}'}), 400
+
+        if not get_ml_manager().is_supported_target_type(data['target_type']):
+            return jsonify({
+                'error': f"不支持的target_type: {data['target_type']}"
+            }), 400
         
         # 创建模型定义
         success = get_ml_manager().create_model_definition(
