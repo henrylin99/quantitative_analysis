@@ -219,6 +219,19 @@ def get_custom_factor_capabilities():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/factors/builtin-validation-samples', methods=['GET'])
+def get_builtin_factor_validation_samples():
+    """获取核心内置因子的样例级校验说明"""
+    try:
+        return jsonify({
+            'success': True,
+            'samples': get_factor_engine().get_builtin_factor_validation_samples()
+        })
+    except Exception as e:
+        logger.error(f"获取内置因子样例失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/factors/list', methods=['GET'])
 def get_factor_list():
     """获取因子列表"""
