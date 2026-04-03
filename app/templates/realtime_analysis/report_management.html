@@ -137,21 +137,6 @@
                     <i class="bi bi-file-earmark-text"></i> 报告列表
                 </button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="templates-tab" data-bs-toggle="pill" data-bs-target="#templates" type="button" role="tab">
-                    <i class="bi bi-layout-text-window"></i> 模板管理
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="subscriptions-tab" data-bs-toggle="pill" data-bs-target="#subscriptions" type="button" role="tab">
-                    <i class="bi bi-bell"></i> 订阅管理
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="statistics-tab" data-bs-toggle="pill" data-bs-target="#statistics" type="button" role="tab">
-                    <i class="bi bi-graph-up"></i> 统计分析
-                </button>
-            </li>
         </ul>
 
         <!-- 标签页内容 -->
@@ -187,65 +172,6 @@
                 </div>
             </div>
 
-            <!-- 模板管理 -->
-            <div class="tab-pane fade" id="templates" role="tabpanel">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">模板管理</h5>
-                        <button class="btn btn-success btn-sm" onclick="showCreateTemplateModal()">
-                            <i class="bi bi-plus"></i> 创建模板
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="templatesContainer" class="row">
-                            <!-- 模板卡片将在这里动态生成 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 订阅管理 -->
-            <div class="tab-pane fade" id="subscriptions" role="tabpanel">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">订阅管理</h5>
-                        <button class="btn btn-warning btn-sm" onclick="showCreateSubscriptionModal()">
-                            <i class="bi bi-plus"></i> 创建订阅
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="subscriptionsContainer" class="row">
-                            <!-- 订阅卡片将在这里动态生成 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 统计分析 -->
-            <div class="tab-pane fade" id="statistics" role="tabpanel">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">报告类型分布</h5>
-                            </div>
-                            <div class="card-body">
-                                <div id="reportTypeChart" class="chart-container"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">报告状态统计</h5>
-                            </div>
-                            <div class="card-body">
-                                <div id="reportStatusChart" class="chart-container"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -294,94 +220,11 @@
         </div>
     </div>
 
-    <!-- 创建模板模态框 -->
-    <div class="modal fade" id="createTemplateModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">创建模板</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="createTemplateForm">
-                        <div class="mb-3">
-                            <label class="form-label">模板名称</label>
-                            <input type="text" class="form-control" id="templateName" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">模板类型</label>
-                            <select class="form-select" id="templateType" required>
-                                <option value="">请选择模板类型</option>
-                                <option value="daily_summary">每日总结</option>
-                                <option value="portfolio_analysis">组合分析</option>
-                                <option value="risk_assessment">风险评估</option>
-                                <option value="signal_analysis">信号分析</option>
-                                <option value="market_overview">市场概览</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">模板描述</label>
-                            <textarea class="form-control" id="templateDescription" rows="3"></textarea>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-success" onclick="createTemplate()">创建模板</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 创建订阅模态框 -->
-    <div class="modal fade" id="createSubscriptionModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">创建订阅</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="createSubscriptionForm">
-                        <div class="mb-3">
-                            <label class="form-label">订阅名称</label>
-                            <input type="text" class="form-control" id="subscriptionName" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">模板</label>
-                            <select class="form-select" id="subscriptionTemplateId" required>
-                                <option value="">请选择模板</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">订阅者邮箱</label>
-                            <input type="email" class="form-control" id="subscriberEmail">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">调度类型</label>
-                            <select class="form-select" id="scheduleType">
-                                <option value="daily">每日</option>
-                                <option value="weekly">每周</option>
-                                <option value="monthly">每月</option>
-                            </select>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-warning" onclick="createSubscription()">创建订阅</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // 全局变量
         let reports = [];
         let templates = [];
-        let subscriptions = [];
-        let statistics = {};
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -397,25 +240,13 @@
                 const needsPortfolio = ['portfolio_analysis', 'risk_assessment'].includes(this.value);
                 portfolioGroup.style.display = needsPortfolio ? 'block' : 'none';
             });
-
-            // 标签页切换时加载数据
-            document.querySelectorAll('[data-bs-toggle="pill"]').forEach(tab => {
-                tab.addEventListener('shown.bs.tab', function(e) {
-                    const target = e.target.getAttribute('data-bs-target');
-                    if (target === '#statistics') {
-                        loadStatistics();
-                    }
-                });
-            });
         }
 
         // 加载初始数据
         async function loadInitialData() {
             await Promise.all([
                 loadReports(),
-                loadTemplates(),
-                loadSubscriptions(),
-                loadStatisticsOverview()
+                loadTemplates()
             ]);
         }
 
@@ -670,58 +501,81 @@
             new bootstrap.Modal(document.getElementById('generateReportModal')).show();
         }
 
-        function showCreateTemplateModal() {
-            new bootstrap.Modal(document.getElementById('createTemplateModal')).show();
-        }
-
-        function showCreateSubscriptionModal() {
-            new bootstrap.Modal(document.getElementById('createSubscriptionModal')).show();
-        }
-
         // 刷新数据
         function refreshData() {
             loadInitialData();
         }
 
-        // 其他功能函数（简化实现）
-        function loadSubscriptions() {
-            // TODO: 实现订阅加载
-        }
-
-        function loadStatisticsOverview() {
-            // TODO: 实现统计概览加载
-        }
-
-        function loadStatistics() {
-            // TODO: 实现统计图表加载
-        }
-
         function filterReports() {
-            // TODO: 实现报告筛选
+            const type = document.getElementById('reportTypeFilter').value;
+            const filtered = type ? reports.filter(report => report.report_type === type) : reports;
+            const container = document.getElementById('reportsContainer');
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="text-center py-4">
+                            <i class="bi bi-file-earmark-text fs-1 text-muted"></i>
+                            <p class="text-muted mt-2">没有匹配的报告</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(report => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card report-card fade-in">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title">${report.report_name}</h6>
+                                <span class="badge ${getStatusBadgeClass(report.report_status)} status-badge">
+                                    ${getStatusText(report.report_status)}
+                                </span>
+                            </div>
+                            <p class="card-text text-muted small">
+                                类型: ${getReportTypeText(report.report_type)}<br>
+                                生成时间: ${formatDateTime(report.generated_at)}<br>
+                                ${report.generation_time ? `耗时: ${report.generation_time.toFixed(2)}秒` : ''}
+                            </p>
+                                <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewReport(${report.id})">
+                                    <i class="bi bi-eye"></i> 查看
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport(${report.id})">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
 
         function viewReport(id) {
-            // TODO: 实现报告查看
+            window.location.href = `/api/realtime-analysis/reports/reports/${id}`;
         }
 
-        function deleteReport(id) {
-            // TODO: 实现报告删除
-        }
+        async function deleteReport(id) {
+            if (!confirm('确定要删除这份报告吗？')) {
+                return;
+            }
 
-        function createTemplate() {
-            // TODO: 实现模板创建
-        }
+            try {
+                const response = await fetch(`/api/realtime-analysis/reports/reports/${id}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
 
-        function editTemplate(id) {
-            // TODO: 实现模板编辑
-        }
-
-        function deleteTemplate(id) {
-            // TODO: 实现模板删除
-        }
-
-        function createSubscription() {
-            // TODO: 实现订阅创建
+                if (result.success) {
+                    showAlert('报告删除成功', 'success');
+                    await loadReports();
+                } else {
+                    showAlert('报告删除失败: ' + result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('报告删除失败: ' + error.message, 'danger');
+            }
         }
     </script>
 </body>
