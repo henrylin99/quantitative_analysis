@@ -314,23 +314,20 @@ class WebSocketPushService:
     def _push_news(self):
         """推送新闻资讯"""
         try:
-            # 模拟新闻数据（实际应用中可以对接新闻API）
-            news_data = [
-                {
-                    'id': f'news_{int(time.time())}',
-                    'title': '市场动态更新',
-                    'content': '实时市场数据推送正常运行',
-                    'source': '系统通知',
-                    'published_at': datetime.now().isoformat(),
-                    'category': 'system'
-                }
-            ]
-            
+            news_data = self._get_news_payload()
+            if not news_data:
+                logger.debug("未配置真实新闻源，跳过新闻推送")
+                return
+
             broadcast_news(news_data)
             logger.debug("推送新闻资讯完成")
             
         except Exception as e:
             logger.error(f"推送新闻资讯失败: {e}")
+
+    def _get_news_payload(self) -> List[Dict[str, Any]]:
+        """获取可推送的新闻数据。默认不生成模拟新闻。"""
+        return []
     
     def _calculate_change_pct(self, current_data: Dict) -> float:
         """计算涨跌幅"""
