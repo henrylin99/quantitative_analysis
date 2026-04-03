@@ -299,25 +299,10 @@ class MLModelManager:
                             'trade_date': current_date,
                             'target': return_rate
                         })
-                    else:
-                        # 如果没有足够的未来数据，使用模拟数据
-                        # 基于历史波动率生成合理的模拟收益率
-                        historical_returns = price_data['pct_chg'].dropna() / 100
-                        if len(historical_returns) > 0:
-                            mean_return = historical_returns.mean()
-                            std_return = historical_returns.std()
-                            # 生成符合历史分布的随机收益率
-                            simulated_return = np.random.normal(mean_return, std_return)
-                            target_data.append({
-                                'ts_code': ts_code,
-                                'trade_date': current_date,
-                                'target': simulated_return
-                            })
             
             if not target_data:
-                # 如果完全没有数据，生成基于特征的模拟目标变量
-                logger.warning("无法计算真实收益率，使用基于特征的模拟数据")
-                return self._generate_simulated_targets(feature_df)
+                logger.warning("无法计算真实收益率，返回空目标数据")
+                return pd.DataFrame(columns=['ts_code', 'trade_date', 'target'])
             
             target_df = pd.DataFrame(target_data)
             logger.info(f"计算目标变量完成: {len(target_df)} 条记录")
@@ -325,8 +310,7 @@ class MLModelManager:
             
         except Exception as e:
             logger.error(f"计算目标变量失败: {e}")
-            # 返回模拟数据作为备选
-            return self._generate_simulated_targets(feature_df)
+            return pd.DataFrame(columns=['ts_code', 'trade_date', 'target'])
     
     def _generate_simulated_targets(self, feature_df: pd.DataFrame) -> pd.DataFrame:
         """生成基于特征的模拟目标变量"""
