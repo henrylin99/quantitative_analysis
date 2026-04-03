@@ -5,6 +5,21 @@ from unittest.mock import patch
 
 import pytest
 
+try:
+    import click.core as click_core
+
+    if not hasattr(click_core, "ParameterSource"):
+        class ParameterSource:  # pragma: no cover - compatibility shim
+            COMMANDLINE = "COMMANDLINE"
+            DEFAULT = "DEFAULT"
+            DEFAULT_MAP = "DEFAULT_MAP"
+            ENVIRONMENT = "ENVIRONMENT"
+            PROMPT = "PROMPT"
+
+        click_core.ParameterSource = ParameterSource
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

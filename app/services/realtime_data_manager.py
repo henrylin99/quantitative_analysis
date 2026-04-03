@@ -199,52 +199,16 @@ class RealtimeDataManager:
         """
         原有的同步方式（保持兼容性）
         """
-        try:
-            # 转换日期格式
-            start_date_legacy = datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d')
-            end_date_legacy = datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d')
-            
-            logger.info(f"使用原有方式同步 {ts_code} 从 {start_date_legacy} 到 {end_date_legacy} 的{period_type}数据")
-            
-            # 获取1分钟数据（这里使用模拟数据，实际应该调用真实API）
-            minute_data = self._fetch_minute_data_from_source(ts_code, start_date_legacy, end_date_legacy)
-            
-            if minute_data.empty:
-                return {
-                    'success': False,
-                    'message': '未获取到数据',
-                    'data_count': 0
-                }
-            
-            # 转换数据格式
-            data_list = self._convert_to_model_format(minute_data, ts_code, period_type)
-            
-            # 批量插入数据
-            StockMinuteData.bulk_insert(data_list)
-            
-            # 如果是1分钟数据，生成其他周期数据
-            if period_type == '1min':
-                self._generate_aggregated_data(ts_code, start_date_legacy, end_date_legacy)
-            
-            logger.info(f"成功同步 {len(data_list)} 条 {ts_code} 的{period_type}数据")
-            
-            return {
-                'success': True,
-                'message': f'成功同步 {len(data_list)} 条数据',
-                'data_count': len(data_list),
-                'ts_code': ts_code,
-                'start_date': start_date,
-                'end_date': end_date,
-                'period_type': period_type
-            }
-            
-        except Exception as e:
-            logger.error(f"同步数据失败: {str(e)}")
-            return {
-                'success': False,
-                'message': f'同步失败: {str(e)}',
-                'data_count': 0
-            }
+        logger.warning("legacy 分钟数据同步已禁用，避免写入模拟行情数据")
+        return {
+            'success': False,
+            'message': 'legacy分钟数据同步已禁用，请使用真实数据源',
+            'data_count': 0,
+            'ts_code': ts_code,
+            'start_date': start_date,
+            'end_date': end_date,
+            'period_type': period_type
+        }
     
     def _fetch_minute_data_from_source(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         """

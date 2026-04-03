@@ -502,11 +502,14 @@ async function startBacktest() {
             errorMessage += ': ' + error.message;
         }
         showAlert(errorMessage, 'danger');
-        
-        // 使用模拟数据进行演示
-        showAlert('使用模拟数据进行演示', 'info');
-        displayMockResults();
+        hideBacktestResults();
     }
+}
+
+function hideBacktestResults() {
+    document.getElementById('backtestResults').style.display = 'none';
+    document.getElementById('positionAnalysis').style.display = 'none';
+    document.getElementById('riskAnalysis').style.display = 'none';
 }
 
 // 获取回测配置
@@ -591,15 +594,7 @@ function displayBacktestResults(data) {
     // 生成月度收益数据
     const rollingReturns = generateRollingReturnsFromDaily(data.daily_returns || [], portfolioValues);
     
-    // 模拟行业分布和收益分布数据
-    const industryDistribution = [
-        { name: '电子', value: 25 },
-        { name: '医药生物', value: 20 },
-        { name: '计算机', value: 15 },
-        { name: '化工', value: 12 },
-        { name: '机械设备', value: 10 },
-        { name: '其他', value: 18 }
-    ];
+    const industryDistribution = data.industry_distribution || [];
     
     const returnsDistribution = generateReturnsDistributionFromDaily(data.daily_returns || []);
     
@@ -616,12 +611,12 @@ function displayBacktestResults(data) {
     
     // 更新风险指标
     const riskMetrics = {
-        var_95: performanceMetrics.var_95 || -0.023,
-        cvar_95: performanceMetrics.cvar_95 || -0.034,
-        beta: performanceMetrics.beta || 0.89,
-        alpha: performanceMetrics.alpha || 0.045,
-        information_ratio: performanceMetrics.information_ratio || 0.67,
-        calmar_ratio: performanceMetrics.calmar_ratio || 1.02
+        var_95: performanceMetrics.var_95 ?? null,
+        cvar_95: performanceMetrics.cvar_95 ?? null,
+        beta: performanceMetrics.beta ?? null,
+        alpha: performanceMetrics.alpha ?? null,
+        information_ratio: performanceMetrics.information_ratio ?? null,
+        calmar_ratio: performanceMetrics.calmar_ratio ?? null
     };
     updateRiskMetrics(riskMetrics);
 }
@@ -648,7 +643,7 @@ function calculateDrawdownFromValues(portfolioValues, initialCapital) {
 // 从日收益率生成月度收益
 function generateRollingReturnsFromDaily(dailyReturns, portfolioValues) {
     if (!dailyReturns || dailyReturns.length === 0) {
-        return generateMockRollingReturns();
+        return [];
     }
     
     // 简化处理：每30个交易日作为一个月
@@ -665,7 +660,7 @@ function generateRollingReturnsFromDaily(dailyReturns, portfolioValues) {
         monthlyData.push({
             date: date.substring(0, 7), // YYYY-MM格式
             portfolio: monthReturn,
-            benchmark: monthReturn * 0.8 // 模拟基准收益
+            benchmark: null
         });
     }
     
@@ -675,7 +670,7 @@ function generateRollingReturnsFromDaily(dailyReturns, portfolioValues) {
 // 从日收益率生成收益分布
 function generateReturnsDistributionFromDaily(dailyReturns) {
     if (!dailyReturns || dailyReturns.length === 0) {
-        return generateMockReturnsDistribution();
+        return [];
     }
     
     // 创建收益率区间
@@ -704,7 +699,7 @@ function generatePositionsFromBacktest(data) {
     const dailyPositions = data.daily_positions || [];
     
     if (dailyPositions.length === 0) {
-        return generateMockPositions();
+        return [];
     }
     
     // 取最后一期的持仓
@@ -716,129 +711,9 @@ function generatePositionsFromBacktest(data) {
         name: tsCode, // 简化处理
         weight: (shares * 100) / totalValue, // 假设股价为100元
         period: '持有中',
-        return: (Math.random() - 0.4) * 0.3, // 模拟收益率
-        contribution: (Math.random() - 0.4) * 0.05 // 模拟贡献度
+        return: null,
+        contribution: null
     }));
-}
-
-// 显示模拟结果（用于演示）
-function displayMockResults() {
-    const mockData = {
-        total_return: 0.156,
-        annual_return: 0.089,
-        max_drawdown: -0.087,
-        sharpe_ratio: 1.23,
-        volatility: 0.145,
-        win_rate: 0.634,
-        returns_data: generateMockReturnsData(),
-        drawdown_data: generateMockDrawdownData(),
-        rolling_returns: generateMockRollingReturns(),
-        industry_distribution: [
-            { name: '电子', value: 25 },
-            { name: '医药生物', value: 20 },
-            { name: '计算机', value: 15 },
-            { name: '化工', value: 12 },
-            { name: '机械设备', value: 10 },
-            { name: '其他', value: 18 }
-        ],
-        returns_distribution: generateMockReturnsDistribution(),
-        positions: generateMockPositions(),
-        risk_metrics: {
-            var_95: -0.023,
-            cvar_95: -0.034,
-            beta: 0.89,
-            alpha: 0.045,
-            information_ratio: 0.67,
-            calmar_ratio: 1.02
-        }
-    };
-    
-    displayBacktestResults(mockData);
-}
-
-// 生成模拟数据的辅助函数
-function generateMockReturnsData() {
-    const data = [];
-    let portfolioValue = 1.0;
-    let benchmarkValue = 1.0;
-    
-    for (let i = 0; i < 365; i++) {
-        const date = new Date(2023, 0, 1);
-        date.setDate(date.getDate() + i);
-        
-        portfolioValue *= (1 + (Math.random() - 0.48) * 0.02);
-        benchmarkValue *= (1 + (Math.random() - 0.49) * 0.015);
-        
-        data.push({
-            date: date.toISOString().split('T')[0],
-            portfolio: portfolioValue,
-            benchmark: benchmarkValue
-        });
-    }
-    
-    return data;
-}
-
-function generateMockDrawdownData() {
-    const data = [];
-    let maxValue = 1.0;
-    let currentValue = 1.0;
-    
-    for (let i = 0; i < 365; i++) {
-        const date = new Date(2023, 0, 1);
-        date.setDate(date.getDate() + i);
-        
-        currentValue *= (1 + (Math.random() - 0.48) * 0.02);
-        maxValue = Math.max(maxValue, currentValue);
-        
-        const drawdown = (currentValue - maxValue) / maxValue;
-        
-        data.push({
-            date: date.toISOString().split('T')[0],
-            drawdown: drawdown
-        });
-    }
-    
-    return data;
-}
-
-function generateMockRollingReturns() {
-    const data = [];
-    
-    for (let i = 0; i < 12; i++) {
-        const date = new Date(2023, i, 1);
-        data.push({
-            date: date.toISOString().split('T')[0].substring(0, 7),
-            portfolio: (Math.random() - 0.4) * 0.2,
-            benchmark: (Math.random() - 0.45) * 0.15
-        });
-    }
-    
-    return data;
-}
-
-function generateMockReturnsDistribution() {
-    const data = [];
-    
-    for (let i = -10; i <= 10; i++) {
-        const returns = i / 100;
-        const frequency = Math.exp(-Math.pow(returns - 0.001, 2) / (2 * Math.pow(0.02, 2)));
-        data.push({ returns: returns, frequency: frequency });
-    }
-    
-    return data;
-}
-
-function generateMockPositions() {
-    const stocks = [
-        { code: '000001.SZ', name: '平安银行', weight: 0.08, period: '2023-01-01 ~ 2023-12-31', return: 0.12, contribution: 0.0096 },
-        { code: '000002.SZ', name: '万科A', weight: 0.06, period: '2023-01-01 ~ 2023-12-31', return: -0.05, contribution: -0.003 },
-        { code: '600036.SH', name: '招商银行', weight: 0.09, period: '2023-01-01 ~ 2023-12-31', return: 0.15, contribution: 0.0135 },
-        { code: '600519.SH', name: '贵州茅台', weight: 0.07, period: '2023-01-01 ~ 2023-12-31', return: 0.08, contribution: 0.0056 },
-        { code: '000858.SZ', name: '五粮液', weight: 0.05, period: '2023-01-01 ~ 2023-12-31', return: 0.06, contribution: 0.003 }
-    ];
-    
-    return stocks;
 }
 
 // 绘制收益曲线图

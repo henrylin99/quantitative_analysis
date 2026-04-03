@@ -264,15 +264,15 @@ def train_ml_model():
             # 转换numpy类型为Python原生类型
             metrics = convert_numpy_types(result.get('metrics', {}))
             
-            return jsonify({
+            response_data = {
                 'success': True,
                 'message': f"模型训练完成: {model_id}",
                 'metrics': metrics,
-                'training_samples': metrics.get('training_samples', 1250),
-                'accuracy': f"{metrics.get('accuracy', 0.856) * 100:.1f}%" if isinstance(metrics.get('accuracy'), (int, float)) else '85.6%',
-                'loss': f"{metrics.get('loss', 0.142):.3f}" if isinstance(metrics.get('loss'), (int, float)) else '0.142',
-                'model_size': '2.3MB'  # 模拟数据
-            })
+            }
+            training_samples = metrics.get('training_samples', metrics.get('sample_count'))
+            if training_samples is not None:
+                response_data['training_samples'] = training_samples
+            return jsonify(response_data)
         else:
             return jsonify({'error': result['error']}), 500
         

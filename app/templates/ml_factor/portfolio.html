@@ -175,42 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // 加载投资组合列表
 async function loadPortfolios() {
     try {
-        // 模拟数据
-        portfolios = [
-            {
-                id: 'portfolio_001',
-                name: '价值投资组合',
-                description: '基于价值因子的长期投资组合',
-                initial_capital: 1000000,
-                current_value: 1150000,
-                return_rate: 0.15,
-                volatility: 0.12,
-                sharpe_ratio: 1.25,
-                max_drawdown: 0.08,
-                created_at: '2024-01-01',
-                status: 'active',
-                holdings: [
-                    {ts_code: '000001.SZ', name: '平安银行', weight: 0.15, value: 172500},
-                    {ts_code: '600036.SH', name: '招商银行', weight: 0.12, value: 138000},
-                    {ts_code: '000002.SZ', name: '万科A', weight: 0.10, value: 115000}
-                ]
-            },
-            {
-                id: 'portfolio_002',
-                name: '成长投资组合',
-                description: '基于成长因子的投资组合',
-                initial_capital: 500000,
-                current_value: 580000,
-                return_rate: 0.16,
-                volatility: 0.18,
-                sharpe_ratio: 0.89,
-                max_drawdown: 0.15,
-                created_at: '2024-02-01',
-                status: 'active',
-                holdings: []
-            }
-        ];
-        
+        portfolios = [];
         renderPortfolios();
     } catch (error) {
         console.error('加载投资组合失败:', error);
@@ -223,7 +188,7 @@ function renderPortfolios() {
     const container = document.getElementById('portfolioList');
     
     if (portfolios.length === 0) {
-        container.innerHTML = '<div class="text-center text-muted">暂无投资组合，点击"创建组合"开始</div>';
+        container.innerHTML = '<div class="alert alert-warning mb-0">投资组合管理功能整改中，当前不再提供演示数据，请先完成真实组合 CRUD 后再开放此页面。</div>';
         return;
     }
     
