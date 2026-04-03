@@ -15,6 +15,7 @@ from app.models.stock_minute_data import StockMinuteData
 from app.models.realtime_indicator import RealtimeIndicator
 from app.models.trading_signal import TradingSignal
 from app.models.risk_alert import RiskAlert
+from app.models.portfolio_position import PortfolioPosition
 from app.services.realtime_data_manager import RealtimeDataManager
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.services.realtime_trading_signal_engine import RealtimeTradingSignalEngine
@@ -277,8 +278,10 @@ class WebSocketPushService:
     def _push_portfolio_updates(self):
         """推送投资组合更新"""
         try:
-            # 获取活跃投资组合
-            portfolio_ids = ['demo_portfolio']  # 可以从数据库获取
+            portfolio_ids = self._get_active_portfolio_ids()
+            if not portfolio_ids:
+                logger.debug("未找到真实投资组合，跳过组合推送")
+                return
             
             for portfolio_id in portfolio_ids:
                 # 获取投资组合指标
@@ -296,6 +299,17 @@ class WebSocketPushService:
             
         except Exception as e:
             logger.error(f"推送投资组合更新失败: {e}")
+
+    def _get_active_portfolio_ids(self) -> List[str]:
+        """获取存在真实持仓的活跃投资组合ID。"""
+        try:
+            rows = db.session.query(PortfolioPosition.portfolio_id).filter(
+                PortfolioPosition.is_active.is_(True)
+            ).distinct().all()
+            return [row[0] for row in rows if row and row[0]]
+        except Exception as e:
+            logger.error(f"获取活跃投资组合失败: {e}")
+            return []
     
     def _push_news(self):
         """推送新闻资讯"""
