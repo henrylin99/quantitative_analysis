@@ -30,7 +30,6 @@
                             <select class="form-select" id="scoringMethod">
                                 <option value="factor_based">基于因子</option>
                                 <option value="ml_based">基于ML模型</option>
-                                <option value="hybrid">混合方法</option>
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -122,16 +121,6 @@ async function calculateScoring() {
                 showError('scoringResults', '没有可用的ML模型，请先创建和训练模型');
                 return;
             }
-        } else {
-            // 混合方法 - 集成选股
-            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                trade_date: tradeDate,
-                selection_method: 'factor_based',
-                factor_list: ['momentum_5d', 'money_flow_strength', 'momentum_20d'],
-                weights: {'momentum_5d': 0.4, 'money_flow_strength': 0.3, 'momentum_20d': 0.3},
-                top_n: topN,
-                optimization_method: 'equal_weight'
-            });
         }
         
         if (response.data.success) {
@@ -139,22 +128,8 @@ async function calculateScoring() {
             let results;
             if (scoringMethod === 'factor_based') {
                 results = response.data.top_stocks || [];
-            } else if (scoringMethod === 'ml_based') {
-                results = response.data.top_stocks || [];
             } else {
-                // 混合方法
-                const stockSelection = response.data.stock_selection || {};
-                const weights = response.data.portfolio_optimization?.weights || {};
-                results = Object.keys(weights).map((ts_code, index) => ({
-                    ts_code: ts_code,
-                    name: ts_code, // 简化显示
-                    composite_score: weights[ts_code],
-                    rank: index + 1,
-                    industry: '未知',
-                    pe_ratio: null,
-                    pb_ratio: null,
-                    roe: null
-                }));
+                results = response.data.top_stocks || [];
             }
             renderScoringResults(results);
         } else {

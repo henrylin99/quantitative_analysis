@@ -22,6 +22,9 @@ portfolio_optimizer = None
 backtest_engine = None
 training_job_service = None
 
+SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
+SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral"}
+
 # JSON序列化辅助函数
 def convert_numpy_types(obj):
     """将numpy类型转换为Python原生类型，用于JSON序列化"""
@@ -173,6 +176,12 @@ def create_custom_factor():
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'缺少必需参数: {field}'}), 400
+
+        validation = get_factor_engine().validate_custom_factor_formula(data['factor_formula'])
+        if not validation.get('valid'):
+            return jsonify({
+                'error': validation.get('error') or '自定义因子公式不合法'
+            }), 400
         
         # 创建因子定义
         success = get_factor_engine().create_factor_definition(
@@ -194,6 +203,19 @@ def create_custom_factor():
         
     except Exception as e:
         logger.error(f"创建自定义因子失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factors/custom-capabilities', methods=['GET'])
+def get_custom_factor_capabilities():
+    """获取自定义因子表达式能力说明"""
+    try:
+        return jsonify({
+            'success': True,
+            'capabilities': get_factor_engine().get_custom_factor_capabilities()
+        })
+    except Exception as e:
+        logger.error(f"获取自定义因子能力失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -410,6 +432,12 @@ def factor_based_scoring():
         method = data.get('method', 'equal_weight')
         top_n = data.get('top_n', 50)
         filters = data.get('filters')
+
+        if method not in SUPPORTED_FACTOR_SCORING_METHODS:
+            return jsonify({
+                'error': f"不支持的评分方法: {method}",
+                'supported_methods': sorted(SUPPORTED_FACTOR_SCORING_METHODS)
+            }), 400
         
         # 计算因子分数
         factor_scores = get_scoring_engine().calculate_factor_scores(trade_date, factor_list, ts_codes)
@@ -715,6 +743,12 @@ def optimize_portfolio():
         method = data.get('method', 'mean_variance')
         constraints = data.get('constraints')
         risk_model = data.get('risk_model')  # 可选，如果不提供会自动估计
+
+        if method not in SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS:
+            return jsonify({
+                'error': f"不支持的优化方法: {method}",
+                'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
+            }), 400
         
         # 转换风险模型
         risk_model_df = None
@@ -796,6 +830,12 @@ def integrated_portfolio_selection():
         # 组合优化参数
         optimization_method = data.get('optimization_method', 'equal_weight')
         constraints = data.get('constraints')
+
+        if optimization_method not in SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS:
+            return jsonify({
+                'error': f"不支持的优化方法: {optimization_method}",
+                'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
+            }), 400
         
         # 步骤1: 股票选择
         if selection_method == 'ml_based' and model_ids:
