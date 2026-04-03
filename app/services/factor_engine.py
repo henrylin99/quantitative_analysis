@@ -12,6 +12,7 @@ from app.models import (
     StockFactor, StockMoneyflow, StockCyqPerf, StockIncomeStatement,
     StockBalanceSheet
 )
+from app.services.factor_expression_engine import FactorExpressionEngine
 
 
 class FactorEngine:
@@ -20,6 +21,7 @@ class FactorEngine:
     def __init__(self):
         self.factor_definitions = {}
         self.builtin_factors = {}
+        self.expression_engine = FactorExpressionEngine()
         self._init_builtin_factors()
         self.load_factor_definitions()
     
@@ -835,10 +837,61 @@ class FactorEngine:
     
     def _calculate_custom_factor(self, factor_id: str, ts_codes: List[str], 
                                 start_date: str, end_date: str) -> pd.DataFrame:
-        """计算自定义因子（待实现）"""
-        # TODO: 实现自定义因子公式解析和计算
-        logger.warning(f"自定义因子计算功能待实现: {factor_id}")
-        return pd.DataFrame()
+        """计算自定义因子（表达式白名单）"""
+        try:
+            if factor_id not in self.factor_definitions:
+                return pd.DataFrame()
+            if not ts_codes:
+                return pd.DataFrame()
+
+            definition = self.factor_definitions[factor_id]
+            formula = (definition.factor_formula or "").strip()
+            if not formula:
+                logger.warning(f"自定义因子未配置公式: {factor_id}")
+                return pd.DataFrame()
+
+            extended_start = (
+                datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=252)
+            ).strftime("%Y-%m-%d")
+
+            query = StockDailyHistory.query.filter(
+                StockDailyHistory.ts_code.in_(ts_codes),
+                StockDailyHistory.trade_date >= extended_start,
+                StockDailyHistory.trade_date <= end_date
+            ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
+
+            history_df = pd.read_sql(query.statement, db.engine)
+            if history_df.empty:
+                return pd.DataFrame()
+
+            history_df["trade_date"] = pd.to_datetime(history_df["trade_date"])
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+
+            result_list = []
+            for ts_code, stock_df in history_df.groupby("ts_code", sort=False):
+                stock_df = stock_df.sort_values("trade_date").reset_index(drop=True)
+                evaluated_df = self.expression_engine.evaluate(formula, stock_df)
+                evaluated_df = evaluated_df[
+                    (evaluated_df["trade_date"] >= start_dt)
+                    & (evaluated_df["trade_date"] <= end_dt)
+                ]
+
+                if evaluated_df.empty:
+                    continue
+
+                factor_df = evaluated_df[["ts_code", "trade_date", "factor_value"]].copy()
+                factor_df["factor_id"] = factor_id
+                result_list.append(factor_df)
+
+            if not result_list:
+                return pd.DataFrame()
+
+            return pd.concat(result_list, ignore_index=True).dropna(subset=["factor_value"])
+
+        except Exception as e:
+            logger.error(f"计算自定义因子失败: {factor_id}, 错误: {e}")
+            return pd.DataFrame()
     
     def get_factor_list(self, factor_type: str = None, is_active: bool = True) -> List[Dict[str, Any]]:
         """获取因子列表"""

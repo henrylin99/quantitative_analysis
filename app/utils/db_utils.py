@@ -1,16 +1,21 @@
 import tushare as ts
 import pymysql
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 class DatabaseUtils:
     # 数据库连接信息
-    _host = 'localhost'       # 替换为你的MySQL主机 118.31.12.34
-    _user = 'root'   # 替换为你的MySQL用户名
-    _password = 'root'  # 替换为你的MySQL密码
-    _database = 'stock_cursor'  # 替换为你的MySQL数据库名
-    _charset = 'utf8mb4'
+    _host = os.getenv('DB_HOST', 'localhost')
+    _user = os.getenv('DB_USER', 'root')
+    _password = os.getenv('DB_PASSWORD', 'root')
+    _database = os.getenv('DB_NAME', 'stock_cursor')
+    _charset = os.getenv('DB_CHARSET', 'utf8mb4')
 
     # Tushare API token
-    _tushare_token = '8d9f545ccbbb72c23e7a3379f702ca71e4a0a1b7e3a91558e3175be5'  # 替换为你的Tushare API token
+    _tushare_token = os.getenv('TUSHARE_TOKEN') or os.getenv('tushare_token')
 
     @classmethod
     def init_tushare_api(cls):
@@ -18,6 +23,8 @@ class DatabaseUtils:
         初始化Tushare API
         :return: Tushare pro API对象
         """
+        if not cls._tushare_token:
+            raise ValueError('未配置TUSHARE_TOKEN，请在.env中设置后重试')
         return ts.pro_api(cls._tushare_token)
 
     @classmethod

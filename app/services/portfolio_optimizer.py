@@ -205,13 +205,100 @@ class PortfolioOptimizer:
                                     constraints: Dict[str, Any] = None) -> pd.Series:
         """因子中性优化"""
         try:
-            # TODO: 实现因子中性优化
-            # 需要获取因子暴露度矩阵，确保组合在特定因子上暴露度为0
-            logger.warning("因子中性优化功能待实现，使用均值-方差优化")
-            return self._mean_variance_optimization(expected_returns, risk_model, constraints)
+            constraints = constraints or {}
+            factor_exposures = constraints.get('factor_exposures')
+            exposure_matrix = self._build_factor_exposure_matrix(expected_returns.index.tolist(), factor_exposures)
+            if exposure_matrix is None or exposure_matrix.empty:
+                logger.warning("未提供有效因子暴露矩阵，回退至均值-方差优化")
+                return self._mean_variance_optimization(expected_returns, risk_model, constraints)
+
+            aligned_risk = risk_model.reindex(
+                index=expected_returns.index,
+                columns=expected_returns.index,
+                fill_value=0
+            )
+
+            mu = expected_returns.values
+            cov = aligned_risk.values
+            exposure_values = exposure_matrix.values
+
+            risk_aversion = float(constraints.get('risk_aversion', 1.0))
+            tolerance = float(constraints.get('exposure_tolerance', 1e-3))
+            min_weight = float(constraints.get('min_weight', 0.0))
+            max_weight = float(constraints.get('max_weight', 1.0))
+
+            bounds = [(min_weight, max_weight) for _ in range(len(expected_returns))]
+
+            def objective(weights):
+                portfolio_return = np.dot(mu, weights)
+                portfolio_variance = np.dot(weights, np.dot(cov, weights))
+                return -(portfolio_return - 0.5 * risk_aversion * portfolio_variance)
+
+            constraints_list = [
+                {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}
+            ]
+
+            for idx in range(exposure_values.shape[1]):
+                factor_vec = exposure_values[:, idx]
+                constraints_list.append({
+                    'type': 'ineq',
+                    'fun': lambda w, v=factor_vec, t=tolerance: t - np.dot(v, w)
+                })
+                constraints_list.append({
+                    'type': 'ineq',
+                    'fun': lambda w, v=factor_vec, t=tolerance: t + np.dot(v, w)
+                })
+
+            x0 = np.ones(len(expected_returns)) / len(expected_returns)
+            result = minimize(
+                objective,
+                x0,
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints_list,
+                options={'maxiter': 1000}
+            )
+
+            if not result.success:
+                logger.warning(f"因子中性优化失败: {result.message}")
+                return None
+
+            weights = pd.Series(result.x, index=expected_returns.index)
+            weights[weights < 1e-8] = 0
+            if weights.sum() <= 0:
+                return None
+            return weights / weights.sum()
             
         except Exception as e:
             logger.error(f"因子中性优化失败: {e}")
+            return None
+
+    def _build_factor_exposure_matrix(self, ts_codes: List[str], factor_exposures: Any) -> Optional[pd.DataFrame]:
+        """构建并对齐因子暴露矩阵（index=股票代码，columns=因子）。"""
+        if factor_exposures is None:
+            return None
+
+        try:
+            if isinstance(factor_exposures, pd.DataFrame):
+                matrix = factor_exposures.copy()
+            elif isinstance(factor_exposures, dict):
+                matrix = pd.DataFrame(factor_exposures)
+            else:
+                return None
+
+            # 支持两种方向：行是股票 或 列是股票
+            if set(ts_codes).issubset(set(matrix.index)):
+                aligned = matrix.reindex(index=ts_codes)
+            elif set(ts_codes).issubset(set(matrix.columns)):
+                aligned = matrix.T.reindex(index=ts_codes)
+            else:
+                return None
+
+            aligned = aligned.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            return aligned
+
+        except Exception as e:
+            logger.error(f"构建因子暴露矩阵失败: {e}")
             return None
     
     def _black_litterman_optimization(self, expected_returns: pd.Series, 
