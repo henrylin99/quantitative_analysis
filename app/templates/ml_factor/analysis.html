@@ -306,6 +306,7 @@ async function loadRiskAnalysis() {
 // 绘制模型性能图表
 function drawModelPerformanceChart(data) {
     const chart = echarts.init(document.getElementById('modelPerformanceChart'));
+    const performanceData = Array.isArray(data) ? data : [];
     
     const option = {
         title: {
@@ -321,7 +322,7 @@ function drawModelPerformanceChart(data) {
         },
         xAxis: {
             type: 'category',
-            data: data.map(d => d.date) || ['2024-01', '2024-02', '2024-03', '2024-04', '2024-05']
+            data: performanceData.map(d => d.date)
         },
         yAxis: {
             type: 'value'
@@ -330,18 +331,18 @@ function drawModelPerformanceChart(data) {
             {
                 name: '训练R²',
                 type: 'line',
-                data: data.map(d => d.train_r2) || [0.85, 0.87, 0.86, 0.88, 0.89]
+                data: performanceData.map(d => d.train_r2)
             },
             {
                 name: '测试R²',
                 type: 'line',
-                data: data.map(d => d.test_r2) || [0.72, 0.74, 0.73, 0.75, 0.76]
+                data: performanceData.map(d => d.test_r2)
             },
             {
                 name: 'MAE',
                 type: 'line',
                 yAxisIndex: 0,
-                data: data.map(d => d.mae) || [0.15, 0.14, 0.15, 0.13, 0.12]
+                data: performanceData.map(d => d.mae)
             }
         ]
     };
@@ -352,6 +353,7 @@ function drawModelPerformanceChart(data) {
 // 绘制模型对比图表
 function drawModelComparisonChart(data) {
     const chart = echarts.init(document.getElementById('modelComparisonChart'));
+    const comparisonData = Array.isArray(data) ? data : [];
     
     const option = {
         title: {
@@ -370,7 +372,7 @@ function drawModelComparisonChart(data) {
         },
         xAxis: {
             type: 'category',
-            data: data.map(d => d.model_type)
+            data: comparisonData.map(d => d.model_type)
         },
         yAxis: {
             type: 'value'
@@ -379,12 +381,12 @@ function drawModelComparisonChart(data) {
             {
                 name: 'R²得分',
                 type: 'bar',
-                data: data.map(d => d.r2_score)
+                data: comparisonData.map(d => d.r2_score)
             },
             {
                 name: 'MAE得分',
                 type: 'bar',
-                data: data.map(d => d.mae_score)
+                data: comparisonData.map(d => d.mae_score)
             }
         ]
     };
@@ -395,6 +397,7 @@ function drawModelComparisonChart(data) {
 // 绘制因子重要性图表
 function drawFactorImportanceChart(data) {
     const chart = echarts.init(document.getElementById('factorImportanceChart'));
+    const importanceData = Array.isArray(data) ? data : [];
     
     const option = {
         title: {
@@ -412,13 +415,13 @@ function drawFactorImportanceChart(data) {
         },
         yAxis: {
             type: 'category',
-            data: data.map(d => d.factor_name)
+            data: importanceData.map(d => d.factor_name)
         },
         series: [
             {
                 name: '重要性',
                 type: 'bar',
-                data: data.map(d => d.importance)
+                data: importanceData.map(d => d.importance)
             }
         ]
     };
@@ -447,6 +450,7 @@ function updateFactorStatsTable(data) {
 // 绘制投资组合表现图表
 function drawPortfolioPerformanceChart(data) {
     const chart = echarts.init(document.getElementById('portfolioPerformanceChart'));
+    const performanceData = Array.isArray(data) ? data : [];
     
     const option = {
         title: {
@@ -462,7 +466,7 @@ function drawPortfolioPerformanceChart(data) {
         },
         xAxis: {
             type: 'category',
-            data: data.map(d => d.date) || ['2024-01', '2024-02', '2024-03', '2024-04', '2024-05']
+            data: performanceData.map(d => d.date)
         },
         yAxis: {
             type: 'value',
@@ -474,12 +478,12 @@ function drawPortfolioPerformanceChart(data) {
             {
                 name: '组合收益',
                 type: 'line',
-                data: data.map(d => d.portfolio_return) || [2.5, 5.2, 3.8, 7.1, 9.3]
+                data: performanceData.map(d => d.portfolio_return)
             },
             {
                 name: '基准收益',
                 type: 'line',
-                data: data.map(d => d.benchmark_return) || [1.2, 2.8, 1.5, 3.9, 4.7]
+                data: performanceData.map(d => d.benchmark_return)
             }
         ]
     };
@@ -490,6 +494,7 @@ function drawPortfolioPerformanceChart(data) {
 // 绘制风险分析图表
 function drawRiskAnalysisChart(data) {
     const chart = echarts.init(document.getElementById('riskAnalysisChart'));
+    const riskData = Array.isArray(data) ? data : [];
     
     const option = {
         title: {
@@ -504,13 +509,7 @@ function drawRiskAnalysisChart(data) {
                 name: '风险类型',
                 type: 'pie',
                 radius: '50%',
-                data: data || [
-                    { value: 35, name: '市场风险' },
-                    { value: 25, name: '行业风险' },
-                    { value: 20, name: '个股风险' },
-                    { value: 15, name: '流动性风险' },
-                    { value: 5, name: '其他风险' }
-                ],
+                data: riskData,
                 emphasis: {
                     itemStyle: {
                         shadowBlur: 10,
@@ -527,23 +526,34 @@ function drawRiskAnalysisChart(data) {
 
 // 生成分析总结
 function generateAnalysisSummary() {
-    const summary = `
-        <h6>📊 系统表现总结</h6>
+    const totalModels = document.getElementById('total-models').textContent.trim();
+    const bestModelR2 = document.getElementById('best-model-r2').textContent.trim();
+    const activeFactors = document.getElementById('active-factors').textContent.trim();
+    const portfolioCount = document.getElementById('portfolio-count').textContent.trim();
+    const annualReturn = document.getElementById('annual-return').textContent.trim();
+    const maxDrawdown = document.getElementById('max-drawdown').textContent.trim();
+    const sharpeRatio = document.getElementById('sharpe-ratio').textContent.trim();
+    const winRate = document.getElementById('win-rate').textContent.trim();
+
+    const hasMeaningfulData = [totalModels, activeFactors, portfolioCount].some(
+        value => value !== '--' && value !== '0'
+    ) || (bestModelR2 !== '--' && bestModelR2 !== '0.000');
+
+    const summary = hasMeaningfulData ? `
+        <h6>📊 当前分析摘要</h6>
         <ul class="list-unstyled">
-            <li>✅ 模型整体表现良好，最佳R²达到0.76</li>
-            <li>✅ 因子有效性较高，资金流向强度因子贡献最大</li>
-            <li>✅ 投资组合年化收益率超越基准</li>
-            <li>⚠️ 需要关注最大回撤控制</li>
-            <li>📈 建议继续优化因子组合和模型参数</li>
+            <li>模型总数：${totalModels}</li>
+            <li>最佳模型 R²：${bestModelR2}</li>
+            <li>活跃因子数：${activeFactors}</li>
+            <li>投资组合数：${portfolioCount}</li>
+            <li>年化收益率 / 最大回撤：${annualReturn} / ${maxDrawdown}</li>
+            <li>夏普比率 / 胜率：${sharpeRatio} / ${winRate}</li>
         </ul>
-        
-        <h6>🔍 改进建议</h6>
-        <ul class="list-unstyled">
-            <li>• 增加更多基本面因子</li>
-            <li>• 优化模型超参数</li>
-            <li>• 加强风险控制机制</li>
-            <li>• 定期重新训练模型</li>
-        </ul>
+        <p class="text-muted mb-0">以上内容基于当前接口返回结果实时生成，不再展示预设示例结论。</p>
+    ` : `
+        <div class="text-center text-muted">
+            当前暂无可用于生成分析总结的真实数据。
+        </div>
     `;
     
     document.getElementById('analysisSummary').innerHTML = summary;
