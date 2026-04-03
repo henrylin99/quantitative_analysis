@@ -180,10 +180,14 @@ class RealtimeReportGenerator:
             if report_type == 'daily_summary':
                 data.update(self._collect_daily_summary_data())
             elif report_type == 'portfolio_analysis':
-                portfolio_id = parameters.get('portfolio_id', 'demo_portfolio')
+                portfolio_id = parameters.get('portfolio_id')
+                if not portfolio_id:
+                    raise ValueError('portfolio_id is required for portfolio_analysis')
                 data.update(self._collect_portfolio_data(portfolio_id))
             elif report_type == 'risk_assessment':
-                portfolio_id = parameters.get('portfolio_id', 'demo_portfolio')
+                portfolio_id = parameters.get('portfolio_id')
+                if not portfolio_id:
+                    raise ValueError('portfolio_id is required for risk_assessment')
                 data.update(self._collect_risk_data(portfolio_id))
             elif report_type == 'signal_analysis':
                 data.update(self._collect_signal_data())

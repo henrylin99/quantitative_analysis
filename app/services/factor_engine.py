@@ -115,6 +115,53 @@ class FactorEngine:
             ],
         }
 
+    def get_builtin_factor_validation_samples(self) -> List[Dict[str, Any]]:
+        """返回核心内置因子的样例级验收说明。"""
+        return [
+            {
+                "factor_id": "momentum_5d",
+                "factor_name": "5日动量",
+                "required_fields": ["close"],
+                "calculation_rule": "close.pct_change(5)，即当前收盘价相对5个交易日前收盘价的涨跌幅。",
+                "sample_expectation": "若 close=[10,11,12,13,14,15]，最后一个样例值应为 15/10-1=0.5。",
+            },
+            {
+                "factor_id": "volatility_20d",
+                "factor_name": "20日波动率",
+                "required_fields": ["close"],
+                "calculation_rule": "先计算 daily_return=close.pct_change()，再取 rolling(20).std()。",
+                "sample_expectation": "至少需要21个收盘价样本，最后一个值应等于最近20个日收益率的标准差。",
+            },
+            {
+                "factor_id": "volume_ratio_20d",
+                "factor_name": "20日量比",
+                "required_fields": ["vol"],
+                "calculation_rule": "volume_ratio = 当日成交量 / 最近20日成交量均值。",
+                "sample_expectation": "若最后20日均量为 11.5、当日量为 21，则样例值应为 21/11.5。",
+            },
+            {
+                "factor_id": "price_to_ma20",
+                "factor_name": "价格相对20日均线",
+                "required_fields": ["close"],
+                "calculation_rule": "price_to_ma = close / close.rolling(20).mean() - 1。",
+                "sample_expectation": "若最近20日均价为 11.5、当日收盘价为 21，则样例值应为 21/11.5-1。",
+            },
+            {
+                "factor_id": "money_flow_strength",
+                "factor_name": "资金流向强度",
+                "required_fields": [
+                    "buy_sm_amount",
+                    "buy_md_amount",
+                    "buy_lg_amount",
+                    "buy_elg_amount",
+                    "sell_lg_amount",
+                    "sell_elg_amount",
+                ],
+                "calculation_rule": "((buy_lg_amount+buy_elg_amount)-(sell_lg_amount+sell_elg_amount)) / (buy_sm_amount+buy_md_amount+buy_lg_amount+buy_elg_amount)。",
+                "sample_expectation": "若大单净流入为 625、分母为 1000，则样例值应为 0.625。",
+            },
+        ]
+
     def validate_custom_factor_formula(self, formula: str) -> Dict[str, Any]:
         """校验自定义因子公式是否符合表达式白名单。"""
         sample_df = pd.DataFrame(

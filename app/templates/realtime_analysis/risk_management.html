@@ -96,7 +96,7 @@
                         <h6 class="card-title">选择投资组合</h6>
                         <div class="input-group">
                             <input type="text" class="form-control" id="portfolioId" 
-                                   placeholder="输入组合ID" value="demo_portfolio">
+                                   placeholder="输入组合ID">
                             <button class="btn btn-outline-primary" onclick="loadPortfolioData()">
                                 <i class="fas fa-search"></i> 加载
                             </button>
@@ -444,13 +444,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let currentPortfolioId = 'demo_portfolio';
+        let currentPortfolioId = '';
         let portfolioData = {};
         let riskData = {};
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
-            loadPortfolioData();
             updateLastUpdateTime();
             
             // 每30秒自动刷新数据
