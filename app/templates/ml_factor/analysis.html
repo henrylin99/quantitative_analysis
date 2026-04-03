@@ -238,7 +238,6 @@ async function loadModelPerformance() {
         
     } catch (error) {
         console.error('加载模型性能数据失败:', error);
-        // 使用模拟数据
         drawModelPerformanceChart([]);
         drawModelComparisonChart([]);
     }
@@ -371,7 +370,7 @@ function drawModelComparisonChart(data) {
         },
         xAxis: {
             type: 'category',
-            data: data.map(d => d.model_type) || ['随机森林', 'XGBoost', 'LightGBM', '神经网络']
+            data: data.map(d => d.model_type)
         },
         yAxis: {
             type: 'value'
@@ -380,12 +379,12 @@ function drawModelComparisonChart(data) {
             {
                 name: 'R²得分',
                 type: 'bar',
-                data: data.map(d => d.r2_score) || [0.76, 0.78, 0.75, 0.73]
+                data: data.map(d => d.r2_score)
             },
             {
                 name: 'MAE得分',
                 type: 'bar',
-                data: data.map(d => d.mae_score) || [0.12, 0.11, 0.13, 0.14]
+                data: data.map(d => d.mae_score)
             }
         ]
     };
@@ -413,13 +412,13 @@ function drawFactorImportanceChart(data) {
         },
         yAxis: {
             type: 'category',
-            data: data.map(d => d.factor_name) || ['资金流向强度', '筹码集中度', '20日动量', '20日波动率', '价格相对均线']
+            data: data.map(d => d.factor_name)
         },
         series: [
             {
                 name: '重要性',
                 type: 'bar',
-                data: data.map(d => d.importance) || [0.25, 0.20, 0.18, 0.15, 0.12]
+                data: data.map(d => d.importance)
             }
         ]
     };
