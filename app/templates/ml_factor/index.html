@@ -348,14 +348,6 @@ function renderFactors() {
                                 <button class="btn btn-sm btn-outline-primary" onclick="viewFactor('${factor.factor_id}')">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                ${!factor.is_builtin ? `
-                                    <button class="btn btn-sm btn-outline-warning" onclick="editFactor('${factor.factor_id}')">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteFactor('${factor.factor_id}')">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                ` : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -431,18 +423,6 @@ function viewFactor(factorId) {
     const factor = allFactors.find(f => f.factor_id === factorId);
     if (factor) {
         alert(`因子详情:\n\nID: ${factor.factor_id}\n名称: ${factor.factor_name}\n类型: ${getTypeLabel(factor.factor_type)}\n描述: ${factor.description || '无'}\n${factor.formula ? '公式: ' + factor.formula : ''}`);
-    }
-}
-
-// 编辑因子
-function editFactor(factorId) {
-    alert('编辑功能待实现');
-}
-
-// 删除因子
-function deleteFactor(factorId) {
-    if (confirm('确定要删除这个因子吗？')) {
-        alert('删除功能待实现');
     }
 }
 

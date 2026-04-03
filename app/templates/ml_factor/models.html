@@ -467,9 +467,6 @@ function renderModels() {
                                 <button class="btn btn-sm btn-outline-primary" onclick="predictModel('${model.model_id}')">
                                     <i class="fas fa-chart-line"></i> 预测
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.model_id}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
                             </td>
                         </tr>
                     `).join('')}
@@ -1137,13 +1134,6 @@ function exportPredictions() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-}
-
-// 删除模型
-function deleteModel(modelId) {
-    if (confirm('确定要删除这个模型吗？')) {
-        alert('删除功能待实现');
-    }
 }
 
 // 显示错误信息

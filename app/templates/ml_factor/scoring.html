@@ -217,12 +217,6 @@ function renderScoringResults(results) {
                     </div>
                 </div>
                 <div class="col-md-6 text-end">
-                    <button class="btn btn-success" onclick="exportResults()">
-                        <i class="fas fa-download"></i> 导出结果
-                    </button>
-                    <button class="btn btn-info" onclick="createPortfolio()">
-                        <i class="fas fa-briefcase"></i> 创建投资组合
-                    </button>
                 </div>
             </div>
         </div>
@@ -255,16 +249,6 @@ function viewStockDetail(tsCode) {
 // 添加到投资组合
 function addToPortfolio(tsCode) {
     alert(`添加到投资组合: ${tsCode}`);
-}
-
-// 导出结果
-function exportResults() {
-    alert('导出功能待实现');
-}
-
-// 创建投资组合
-function createPortfolio() {
-    alert('创建投资组合功能待实现');
 }
 
 // 显示加载状态
