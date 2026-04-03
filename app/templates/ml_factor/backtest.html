@@ -578,25 +578,11 @@ function displayBacktestResults(data) {
     document.getElementById('winRate').textContent = ((performanceMetrics.win_rate || 0) * 100).toFixed(1) + '%';
     
     // 处理图表数据
-    const portfolioValues = data.portfolio_values || [];
-    const benchmarkReturns = data.benchmark_returns || [];
-    
-    // 转换为图表需要的格式
-    const returnsData = portfolioValues.map((item, index) => ({
-        date: item.date,
-        portfolio: item.total_value / (data.initial_capital || 1000000),
-        benchmark: benchmarkReturns[index] ? benchmarkReturns[index].value : 1.0
-    }));
-    
-    // 计算回撤数据
-    const drawdownData = calculateDrawdownFromValues(portfolioValues, data.initial_capital || 1000000);
-    
-    // 生成月度收益数据
-    const rollingReturns = generateRollingReturnsFromDaily(data.daily_returns || [], portfolioValues);
-    
+    const returnsData = data.equity_curve || [];
+    const drawdownData = data.drawdown_series || [];
+    const rollingReturns = data.monthly_returns || [];
     const industryDistribution = data.industry_distribution || [];
-    
-    const returnsDistribution = generateReturnsDistributionFromDaily(data.daily_returns || []);
+    const returnsDistribution = data.returns_distribution || [];
     
     // 绘制图表
     drawReturnsChart(returnsData);
@@ -606,114 +592,12 @@ function displayBacktestResults(data) {
     drawReturnsDistributionChart(returnsDistribution);
     
     // 更新持仓表
-    const positions = generatePositionsFromBacktest(data);
+    const positions = data.positions || [];
     updatePositionTable(positions);
     
     // 更新风险指标
-    const riskMetrics = {
-        var_95: performanceMetrics.var_95 ?? null,
-        cvar_95: performanceMetrics.cvar_95 ?? null,
-        beta: performanceMetrics.beta ?? null,
-        alpha: performanceMetrics.alpha ?? null,
-        information_ratio: performanceMetrics.information_ratio ?? null,
-        calmar_ratio: performanceMetrics.calmar_ratio ?? null
-    };
+    const riskMetrics = data.risk_metrics || {};
     updateRiskMetrics(riskMetrics);
-}
-
-// 从投资组合价值计算回撤
-function calculateDrawdownFromValues(portfolioValues, initialCapital) {
-    const data = [];
-    let maxValue = initialCapital;
-    
-    portfolioValues.forEach(item => {
-        const currentValue = item.total_value;
-        maxValue = Math.max(maxValue, currentValue);
-        const drawdown = (currentValue - maxValue) / maxValue;
-        
-        data.push({
-            date: item.date,
-            drawdown: drawdown
-        });
-    });
-    
-    return data;
-}
-
-// 从日收益率生成月度收益
-function generateRollingReturnsFromDaily(dailyReturns, portfolioValues) {
-    if (!dailyReturns || dailyReturns.length === 0) {
-        return [];
-    }
-    
-    // 简化处理：每30个交易日作为一个月
-    const monthlyData = [];
-    const monthSize = 30;
-    
-    for (let i = 0; i < dailyReturns.length; i += monthSize) {
-        const monthReturns = dailyReturns.slice(i, i + monthSize);
-        const monthReturn = monthReturns.reduce((acc, ret) => (1 + acc) * (1 + ret) - 1, 0);
-        
-        const dateIndex = Math.min(i + monthSize - 1, portfolioValues.length - 1);
-        const date = portfolioValues[dateIndex] ? portfolioValues[dateIndex].date : new Date().toISOString().split('T')[0];
-        
-        monthlyData.push({
-            date: date.substring(0, 7), // YYYY-MM格式
-            portfolio: monthReturn,
-            benchmark: null
-        });
-    }
-    
-    return monthlyData;
-}
-
-// 从日收益率生成收益分布
-function generateReturnsDistributionFromDaily(dailyReturns) {
-    if (!dailyReturns || dailyReturns.length === 0) {
-        return [];
-    }
-    
-    // 创建收益率区间
-    const bins = [];
-    for (let i = -10; i <= 10; i++) {
-        bins.push(i / 100);
-    }
-    
-    // 统计每个区间的频率
-    const distribution = bins.map(binValue => {
-        const count = dailyReturns.filter(ret => 
-            ret >= binValue - 0.005 && ret < binValue + 0.005
-        ).length;
-        
-        return {
-            returns: binValue,
-            frequency: count
-        };
-    });
-    
-    return distribution;
-}
-
-// 从回测数据生成持仓信息
-function generatePositionsFromBacktest(data) {
-    const dailyPositions = data.daily_positions || [];
-    
-    if (dailyPositions.length === 0) {
-        return [];
-    }
-    
-    // 取最后一期的持仓
-    const lastPositions = dailyPositions[dailyPositions.length - 1] || {};
-    const totalValue = data.final_value || data.initial_capital || 1000000;
-    
-    return Object.entries(lastPositions).map(([ tsCode, shares ], index) => ({
-        code: tsCode,
-        name: tsCode, // 简化处理
-        weight: (shares * 100) / totalValue, // 假设股价为100元
-        period: '持有中',
-        return: null,
-        contribution: null
-    }));
 }
 
 // 绘制收益曲线图
@@ -924,11 +808,11 @@ function updatePositionTable(positions) {
             <td>${pos.name}</td>
             <td>${(pos.weight * 100).toFixed(1)}%</td>
             <td>${pos.period}</td>
-            <td class="${pos.return >= 0 ? 'text-success' : 'text-danger'}">
-                ${(pos.return * 100).toFixed(2)}%
+            <td class="${(pos.return ?? 0) >= 0 ? 'text-success' : 'text-danger'}">
+                ${pos.return == null ? '--' : ((pos.return * 100).toFixed(2) + '%')}
             </td>
-            <td class="${pos.contribution >= 0 ? 'text-success' : 'text-danger'}">
-                ${(pos.contribution * 100).toFixed(2)}%
+            <td class="${(pos.contribution ?? 0) >= 0 ? 'text-success' : 'text-danger'}">
+                ${pos.contribution == null ? '--' : ((pos.contribution * 100).toFixed(2) + '%')}
             </td>
         </tr>
     `).join('');
@@ -936,12 +820,12 @@ function updatePositionTable(positions) {
 
 // 更新风险指标
 function updateRiskMetrics(metrics) {
-    document.getElementById('var95').textContent = (metrics.var_95 * 100).toFixed(2) + '%';
-    document.getElementById('cvar95').textContent = (metrics.cvar_95 * 100).toFixed(2) + '%';
-    document.getElementById('beta').textContent = metrics.beta.toFixed(2);
-    document.getElementById('alpha').textContent = (metrics.alpha * 100).toFixed(2) + '%';
-    document.getElementById('informationRatio').textContent = metrics.information_ratio.toFixed(2);
-    document.getElementById('calmarRatio').textContent = metrics.calmar_ratio.toFixed(2);
+    document.getElementById('var95').textContent = metrics.var_95 == null ? '--' : (metrics.var_95 * 100).toFixed(2) + '%';
+    document.getElementById('cvar95').textContent = metrics.cvar_95 == null ? '--' : (metrics.cvar_95 * 100).toFixed(2) + '%';
+    document.getElementById('beta').textContent = metrics.beta == null ? '--' : metrics.beta.toFixed(2);
+    document.getElementById('alpha').textContent = metrics.alpha == null ? '--' : (metrics.alpha * 100).toFixed(2) + '%';
+    document.getElementById('informationRatio').textContent = metrics.information_ratio == null ? '--' : metrics.information_ratio.toFixed(2);
+    document.getElementById('calmarRatio').textContent = metrics.calmar_ratio == null ? '--' : metrics.calmar_ratio.toFixed(2);
 }
 
 // 保存策略

@@ -9,6 +9,7 @@ from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
+from app.services.model_training_job_service import ModelTrainingJobService
 
 # 创建蓝图
 ml_factor_bp = Blueprint('ml_factor', __name__, url_prefix='/api/ml-factor')
@@ -19,6 +20,7 @@ ml_manager = None
 scoring_engine = None
 portfolio_optimizer = None
 backtest_engine = None
+training_job_service = None
 
 # JSON序列化辅助函数
 def convert_numpy_types(obj):
@@ -70,6 +72,14 @@ def get_backtest_engine():
     if backtest_engine is None:
         backtest_engine = BacktestEngine()
     return backtest_engine
+
+
+def get_training_job_service():
+    """获取模型训练任务服务实例（延迟初始化）"""
+    global training_job_service
+    if training_job_service is None:
+        training_job_service = ModelTrainingJobService()
+    return training_job_service
 
 
 @ml_factor_bp.route('/factors/calculate', methods=['POST'])
@@ -245,7 +255,7 @@ def create_ml_model():
 
 @ml_factor_bp.route('/models/train', methods=['POST'])
 def train_ml_model():
-    """训练机器学习模型"""
+    """提交机器学习模型训练任务"""
     try:
         data = request.get_json()
         
@@ -257,27 +267,35 @@ def train_ml_model():
         if not all([model_id, start_date, end_date]):
             return jsonify({'error': '缺少必需参数: model_id, start_date, end_date'}), 400
         
-        # 训练模型
-        result = get_ml_manager().train_model(model_id, start_date, end_date)
-        
-        if result['success']:
-            # 转换numpy类型为Python原生类型
-            metrics = convert_numpy_types(result.get('metrics', {}))
-            
-            response_data = {
-                'success': True,
-                'message': f"模型训练完成: {model_id}",
-                'metrics': metrics,
-            }
-            training_samples = metrics.get('training_samples', metrics.get('sample_count'))
-            if training_samples is not None:
-                response_data['training_samples'] = training_samples
-            return jsonify(response_data)
-        else:
-            return jsonify({'error': result['error']}), 500
+        job = get_training_job_service().submit_job(model_id, start_date, end_date)
+        return jsonify({
+            'success': True,
+            'message': f"训练任务已提交: {model_id}",
+            'job_id': job['job_id'],
+            'status': job['status'],
+            'progress': job.get('progress', 0.0),
+            'step': job.get('step', ''),
+            'logs': job.get('logs', []),
+        }), 202
         
     except Exception as e:
         logger.error(f"训练机器学习模型失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/models/train-jobs/<job_id>', methods=['GET'])
+def get_train_job_status(job_id):
+    """获取训练任务状态"""
+    try:
+        job = get_training_job_service().get_job_snapshot(job_id)
+        if job is None:
+            return jsonify({'error': f'未找到训练任务: {job_id}'}), 404
+        return jsonify({
+            'success': True,
+            'job': convert_numpy_types(job)
+        })
+    except Exception as e:
+        logger.error(f"获取训练任务状态失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -729,34 +729,13 @@ function resetTrainingModal() {
 // 执行训练
 async function executeTraining(modelId, startDate, endDate) {
     const startTime = Date.now();
-    let trainingInterval;
     
     try {
         // 更新状态为训练中
         updateTrainingStatus('训练中', 'warning');
         addTrainingLog('🚀 开始训练模型: ' + modelId);
         addTrainingLog('📊 训练参数: ' + startDate + ' 至 ' + endDate);
-        addTrainingLog('⚙️ 正在准备训练数据...');
-        
-        // 模拟训练进度
-        let progress = 0;
-        trainingInterval = setInterval(() => {
-            progress += Math.random() * 10 + 2; // 更快的进度更新
-            if (progress > 85) progress = 85; // 不要超过85%，等API返回后再完成
-            
-            updateTrainingProgress(progress, getTrainingStepMessage(progress));
-            
-            // 添加一些模拟日志
-            if (progress > 15 && progress < 20) {
-                addTrainingLog('📈 数据预处理完成，开始特征工程...');
-            } else if (progress > 35 && progress < 40) {
-                addTrainingLog('🔄 开始模型训练，迭代中...');
-            } else if (progress > 55 && progress < 60) {
-                addTrainingLog('📊 训练进行中，评估模型性能...');
-            } else if (progress > 75 && progress < 80) {
-                addTrainingLog('🎯 模型优化中，调整超参数...');
-            }
-        }, 800); // 增加间隔时间，避免过快更新
+        addTrainingLog('⚙️ 正在提交训练任务...');
         
         // 调用训练API
         const response = await axios.post('/api/ml-factor/models/train', {
@@ -764,44 +743,15 @@ async function executeTraining(modelId, startDate, endDate) {
             start_date: startDate,
             end_date: endDate
         });
-        
-        // 清除进度模拟
-        clearInterval(trainingInterval);
-        
-        if (response.data.success) {
-            // 训练成功
-            updateTrainingProgress(100, '训练完成');
-            updateTrainingStatus('训练完成', 'success');
-            
-            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-            document.getElementById('trainingDurationDisplay').textContent = duration + '秒';
-            
-            addTrainingLog('✅ 模型训练成功完成！');
-            addTrainingLog('📋 正在保存模型参数...');
-            addTrainingLog('🎉 训练任务完成，模型已就绪');
-            
-            // 显示训练结果
-            showTrainingResults(response.data);
-            
-            // 更新按钮状态
-            document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
-            document.getElementById('trainingViewBtn').style.display = 'inline-block';
-            
-            // 重新加载模型列表
-            setTimeout(() => {
-                loadModels();
-            }, 1000);
-            
-        } else {
-            throw new Error(response.data.error || '训练失败');
+
+        if (!response.data.success || !response.data.job_id) {
+            throw new Error(response.data.error || '训练任务提交失败');
         }
+
+        addTrainingLog('🧾 任务已提交，开始轮询训练状态...');
+        await pollTrainingJob(response.data.job_id, startTime);
         
     } catch (error) {
-        // 清除进度模拟
-        if (trainingInterval) {
-            clearInterval(trainingInterval);
-        }
-        
         // 训练失败
         updateTrainingStatus('训练失败', 'danger');
         addTrainingLog('❌ 训练失败: ' + error.message);
@@ -816,6 +766,55 @@ async function executeTraining(modelId, startDate, endDate) {
         document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
         
         console.error('训练模型失败:', error);
+    }
+}
+
+async function pollTrainingJob(jobId, startTime) {
+    const seenLogs = new Set();
+
+    while (true) {
+        const response = await axios.get(`/api/ml-factor/models/train-jobs/${jobId}`);
+        if (!response.data.success || !response.data.job) {
+            throw new Error(response.data.error || '获取训练状态失败');
+        }
+
+        const job = response.data.job;
+        updateTrainingProgress(job.progress || 0, job.step || '训练中');
+
+        if (Array.isArray(job.logs)) {
+            job.logs.forEach(log => {
+                if (!seenLogs.has(log)) {
+                    seenLogs.add(log);
+                    addTrainingLog(log);
+                }
+            });
+        }
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        document.getElementById('trainingDurationDisplay').textContent = duration + '秒';
+
+        if (job.status === 'queued' || job.status === 'running') {
+            updateTrainingStatus(job.status === 'queued' ? '排队中' : '训练中', 'warning');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+        }
+
+        if (job.status === 'success') {
+            updateTrainingStatus('训练完成', 'success');
+            updateTrainingProgress(100, '训练完成');
+            showTrainingResults(job.result || {});
+            document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
+            document.getElementById('trainingViewBtn').style.display = 'inline-block';
+            setTimeout(() => {
+                loadModels();
+            }, 1000);
+            return;
+        }
+
+        updateTrainingStatus('训练失败', 'danger');
+        showTrainingError(job.error || '训练失败');
+        document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 关闭';
+        throw new Error(job.error || '训练失败');
     }
 }
 
@@ -853,26 +852,16 @@ function addTrainingLog(message) {
     logsContainer.scrollTop = logsContainer.scrollHeight;
 }
 
-// 获取训练步骤消息
-function getTrainingStepMessage(progress) {
-    if (progress < 10) return '初始化训练环境...';
-    if (progress < 20) return '加载训练数据...';
-    if (progress < 30) return '数据预处理中...';
-    if (progress < 50) return '特征工程处理...';
-    if (progress < 70) return '模型训练中...';
-    if (progress < 90) return '模型验证中...';
-    return '保存模型参数...';
-}
-
 // 显示训练结果
 function showTrainingResults(data) {
     const resultsDiv = document.getElementById('trainingResults');
+    const metrics = data.metrics || {};
     
     // 设置训练结果数据
-    document.getElementById('trainingSamples').textContent = data.training_samples || '1,250';
-    document.getElementById('trainingAccuracy').textContent = data.accuracy || '85.6%';
-    document.getElementById('trainingLoss').textContent = data.loss || '0.142';
-    document.getElementById('modelSize').textContent = data.model_size || '2.3MB';
+    document.getElementById('trainingSamples').textContent = metrics.sample_count ?? '--';
+    document.getElementById('trainingAccuracy').textContent = metrics.train_r2 != null ? metrics.train_r2.toFixed(4) : '--';
+    document.getElementById('trainingLoss').textContent = metrics.test_r2 != null ? metrics.test_r2.toFixed(4) : '--';
+    document.getElementById('modelSize').textContent = metrics.feature_count ?? '--';
     
     resultsDiv.style.display = 'block';
 }
