@@ -7,7 +7,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from app.extensions import db
-from app.models import StockDailyHistory, FactorValues, MLPredictions
+from app.models import StockBasic, StockDailyHistory, FactorValues, MLPredictions
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
@@ -75,6 +75,7 @@ class BacktestEngine:
             positions = {}
             cash = initial_capital
             total_value = initial_capital
+            last_prices = {}
             
             # 记录每日数据
             daily_returns = []
@@ -99,6 +100,8 @@ class BacktestEngine:
                     
                     # 计算当前持仓价值
                     current_prices = self._get_current_prices(trade_date, list(positions.keys()))
+                    if current_prices:
+                        last_prices = current_prices.copy()
                     current_portfolio_value = self._calculate_portfolio_value(
                         positions, current_prices, cash
                     )
@@ -142,20 +145,20 @@ class BacktestEngine:
             # 获取基准收益
             benchmark_returns = self._get_benchmark_returns(start_date, end_date)
             
-            return {
-                'success': True,
-                'strategy_config': strategy_config,
-                'backtest_period': f"{start_date} to {end_date}",
-                'initial_capital': initial_capital,
-                'final_value': total_value,
-                'total_return': (total_value - initial_capital) / initial_capital,
-                'portfolio_values': portfolio_values,
-                'daily_returns': daily_returns,
-                'daily_positions': daily_positions,
-                'daily_turnover': daily_turnover,
-                'performance_metrics': performance_metrics,
-                'benchmark_returns': benchmark_returns
-            }
+            return self._build_response_payload(
+                strategy_config=strategy_config,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                final_value=total_value,
+                portfolio_values=portfolio_values,
+                daily_returns=daily_returns,
+                daily_positions=daily_positions,
+                daily_turnover=daily_turnover,
+                performance_metrics=performance_metrics,
+                benchmark_returns=benchmark_returns,
+                final_prices=last_prices,
+            )
             
         except Exception as e:
             logger.error(f"回测失败: {e}")
@@ -470,7 +473,8 @@ class BacktestEngine:
                     "date": date_text,
                     "close": close_price,
                     "daily_return": daily_return,
-                    "cumulative_return": cumulative_return
+                    "cumulative_return": cumulative_return,
+                    "value": 1.0 + cumulative_return,
                 })
 
                 prev_close = close_price
@@ -480,6 +484,200 @@ class BacktestEngine:
         except Exception as e:
             logger.error(f"获取基准收益率失败: {e}")
             return []
+
+    def _get_stock_metadata(self, ts_codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """获取股票名称和行业信息"""
+        try:
+            if not ts_codes:
+                return {}
+            rows = StockBasic.query.filter(StockBasic.ts_code.in_(ts_codes)).all()
+            return {
+                row.ts_code: {
+                    'name': row.name or row.ts_code,
+                    'industry': row.industry or '未知'
+                }
+                for row in rows
+            }
+        except Exception as e:
+            logger.error(f"获取股票元数据失败: {e}")
+            return {}
+
+    def _build_equity_curve(
+        self,
+        portfolio_values: List[Dict[str, Any]],
+        benchmark_returns: List[Dict[str, Any]],
+        initial_capital: float,
+    ) -> List[Dict[str, Any]]:
+        benchmark_map = {row['date']: row.get('value') for row in benchmark_returns}
+        return [
+            {
+                'date': item['date'],
+                'portfolio': item['total_value'] / initial_capital if initial_capital else None,
+                'benchmark': benchmark_map.get(item['date']),
+            }
+            for item in portfolio_values
+        ]
+
+    def _build_drawdown_series(self, portfolio_values: List[Dict[str, Any]], initial_capital: float) -> List[Dict[str, Any]]:
+        data = []
+        max_value = initial_capital
+        for item in portfolio_values:
+            current_value = item['total_value']
+            max_value = max(max_value, current_value)
+            drawdown = (current_value - max_value) / max_value if max_value else 0
+            data.append({'date': item['date'], 'drawdown': drawdown})
+        return data
+
+    def _build_monthly_returns(
+        self,
+        portfolio_values: List[Dict[str, Any]],
+        benchmark_returns: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if len(portfolio_values) < 2:
+            return []
+
+        benchmark_map = {row['date']: row.get('value') for row in benchmark_returns}
+        monthly_groups: Dict[str, Dict[str, Any]] = {}
+        for index in range(1, len(portfolio_values)):
+            current_item = portfolio_values[index]
+            previous_item = portfolio_values[index - 1]
+            date_text = current_item['date']
+            month_key = str(date_text)[:7]
+            portfolio_return = (
+                current_item['total_value'] / previous_item['total_value'] - 1
+                if previous_item['total_value'] else 0
+            )
+            benchmark_value = benchmark_map.get(date_text)
+            previous_benchmark_value = benchmark_map.get(previous_item['date'])
+            benchmark_return = None
+            if benchmark_value is not None and previous_benchmark_value not in (None, 0):
+                benchmark_return = benchmark_value / previous_benchmark_value - 1
+
+            group = monthly_groups.setdefault(month_key, {'date': month_key, 'portfolio': 1.0, 'benchmark': 1.0})
+            group['portfolio'] *= (1 + portfolio_return)
+            if benchmark_return is not None:
+                group['benchmark'] *= (1 + benchmark_return)
+
+        results = []
+        for group in monthly_groups.values():
+            benchmark_value = group['benchmark'] - 1 if group['benchmark'] != 1.0 else None
+            results.append({
+                'date': group['date'],
+                'portfolio': group['portfolio'] - 1,
+                'benchmark': benchmark_value,
+            })
+        return results
+
+    def _build_returns_distribution(self, daily_returns: List[float]) -> List[Dict[str, Any]]:
+        if not daily_returns:
+            return []
+        bins = [i / 100 for i in range(-10, 11)]
+        distribution = []
+        for bin_value in bins:
+            count = len([ret for ret in daily_returns if ret >= bin_value - 0.005 and ret < bin_value + 0.005])
+            distribution.append({'returns': bin_value, 'frequency': count})
+        return distribution
+
+    def _build_position_summary(
+        self,
+        daily_positions: List[Dict[str, int]],
+        final_prices: Dict[str, float],
+        final_value: float,
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        if not daily_positions:
+            return []
+        last_positions = daily_positions[-1] or {}
+        metadata = self._get_stock_metadata(list(last_positions.keys()))
+        positions = []
+        for ts_code, shares in last_positions.items():
+            price = final_prices.get(ts_code, 0.0)
+            weight = (shares * price / final_value) if final_value and price else 0.0
+            info = metadata.get(ts_code, {'name': ts_code, 'industry': '未知'})
+            positions.append({
+                'code': ts_code,
+                'name': info.get('name', ts_code),
+                'industry': info.get('industry', '未知'),
+                'weight': weight,
+                'period': f'{start_date} ~ {end_date}',
+                'return': None,
+                'contribution': None,
+            })
+        return positions
+
+    def _build_industry_distribution(self, positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        industry_weights: Dict[str, float] = {}
+        for position in positions:
+            industry = position.get('industry') or '未知'
+            industry_weights[industry] = industry_weights.get(industry, 0.0) + float(position.get('weight') or 0.0)
+        return [
+            {'name': name, 'value': value}
+            for name, value in sorted(industry_weights.items(), key=lambda item: item[1], reverse=True)
+        ]
+
+    def _build_risk_metrics(self, performance_metrics: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            'var_95': performance_metrics.get('var_95'),
+            'cvar_95': performance_metrics.get('cvar_95'),
+            'beta': performance_metrics.get('beta'),
+            'alpha': performance_metrics.get('alpha'),
+            'information_ratio': performance_metrics.get('information_ratio'),
+            'calmar_ratio': performance_metrics.get('calmar_ratio'),
+        }
+
+    def _normalize_benchmark_returns(self, benchmark_returns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized = []
+        for row in benchmark_returns or []:
+            item = dict(row)
+            if item.get('value') is None:
+                cumulative_return = item.get('cumulative_return')
+                item['value'] = 1.0 + cumulative_return if cumulative_return is not None else None
+            normalized.append(item)
+        return normalized
+
+    def _build_response_payload(
+        self,
+        strategy_config: Dict[str, Any],
+        start_date: str,
+        end_date: str,
+        initial_capital: float,
+        final_value: float,
+        portfolio_values: List[Dict[str, Any]],
+        daily_returns: List[float],
+        daily_positions: List[Dict[str, int]],
+        daily_turnover: List[float],
+        performance_metrics: Dict[str, Any],
+        benchmark_returns: List[Dict[str, Any]],
+        final_prices: Dict[str, float],
+    ) -> Dict[str, Any]:
+        performance_metrics = dict(performance_metrics or {})
+        benchmark_returns = self._normalize_benchmark_returns(benchmark_returns)
+        if 'annualized_return' in performance_metrics and 'annual_return' not in performance_metrics:
+            performance_metrics['annual_return'] = performance_metrics['annualized_return']
+        positions = self._build_position_summary(daily_positions, final_prices, final_value, start_date, end_date)
+        industry_distribution = self._build_industry_distribution(positions)
+        return {
+            'success': True,
+            'strategy_config': strategy_config,
+            'backtest_period': f"{start_date} to {end_date}",
+            'initial_capital': initial_capital,
+            'final_value': final_value,
+            'total_return': (final_value - initial_capital) / initial_capital if initial_capital else None,
+            'portfolio_values': portfolio_values,
+            'daily_returns': daily_returns,
+            'daily_positions': daily_positions,
+            'daily_turnover': daily_turnover,
+            'performance_metrics': performance_metrics,
+            'benchmark_returns': benchmark_returns,
+            'equity_curve': self._build_equity_curve(portfolio_values, benchmark_returns, initial_capital),
+            'drawdown_series': self._build_drawdown_series(portfolio_values, initial_capital),
+            'monthly_returns': self._build_monthly_returns(portfolio_values, benchmark_returns),
+            'returns_distribution': self._build_returns_distribution(daily_returns),
+            'positions': positions,
+            'industry_distribution': industry_distribution,
+            'risk_metrics': self._build_risk_metrics(performance_metrics),
+        }
     
     def compare_strategies(self, strategies: List[Dict[str, Any]], 
                          start_date: str, end_date: str) -> Dict[str, Any]:

@@ -346,35 +346,45 @@ class MLModelManager:
             logger.error(f"生成模拟目标变量失败: {e}")
             return pd.DataFrame()
     
-    def train_model(self, model_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    def train_model(self, model_id: str, start_date: str, end_date: str, progress_callback=None) -> Dict[str, Any]:
         """训练模型"""
         try:
+            def report(progress: float, step: str, message: str = None):
+                if callable(progress_callback):
+                    progress_callback(progress, step, message)
+
             # 获取模型定义
             model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
             if not model_def:
                 raise ValueError(f"未找到模型定义: {model_id}")
             
             # 准备训练数据
+            report(15.0, "准备训练数据", "正在准备训练数据...")
             X, y = self.prepare_training_data(model_id, start_date, end_date)
             if X.empty or y.empty:
                 raise ValueError("训练数据为空")
             
             # 特征工程
+            report(35.0, "特征工程", "正在执行特征工程...")
             X_processed, feature_names = self._feature_engineering(X, y, model_def.training_config)
             
             # 分割训练集和测试集
+            report(50.0, "拆分训练集", "正在拆分训练集和测试集...")
             test_size = model_def.training_config.get('test_size', 0.2)
             X_train, X_test, y_train, y_test = train_test_split(
                 X_processed, y, test_size=test_size, random_state=42, shuffle=False
             )
             
             # 创建模型
+            report(65.0, "创建模型", f"正在创建模型: {model_def.model_type}")
             model = self._create_model(model_def.model_type, model_def.model_params)
             
             # 训练模型
+            report(80.0, "训练模型", "正在训练模型...")
             model.fit(X_train, y_train)
             
             # 评估模型
+            report(90.0, "评估模型", "正在评估模型表现...")
             train_score = model.score(X_train, y_train)
             test_score = model.score(X_test, y_test)
             
@@ -407,6 +417,7 @@ class MLModelManager:
                 metrics['cv_std'] = cv_scores.std()
             
             # 保存模型
+            report(95.0, "保存模型", "正在保存模型和元数据...")
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
             
@@ -420,6 +431,7 @@ class MLModelManager:
                 self.scalers[model_id] = self._scaler
             
             logger.info(f"模型训练完成: {model_id}, 测试R²: {test_score:.4f}")
+            report(100.0, "训练完成", "训练任务已完成")
             return {
                 'success': True,
                 'metrics': metrics,
