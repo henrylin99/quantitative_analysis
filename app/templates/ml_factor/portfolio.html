@@ -231,15 +231,6 @@ function renderPortfolios() {
                             <button class="btn btn-outline-primary" onclick="viewPortfolioDetail('${portfolio.id}')">
                                 <i class="fas fa-eye"></i> 详情
                             </button>
-                            <button class="btn btn-outline-success" onclick="rebalancePortfolio('${portfolio.id}')">
-                                <i class="fas fa-balance-scale"></i> 再平衡
-                            </button>
-                            <button class="btn btn-outline-warning" onclick="editPortfolio('${portfolio.id}')">
-                                <i class="fas fa-edit"></i> 编辑
-                            </button>
-                            <button class="btn btn-outline-danger" onclick="deletePortfolio('${portfolio.id}')">
-                                <i class="fas fa-trash"></i> 删除
-                            </button>
                         </div>
                         <div class="mt-2">
                             <small class="text-muted">创建于 ${portfolio.created_at}</small>
@@ -734,23 +725,6 @@ function viewPortfolioDetail(portfolioId) {
     
     document.getElementById('portfolioDetailContent').innerHTML = detailHtml;
     new bootstrap.Modal(document.getElementById('portfolioDetailModal')).show();
-}
-
-// 再平衡组合
-function rebalancePortfolio(portfolioId) {
-    alert('再平衡功能待实现');
-}
-
-// 编辑组合
-function editPortfolio(portfolioId) {
-    alert('编辑功能待实现');
-}
-
-// 删除组合
-function deletePortfolio(portfolioId) {
-    if (confirm('确定要删除这个投资组合吗？')) {
-        alert('删除功能待实现');
-    }
 }
 
 // 格式化金额
