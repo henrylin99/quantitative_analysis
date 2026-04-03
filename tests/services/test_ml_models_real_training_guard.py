@@ -4,6 +4,20 @@ import types
 from app.services.ml_models import MLModelManager
 
 
+def test_create_model_definition_rejects_simulated_target_type(app):
+    manager = MLModelManager()
+
+    success = manager.create_model_definition(
+        model_id="sim-model",
+        model_name="Simulated Model",
+        model_type="random_forest",
+        factor_list=["factor_a"],
+        target_type="simulated_return",
+    )
+
+    assert success is False
+
+
 def test_calculate_target_returns_requires_real_future_prices(app, monkeypatch):
     manager = MLModelManager()
     feature_df = pd.DataFrame(
