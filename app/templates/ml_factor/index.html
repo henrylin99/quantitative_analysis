@@ -172,6 +172,9 @@
                         <label for="factorDescription" class="form-label">描述</label>
                         <textarea class="form-control" id="factorDescription" rows="3"></textarea>
                     </div>
+                    <div class="alert alert-light border" id="factorCapabilities">
+                        <div class="fw-bold mb-2">表达式白名单加载中...</div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -191,6 +194,7 @@ let filteredFactors = [];
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     loadFactors();
+    loadFactorCapabilities();
     
     // 绑定筛选事件
     document.getElementById('factorTypeFilter').addEventListener('change', filterFactors);
@@ -204,10 +208,8 @@ async function loadFactors() {
     try {
         const response = await axios.get('/api/ml-factor/factors/list');
         if (response.data.success) {
-            // 处理真实数据，添加is_builtin字段
             allFactors = response.data.factors.map(factor => ({
                 ...factor,
-                is_builtin: true, // 目前都是内置因子
                 is_active: factor.is_active !== false
             }));
             filteredFactors = [...allFactors];
@@ -220,6 +222,38 @@ async function loadFactors() {
         console.error('加载因子列表失败:', error);
         // 如果API失败，显示错误信息
         showError('factorsList', '加载因子列表失败，请检查服务器连接: ' + error.message);
+    }
+}
+
+async function loadFactorCapabilities() {
+    const container = document.getElementById('factorCapabilities');
+    if (!container) return;
+
+    try {
+        const response = await axios.get('/api/ml-factor/factors/custom-capabilities');
+        if (!response.data.success) {
+            throw new Error(response.data.error || '加载失败');
+        }
+
+        const capabilities = response.data.capabilities || {};
+        const allowedColumns = capabilities.allowed_columns || [];
+        const allowedSeriesMethods = capabilities.allowed_series_methods || [];
+        const allowedWindowMethods = capabilities.allowed_window_methods || [];
+        const allowedFunctions = capabilities.allowed_functions || [];
+        const examples = capabilities.examples || [];
+
+        container.innerHTML = `
+            <div class="fw-bold mb-2">自定义因子表达式白名单</div>
+            <div class="small text-muted mb-2">只支持后端明确开放的列、函数和方法，非法表达式会直接报错。</div>
+            <div class="small"><strong>字段:</strong> ${allowedColumns.join(', ') || '--'}</div>
+            <div class="small"><strong>序列方法:</strong> ${allowedSeriesMethods.join(', ') || '--'}</div>
+            <div class="small"><strong>窗口方法:</strong> ${allowedWindowMethods.join(', ') || '--'}</div>
+            <div class="small"><strong>函数:</strong> ${allowedFunctions.join(', ') || '--'}</div>
+            <div class="small mt-2"><strong>示例:</strong> ${examples.join(' | ') || '--'}</div>
+        `;
+    } catch (error) {
+        console.error('加载自定义因子能力失败:', error);
+        container.innerHTML = '<div class="text-danger">表达式白名单加载失败，请稍后重试。</div>';
     }
 }
 

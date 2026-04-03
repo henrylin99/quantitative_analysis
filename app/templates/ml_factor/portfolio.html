@@ -33,8 +33,7 @@
                             <select class="form-select" id="optimizationMethod">
                                 <option value="mean_variance">均值方差优化</option>
                                 <option value="risk_parity">风险平价</option>
-                                <option value="max_sharpe">最大夏普比率</option>
-                                <option value="min_variance">最小方差</option>
+                                <option value="equal_weight">等权重</option>
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -271,51 +270,26 @@ async function optimizePortfolio() {
         const riskParams = getRiskParameters(riskLevel);
         const tradeDate = new Date().toISOString().split('T')[0];
         
-        // 首先尝试使用选择的优化方法
-        let response;
-        try {
-            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                trade_date: tradeDate,
-                selection_method: 'factor_based',
-                factor_list: ['momentum_5d', 'pe_percentile', 'money_flow_strength'],
-                weights: {'momentum_5d': 0.4, 'pe_percentile': 0.3, 'money_flow_strength': 0.3},
-                top_n: Math.max(maxStocks * 2, 20), // 选择更大的股票池进行优化
-                optimization_method: method,
-                constraints: {
-                    max_weight: riskParams.max_weight,
-                    min_weight: riskParams.min_weight,
-                    max_stocks: maxStocks,
-                    target_return: riskParams.target_return,
-                    risk_tolerance: riskParams.risk_tolerance
-                }
-            });
-        } catch (error) {
-            console.warn(`${method} 优化失败，尝试等权重方法:`, error.message);
-            response = null;
-        }
-        
-        // 如果主要方法失败，回退到等权重方法
-        if (!response || !response.data.success) {
-            console.log('回退到等权重优化方法...');
-            
-            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                trade_date: tradeDate,
-                selection_method: 'factor_based',
-                factor_list: ['momentum_5d', 'pe_percentile'],
-                weights: {'momentum_5d': 0.6, 'pe_percentile': 0.4},
-                top_n: maxStocks,
-                optimization_method: 'equal_weight'
-            });
-            
-            if (response.data.success) {
-                // 显示警告信息
-                showOptimizationWarning(method, 'equal_weight');
+        const response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
+            trade_date: tradeDate,
+            selection_method: 'factor_based',
+            factor_list: ['momentum_5d', 'pe_percentile', 'money_flow_strength'],
+            weights: {'momentum_5d': 0.4, 'pe_percentile': 0.3, 'money_flow_strength': 0.3},
+            top_n: Math.max(maxStocks * 2, 20),
+            optimization_method: method,
+            constraints: {
+                max_weight: riskParams.max_weight,
+                min_weight: riskParams.min_weight,
+                max_stocks: maxStocks,
+                target_return: riskParams.target_return,
+                risk_tolerance: riskParams.risk_tolerance
             }
-        }
+        });
         
         if (response.data.success) {
             // 显示优化结果
-            showOptimizationResults(response.data.portfolio_optimization, method, riskLevel, maxStocks, response.data);
+            const effectiveMethod = response.data.portfolio_optimization?.method || method;
+            showOptimizationResults(response.data.portfolio_optimization, effectiveMethod, riskLevel, maxStocks, response.data);
         } else {
             throw new Error('所有优化方法都失败了: ' + (response.data.error || '未知错误'));
         }
@@ -554,8 +528,8 @@ function getMethodLabel(method) {
     const labels = {
         'mean_variance': '均值方差优化',
         'risk_parity': '风险平价',
-        'max_sharpe': '最大夏普比率',
-        'min_variance': '最小方差'
+        'equal_weight': '等权重',
+        'factor_neutral': '因子中性优化'
     };
     return labels[method] || method;
 }
@@ -904,27 +878,5 @@ async function createPortfolio() {
     }
 }
 
-// 显示优化警告
-function showOptimizationWarning(originalMethod, fallbackMethod) {
-    const warningHtml = `
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-            <i class="fas fa-exclamation-triangle"></i>
-            <strong>优化方法回退:</strong> ${getMethodLabel(originalMethod)} 优化失败，已自动切换到 ${getMethodLabel(fallbackMethod)}。
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-    
-    // 在页面顶部显示警告
-    const container = document.querySelector('.container');
-    container.insertAdjacentHTML('afterbegin', warningHtml);
-    
-    // 5秒后自动隐藏
-    setTimeout(() => {
-        const alert = document.querySelector('.alert-warning');
-        if (alert) {
-            alert.remove();
-        }
-    }, 5000);
-}
 </script>
 {% endblock %} 

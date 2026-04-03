@@ -99,6 +99,43 @@ class FactorEngine:
             db.session.rollback()
             logger.error(f"注册因子失败: {factor_id}, 错误: {e}")
             return False
+
+    def get_custom_factor_capabilities(self) -> Dict[str, Any]:
+        """返回自定义因子表达式白名单能力，用于前端展示和接口契约。"""
+        return {
+            "allowed_columns": sorted(self.expression_engine.allowed_columns),
+            "allowed_series_methods": sorted(self.expression_engine.allowed_series_methods),
+            "allowed_window_methods": sorted(self.expression_engine.allowed_window_methods),
+            "allowed_functions": sorted(self.expression_engine.allowed_functions.keys()),
+            "examples": [
+                "close.pct_change(5)",
+                "abs(close - open)",
+                "close.rolling(20).mean() - close",
+                "vol.rolling(10).std()",
+            ],
+        }
+
+    def validate_custom_factor_formula(self, formula: str) -> Dict[str, Any]:
+        """校验自定义因子公式是否符合表达式白名单。"""
+        sample_df = pd.DataFrame(
+            {
+                "open": [10, 11, 12, 13, 14],
+                "high": [11, 12, 13, 14, 15],
+                "low": [9, 10, 11, 12, 13],
+                "close": [10, 11, 12, 13, 14],
+                "pre_close": [9, 10, 11, 12, 13],
+                "change_c": [1, 1, 1, 1, 1],
+                "pct_chg": [0.1, 0.1, 0.09, 0.08, 0.07],
+                "vol": [100, 110, 120, 130, 140],
+                "amount": [1000, 1100, 1200, 1300, 1400],
+            }
+        )
+
+        try:
+            self.expression_engine.evaluate((formula or "").strip(), sample_df)
+            return {"valid": True, "error": None}
+        except Exception as e:
+            return {"valid": False, "error": str(e)}
     
     def calculate_factor(self, factor_id: str, ts_codes: List[str], 
                         start_date: str, end_date: str) -> pd.DataFrame:
