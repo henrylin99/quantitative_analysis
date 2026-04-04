@@ -47,3 +47,38 @@ def test_build_response_payload_includes_ui_ready_fields(monkeypatch):
     assert "risk_metrics" in result
     assert "drawdown_series" in result
     assert "monthly_returns" in result
+
+
+def test_build_response_payload_keeps_empty_ui_collections_explicit(monkeypatch):
+    engine = BacktestEngine()
+    monkeypatch.setattr(engine, "_get_stock_metadata", lambda ts_codes: {})
+
+    result = engine._build_response_payload(
+        strategy_config={"selection_method": "factor_based"},
+        start_date="2024-01-02",
+        end_date="2024-01-03",
+        initial_capital=1000.0,
+        final_value=1000.0,
+        portfolio_values=[],
+        daily_returns=[],
+        daily_positions=[],
+        daily_turnover=[],
+        performance_metrics={},
+        benchmark_returns=[],
+        final_prices={},
+    )
+
+    assert result["equity_curve"] == []
+    assert result["drawdown_series"] == []
+    assert result["monthly_returns"] == []
+    assert result["returns_distribution"] == []
+    assert result["positions"] == []
+    assert result["industry_distribution"] == []
+    assert result["risk_metrics"] == {
+        "var_95": None,
+        "cvar_95": None,
+        "beta": None,
+        "alpha": None,
+        "information_ratio": None,
+        "calmar_ratio": None,
+    }
