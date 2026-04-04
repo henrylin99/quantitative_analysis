@@ -25,3 +25,13 @@ def test_readme_reflects_portfolio_and_model_cleanup_progress():
     assert "模型删除前后端入口已打通" in readme
     assert "投资组合完整 CRUD 与删除闭环" not in readme
     assert "模型删除闭环" not in readme
+
+
+def test_readme_avoids_full_demo_and_full_report_backend_claims():
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "报告列表与生成功能入口" in readme
+    assert "运行当前已接通功能入口" in readme
+    assert "完整报告管理后台" not in readme
+    assert "完整功能演示" not in readme
+    assert "运行完整演示" not in readme
