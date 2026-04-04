@@ -25,6 +25,7 @@ from app import create_app
 from app.extensions import db
 from app.services.factor_engine import FactorEngine
 from config import config
+from startup_runtime import build_startup_report
 
 
 class SystemManager:
@@ -208,6 +209,10 @@ class SystemManager:
         try:
             if not self.app:
                 self.app = create_app('development')
+
+            print("启动检查:")
+            for line in build_startup_report(self.app.config):
+                print(f"  - {line}")
             
             # 自动打开浏览器
             if not debug:

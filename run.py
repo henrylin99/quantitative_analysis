@@ -4,11 +4,16 @@
 import os
 from app import create_app
 from app.extensions import socketio
+from startup_runtime import build_startup_report
 
 # 创建Flask应用实例
 app = create_app(os.getenv('FLASK_ENV', 'default'))
 
 if __name__ == '__main__':
+    print("启动检查:")
+    for line in build_startup_report(app.config):
+        print(f"  - {line}")
+
     # 开发环境下运行，使用SocketIO
     socketio.run(
         app,
