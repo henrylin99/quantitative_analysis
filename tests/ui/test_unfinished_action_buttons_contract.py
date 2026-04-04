@@ -16,9 +16,11 @@ def test_portfolio_template_hides_unfinished_portfolio_actions():
     assert "onclick=\"rebalancePortfolio(" not in html
     assert "onclick=\"editPortfolio(" not in html
     assert "onclick=\"deletePortfolio(" in html
+    assert "onclick=\"deletePortfolioPosition(" in html
     assert "function rebalancePortfolio(" not in html
     assert "function editPortfolio(" not in html
     assert "function deletePortfolio(" in html
+    assert "function deletePortfolioPosition(" in html
 
 
 def test_models_template_uses_real_delete_action():
