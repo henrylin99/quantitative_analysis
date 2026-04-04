@@ -46,3 +46,10 @@ def test_portfolio_template_empty_state_matches_real_crud_availability():
 
     assert "暂无真实投资组合，请先创建组合或保存优化结果。" in html
     assert "请先完成真实组合 CRUD 后再开放此页面" not in html
+
+
+def test_portfolio_template_marks_scope_as_minimal_real_crud():
+    html = Path("app/templates/ml_factor/portfolio.html").read_text(encoding="utf-8")
+
+    assert "当前页面提供最小真实组合闭环，再平衡入口暂未开放。" in html
+    assert "智能构建和优化投资组合" not in html
