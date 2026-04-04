@@ -16,6 +16,7 @@ import subprocess
 import time
 import webbrowser
 from pathlib import Path
+from sqlalchemy import inspect
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent
@@ -25,7 +26,7 @@ from app import create_app
 from app.extensions import db
 from app.services.factor_engine import FactorEngine
 from config import config
-from startup_runtime import build_startup_report
+from startup_runtime import build_health_report, build_startup_report
 
 
 class SystemManager:
@@ -64,9 +65,49 @@ class SystemManager:
         if missing_packages:
             print(f"\n缺少以下包，请运行: pip install {' '.join(missing_packages)}")
             return False
+
+        try:
+            report = self.inspect_runtime_health()
+            self.print_health_summary(report)
+        except Exception as exc:
+            print(f"⚠️ 健康检查未完成: {exc}")
         
         print("✅ 所有依赖检查通过")
         return True
+
+    def build_health_summary(self, connected: bool, existing_tables=None):
+        return build_health_report(
+            {"DATA_JOB_EXECUTION_MODE": config["development"].DATA_JOB_EXECUTION_MODE},
+            connected=connected,
+            existing_tables=set(existing_tables or []),
+        )
+
+    def inspect_runtime_health(self):
+        if not self.app:
+            self.app = create_app('development')
+
+        with self.app.app_context():
+            existing_tables = set()
+            connected = False
+            try:
+                inspector = inspect(db.engine)
+                existing_tables = set(inspector.get_table_names())
+                connected = True
+            except Exception:
+                connected = False
+
+            return self.build_health_summary(connected=connected, existing_tables=existing_tables)
+
+    def print_health_summary(self, report):
+        print("健康检查摘要:")
+        print(f"  - 主启动入口: {report['entrypoint']}")
+        print(f"  - 数据库连接: {'正常' if report['database']['connected'] else '失败'}")
+        if report["database"]["missing_tables"]:
+            missing = ", ".join(report["database"]["missing_tables"])
+            print(f"  - 缺失关键表: {missing}")
+        else:
+            print("  - 关键表检查: 通过")
+        print(f"  - 数据任务模式: {report['data_jobs']['execution_mode']}")
     
     def setup_database(self):
         """设置数据库"""
@@ -267,8 +308,9 @@ def main():
     """主函数"""
     manager = SystemManager()
     
-    print("多因子选股系统启动器")
+    print("多因子选股系统初始化与诊断工具")
     print("="*40)
+    print("常规 Web 启动请使用: python run.py")
     
     while True:
         print("\n请选择操作:")
