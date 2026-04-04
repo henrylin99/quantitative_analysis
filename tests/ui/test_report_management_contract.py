@@ -21,3 +21,14 @@ def test_report_management_template_describes_only_available_scope():
 
     assert "管理分析报告、模板和订阅" not in html
     assert "当前页面仅开放报告列表与报告生成能力" in html
+
+
+def test_report_management_template_does_not_load_hidden_template_or_subscription_data():
+    html = Path("app/templates/realtime_analysis/report_management.html").read_text(encoding="utf-8")
+
+    assert "loadTemplates()" not in html
+    assert "renderTemplates()" not in html
+    assert "updateTemplateSelects()" not in html
+    assert "totalTemplates" not in html
+    assert "totalSubscriptions" not in html
+    assert "subscriptionTemplateId" not in html
