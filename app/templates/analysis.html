@@ -249,6 +249,14 @@ let currentMainChart = 'price';
 let mainChart = null;
 let indicatorChart = null;
 
+function getChronologicalHistoryData() {
+    return [...historyData].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
+}
+
+function getChronologicalFactorsData() {
+    return [...factorsData].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM加载完成，开始初始化...');
@@ -654,11 +662,11 @@ function renderMainChart() {
 function renderPriceChart() {
     console.log('开始渲染价格图表，图表类型:', chartType);
     console.log('历史数据条数:', historyData.length);
-    
-    // 后端已经返回正序数据，直接使用
-    const dates = historyData.map(item => item.trade_date);
-    const klineData = historyData.map(item => [item.open, item.close, item.low, item.high]);
-    const lineData = historyData.map(item => item.close);
+
+    const orderedHistoryData = getChronologicalHistoryData();
+    const dates = orderedHistoryData.map(item => item.trade_date);
+    const klineData = orderedHistoryData.map(item => [item.open, item.close, item.low, item.high]);
+    const lineData = orderedHistoryData.map(item => item.close);
     
     console.log('处理后的数据:', {
         dates: dates.slice(0, 3),
@@ -777,9 +785,9 @@ function renderPriceChart() {
 
 // 渲染成交量图表
 function renderVolumeChart() {
-    // 后端已经返回正序数据，直接使用
-    const dates = historyData.map(item => item.trade_date);
-    const volumeData = historyData.map(item => item.vol);
+    const orderedHistoryData = getChronologicalHistoryData();
+    const dates = orderedHistoryData.map(item => item.trade_date);
+    const volumeData = orderedHistoryData.map(item => item.vol);
     
     const option = {
         title: {
@@ -885,11 +893,11 @@ function renderIndicatorChart() {
 
 // 渲染MACD图表
 function renderMACDChart() {
-    // 后端已经返回正序数据，直接使用
-    const dates = factorsData.map(item => item.trade_date);
-    const macdData = factorsData.map(item => item.macd || 0);
-    const deaData = factorsData.map(item => item.macd_dea || 0);
-    const difData = factorsData.map(item => item.macd_dif || 0);
+    const orderedFactorsData = getChronologicalFactorsData();
+    const dates = orderedFactorsData.map(item => item.trade_date);
+    const macdData = orderedFactorsData.map(item => item.macd || 0);
+    const deaData = orderedFactorsData.map(item => item.macd_dea || 0);
+    const difData = orderedFactorsData.map(item => item.macd_dif || 0);
     
     console.log('MACD数据:', {
         dates: dates.slice(0, 3),
@@ -964,11 +972,11 @@ function renderMACDChart() {
 
 // 渲染KDJ图表
 function renderKDJChart() {
-    // 后端已经返回正序数据，直接使用
-    const dates = factorsData.map(item => item.trade_date);
-    const kData = factorsData.map(item => item.kdj_k || 0);
-    const dData = factorsData.map(item => item.kdj_d || 0);
-    const jData = factorsData.map(item => item.kdj_j || 0);
+    const orderedFactorsData = getChronologicalFactorsData();
+    const dates = orderedFactorsData.map(item => item.trade_date);
+    const kData = orderedFactorsData.map(item => item.kdj_k || 0);
+    const dData = orderedFactorsData.map(item => item.kdj_d || 0);
+    const jData = orderedFactorsData.map(item => item.kdj_j || 0);
     
     const option = {
         title: {
@@ -1053,11 +1061,11 @@ function renderKDJChart() {
 
 // 渲染RSI图表
 function renderRSIChart() {
-    // 后端已经返回正序数据，直接使用
-    const dates = factorsData.map(item => item.trade_date);
-    const rsi6Data = factorsData.map(item => item.rsi_6 || 0);
-    const rsi12Data = factorsData.map(item => item.rsi_12 || 0);
-    const rsi24Data = factorsData.map(item => item.rsi_24 || 0);
+    const orderedFactorsData = getChronologicalFactorsData();
+    const dates = orderedFactorsData.map(item => item.trade_date);
+    const rsi6Data = orderedFactorsData.map(item => item.rsi_6 || 0);
+    const rsi12Data = orderedFactorsData.map(item => item.rsi_12 || 0);
+    const rsi24Data = orderedFactorsData.map(item => item.rsi_24 || 0);
     
     const option = {
         title: {
@@ -1132,9 +1140,10 @@ function renderRSIChart() {
 
 // 渲染布林带图表
 function renderBollChart() {
-    // 后端已经返回正序数据，直接使用
-    const dates = historyData.map(item => item.trade_date);
-    const closeData = historyData.map(item => item.close);
+    const orderedHistoryData = getChronologicalHistoryData();
+    const orderedFactorsData = getChronologicalFactorsData();
+    const dates = orderedHistoryData.map(item => item.trade_date);
+    const closeData = orderedHistoryData.map(item => item.close);
     
     // 从技术因子数据中获取布林带数据
     const bollUpper = [];
@@ -1142,7 +1151,7 @@ function renderBollChart() {
     const bollLower = [];
     
     dates.forEach(date => {
-        const factor = factorsData.find(f => f.trade_date === date);
+        const factor = orderedFactorsData.find(f => f.trade_date === date);
         bollUpper.push(factor ? factor.boll_upper || 0 : 0);
         bollMid.push(factor ? factor.boll_mid || 0 : 0);
         bollLower.push(factor ? factor.boll_lower || 0 : 0);
