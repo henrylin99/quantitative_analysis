@@ -36,3 +36,14 @@ def test_realtime_analysis_websocket_tab_avoids_performance_promises():
     assert "毫秒级数据推送，确保信息实时性" not in html
     assert "支持数千并发连接" not in html
     assert "自动重连和故障恢复" not in html
+
+
+def test_realtime_analysis_monitor_and_indicator_sections_avoid_feature_checklist_overclaim():
+    html = Path("app/templates/realtime_analysis/index.html").read_text(encoding="utf-8")
+
+    assert "刷新频率、阈值和图表范围以当前监控页实现为准。" in html
+    assert "指标范围、结果存储和扩展分析能力以实际页面为准。" in html
+    assert "30秒自动刷新" not in html
+    assert "智能异动评分" not in html
+    assert "历史数据回测" not in html
+    assert "统计分析报告" not in html
