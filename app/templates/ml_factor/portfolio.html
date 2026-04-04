@@ -12,9 +12,7 @@
                     <h1>💼 投资组合</h1>
                     <p class="text-muted">智能构建和优化投资组合</p>
                 </div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPortfolioModal">
-                    <i class="fas fa-plus"></i> 创建组合
-                </button>
+                <span class="badge bg-secondary">真实组合 CRUD 整改中</span>
             </div>
         </div>
     </div>
@@ -78,67 +76,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 创建组合模态框 -->
-<div class="modal fade" id="createPortfolioModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">创建投资组合</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="createPortfolioForm">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="portfolioName" class="form-label">组合名称 *</label>
-                                <input type="text" class="form-control" id="portfolioName" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="initialCapital" class="form-label">初始资金 *</label>
-                                <input type="number" class="form-control" id="initialCapital" value="1000000" required>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="portfolioDescription" class="form-label">组合描述</label>
-                        <textarea class="form-control" id="portfolioDescription" rows="3"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">选股策略</label>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="selectionStrategy" 
-                                           id="factorStrategy" value="factor_based" checked>
-                                    <label class="form-check-label" for="factorStrategy">
-                                        基于因子选股
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="selectionStrategy" 
-                                           id="mlStrategy" value="ml_based">
-                                    <label class="form-check-label" for="mlStrategy">
-                                        基于ML模型选股
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="createPortfolio()">创建组合</button>
             </div>
         </div>
     </div>
@@ -480,9 +417,6 @@ function showOptimizationResults(data, method, riskLevel, maxStocks, responseDat
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-                        <button type="button" class="btn btn-success" onclick="saveOptimizedPortfolio()">
-                            <i class="fas fa-save"></i> 保存为投资组合
-                        </button>
                         <button type="button" class="btn btn-primary" onclick="exportOptimizationResults()">
                             <i class="fas fa-download"></i> 导出结果
                         </button>
@@ -563,47 +497,6 @@ function calculateWeightStd(weights) {
 function calculateEffectiveStocks(weights) {
     const sumSquaredWeights = Object.values(weights).reduce((sum, w) => sum + w * w, 0);
     return 1 / sumSquaredWeights;
-}
-
-// 保存优化后的投资组合
-function saveOptimizedPortfolio() {
-    if (!window.currentOptimizationResult) {
-        alert('没有优化结果可保存');
-        return;
-    }
-    
-    const result = window.currentOptimizationResult;
-    const name = prompt('请输入投资组合名称:', `${getMethodLabel(result.method)}_${getRiskLabel(result.riskLevel)}_${new Date().toISOString().split('T')[0]}`);
-    
-    if (!name) return;
-    
-    // 构造组合数据
-    const portfolioData = {
-        id: 'portfolio_' + Date.now(),
-        name: name,
-        description: `基于${getMethodLabel(result.method)}的${getRiskLabel(result.riskLevel)}投资组合`,
-        initial_capital: 1000000, // 默认100万
-        current_value: 1000000,
-        return_rate: result.stats.expected_return || 0,
-        volatility: result.stats.volatility || 0,
-        sharpe_ratio: result.stats.sharpe_ratio || 0,
-        max_drawdown: 0,
-        created_at: new Date().toISOString().split('T')[0],
-        status: 'active',
-        holdings: Object.entries(result.weights).map(([ts_code, weight]) => ({
-            ts_code: ts_code,
-            name: ts_code,
-            weight: weight,
-            value: 1000000 * weight
-        }))
-    };
-    
-    // 添加到组合列表
-    portfolios.push(portfolioData);
-    
-    alert('投资组合保存成功！');
-    bootstrap.Modal.getInstance(document.getElementById('optimizationResultModal')).hide();
-    renderPortfolios();
 }
 
 // 导出优化结果
@@ -747,108 +640,6 @@ function showError(elementId, message) {
     const element = document.getElementById(elementId);
     if (element) {
         element.innerHTML = `<div class="alert alert-danger">${message}</div>`;
-    }
-}
-
-// 创建投资组合
-async function createPortfolio() {
-    const name = document.getElementById('portfolioName').value;
-    const capital = parseFloat(document.getElementById('initialCapital').value);
-    const description = document.getElementById('portfolioDescription').value;
-    const strategy = document.querySelector('input[name="selectionStrategy"]:checked').value;
-    
-    if (!name || !capital) {
-        alert('请填写必填字段');
-        return;
-    }
-    
-    try {
-        const tradeDate = new Date().toISOString().split('T')[0];
-        
-        // 根据选择的策略创建投资组合
-        let response;
-        if (strategy === 'factor_based') {
-            // 基于因子的策略
-            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                trade_date: tradeDate,
-                selection_method: 'factor_based',
-                factor_list: ['momentum_5d', 'pe_percentile', 'money_flow_strength'],
-                weights: {'momentum_5d': 0.4, 'pe_percentile': 0.3, 'money_flow_strength': 0.3},
-                top_n: 20,
-                optimization_method: 'mean_variance',
-                constraints: {
-                    max_weight: 0.1,  // 单只股票最大权重10%
-                    min_weight: 0.01  // 单只股票最小权重1%
-                }
-            });
-        } else if (strategy === 'ml_based') {
-            // 基于ML模型的策略
-            const modelsResponse = await axios.get('/api/ml-factor/models/list');
-            if (modelsResponse.data.success && modelsResponse.data.models.length > 0) {
-                const modelIds = modelsResponse.data.models.map(m => m.model_id);
-                response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                    trade_date: tradeDate,
-                    selection_method: 'ml_based',
-                    model_ids: modelIds,
-                    top_n: 20,
-                    optimization_method: 'mean_variance'
-                });
-            } else {
-                alert('没有可用的ML模型，请先创建和训练模型');
-                return;
-            }
-        } else {
-            // 等权重策略
-            response = await axios.post('/api/ml-factor/portfolio/integrated-selection', {
-                trade_date: tradeDate,
-                selection_method: 'factor_based',
-                factor_list: ['momentum_5d', 'pe_percentile'],
-                top_n: 10,
-                optimization_method: 'equal_weight'
-            });
-        }
-        
-        if (response.data.success) {
-            // 构造组合数据
-            const portfolioData = {
-                id: 'portfolio_' + Date.now(),
-                name: name,
-                description: description,
-                initial_capital: capital,
-                current_value: capital,
-                return_rate: 0,
-                volatility: response.data.portfolio_optimization?.portfolio_stats?.volatility || 0.15,
-                sharpe_ratio: response.data.portfolio_optimization?.portfolio_stats?.sharpe_ratio || 1.0,
-                max_drawdown: 0,
-                created_at: tradeDate,
-                status: 'active',
-                holdings: []
-            };
-            
-            // 转换持仓数据
-            const weights = response.data.portfolio_optimization?.weights || {};
-            portfolioData.holdings = Object.entries(weights).map(([ts_code, weight]) => ({
-                ts_code: ts_code,
-                name: ts_code, // 简化显示
-                weight: weight,
-                value: capital * weight
-            }));
-            
-            // 添加到组合列表
-            portfolios.push(portfolioData);
-            
-            alert('投资组合创建成功！');
-            bootstrap.Modal.getInstance(document.getElementById('createPortfolioModal')).hide();
-            document.getElementById('createPortfolioForm').reset();
-            renderPortfolios();
-            
-        } else {
-            alert('创建失败: ' + response.data.error);
-        }
-        
-    } catch (error) {
-        console.error('创建投资组合失败:', error);
-        alert('创建投资组合失败，可能是因为缺少因子数据。请先计算因子值。错误: ' + error.message);
     }
 }
 
