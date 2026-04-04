@@ -43,10 +43,12 @@ def test_realtime_analysis_monitor_and_indicator_sections_avoid_feature_checklis
 
     assert "刷新频率、阈值和图表范围以当前监控页实现为准。" in html
     assert "指标范围、结果存储和扩展分析能力以实际页面为准。" in html
+    assert "指标计算结果与存储范围以当前页面返回为准" in html
     assert "30秒自动刷新" not in html
     assert "智能异动评分" not in html
     assert "历史数据回测" not in html
     assert "统计分析报告" not in html
+    assert "系统自动计算并存储结果" not in html
 
 
 def test_realtime_analysis_monitor_and_websocket_details_avoid_smart_capability_claims():
@@ -56,3 +58,11 @@ def test_realtime_analysis_monitor_and_websocket_details_avoid_smart_capability_
     assert "缓存与投递策略以后端当前实现为准" in html
     assert "智能识别价格和成交量异常变动的股票" not in html
     assert "智能数据缓存机制" not in html
+
+
+def test_realtime_analysis_risk_section_avoids_auto_execution_claims():
+    html = Path("app/templates/realtime_analysis/index.html").read_text(encoding="utf-8")
+
+    assert "止损止盈价格和触发条件以风险页当前计算结果为准" in html
+    assert "自动计算止损止盈价格" not in html
+    assert "实时监控触发条件" not in html
