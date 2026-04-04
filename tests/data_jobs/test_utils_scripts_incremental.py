@@ -6,6 +6,7 @@ SCRIPTS = [
     "app/utils/daily_history_by_date.py",
     "app/utils/moneyflow.py",
     "app/utils/moneyflow_ths.py",
+    "app/utils/cyq_perf.py",
 ]
 
 
@@ -25,3 +26,4 @@ def test_scripts_do_not_hardcode_legacy_date():
     for rel in SCRIPTS:
         content = Path(rel).read_text(encoding="utf-8")
         assert "20250523" not in content
+        assert "2025-05-27" not in content
