@@ -118,3 +118,6 @@ local_settings.py
 
 # Local git worktrees
 .worktrees/
+
+# Local development tests
+tests/
