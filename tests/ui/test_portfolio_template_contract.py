@@ -28,3 +28,14 @@ def test_portfolio_template_uses_real_list_and_detail_endpoints():
     assert "/api/realtime-analysis/risk/portfolio/" in html
     assert "portfolios.find(" not in html
     assert "portfolio.portfolio_id" in html
+
+
+def test_portfolio_template_supports_real_position_create_and_update_actions():
+    html = Path("app/templates/ml_factor/portfolio.html").read_text(encoding="utf-8")
+
+    assert "新增持仓" in html
+    assert "编辑持仓" in html
+    assert "function openPositionModal(" in html
+    assert "function submitPortfolioPosition(" in html
+    assert "method = editingPositionId ? 'put' : 'post'" in html
+    assert "/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${editingPositionId}" in html

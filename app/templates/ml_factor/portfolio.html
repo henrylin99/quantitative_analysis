@@ -139,11 +139,62 @@
         </div>
     </div>
 </div>
+
+<!-- 持仓编辑模态框 -->
+<div class="modal fade" id="portfolioPositionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="portfolioPositionModalTitle">新增持仓</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="portfolioPositionForm">
+                    <div class="mb-3">
+                        <label for="positionTsCode" class="form-label">股票代码 *</label>
+                        <input type="text" class="form-control" id="positionTsCode" placeholder="例如 000001.SZ" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionSizeInput" class="form-label">持仓数量 *</label>
+                        <input type="number" class="form-control" id="positionSizeInput" min="1" step="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionAvgCostInput" class="form-label">平均成本 *</label>
+                        <input type="number" class="form-control" id="positionAvgCostInput" min="0.01" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionCurrentPriceInput" class="form-label">当前价格</label>
+                        <input type="number" class="form-control" id="positionCurrentPriceInput" min="0.01" step="0.01">
+                        <div class="form-text">仅编辑持仓时可修改，新增持仓默认按成本价初始化。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionSectorInput" class="form-label">行业</label>
+                        <input type="text" class="form-control" id="positionSectorInput" placeholder="例如 银行">
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionStopLossInput" class="form-label">止损价</label>
+                        <input type="number" class="form-control" id="positionStopLossInput" min="0.01" step="0.01">
+                    </div>
+                    <div class="mb-0">
+                        <label for="positionTakeProfitInput" class="form-label">止盈价</label>
+                        <input type="number" class="form-control" id="positionTakeProfitInput" min="0.01" step="0.01">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="portfolioPositionSubmitButton" onclick="submitPortfolioPosition()">保存持仓</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 let portfolios = [];
+let currentPortfolioId = null;
+let editingPositionId = null;
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -671,6 +722,7 @@ async function viewPortfolioDetail(portfolioId) {
         const portfolio = response.data.portfolio;
         const metrics = portfolio.metrics || {};
         const positions = portfolio.positions || [];
+        currentPortfolioId = portfolioId;
 
         document.getElementById('portfolioDetailTitle').textContent = portfolio.name;
         
@@ -712,7 +764,12 @@ async function viewPortfolioDetail(portfolioId) {
         
         <div class="row">
             <div class="col-12">
-                <h6>持仓明细</h6>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">持仓明细</h6>
+                    <button class="btn btn-sm btn-primary" onclick="openPositionModal('${portfolio.portfolio_id}')">
+                        <i class="fas fa-plus"></i> 新增持仓
+                    </button>
+                </div>
                 ${positions.length > 0 ? `
                     <div class="table-responsive">
                         <table class="table table-sm">
@@ -735,6 +792,9 @@ async function viewPortfolioDetail(portfolioId) {
                                         <td>${formatAmount(position.market_value || 0)}</td>
                                         <td>${formatAmount(position.unrealized_pnl || 0)}</td>
                                         <td>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="openPositionModal('${portfolio.portfolio_id}', ${JSON.stringify(position).replace(/"/g, '&quot;')})">
+                                                <i class="fas fa-pen"></i> 编辑持仓
+                                            </button>
                                             <button class="btn btn-sm btn-outline-danger" onclick="deletePortfolioPosition('${portfolio.portfolio_id}', ${position.id})">
                                                 <i class="fas fa-trash"></i> 删除
                                             </button>
@@ -757,6 +817,84 @@ async function viewPortfolioDetail(portfolioId) {
     }
 }
 
+function openPositionModal(portfolioId, position = null) {
+    currentPortfolioId = portfolioId;
+    editingPositionId = position ? position.id : null;
+
+    document.getElementById('portfolioPositionModalTitle').textContent = editingPositionId ? '编辑持仓' : '新增持仓';
+    document.getElementById('portfolioPositionSubmitButton').textContent = editingPositionId ? '保存修改' : '保存持仓';
+    document.getElementById('positionTsCode').value = position?.ts_code || '';
+    document.getElementById('positionTsCode').disabled = Boolean(editingPositionId);
+    document.getElementById('positionSizeInput').value = position?.position_size || '';
+    document.getElementById('positionAvgCostInput').value = position?.avg_cost || '';
+    document.getElementById('positionCurrentPriceInput').value = position?.current_price || '';
+    document.getElementById('positionSectorInput').value = position?.sector || '';
+    document.getElementById('positionStopLossInput').value = position?.stop_loss_price || '';
+    document.getElementById('positionTakeProfitInput').value = position?.take_profit_price || '';
+
+    new bootstrap.Modal(document.getElementById('portfolioPositionModal')).show();
+}
+
+async function submitPortfolioPosition() {
+    const portfolioId = currentPortfolioId;
+    const method = editingPositionId ? 'put' : 'post';
+    const url = editingPositionId
+        ? `/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${editingPositionId}`
+        : '/api/realtime-analysis/risk/portfolio';
+    const payload = {
+        position_size: parseFloat(document.getElementById('positionSizeInput').value),
+        avg_cost: parseFloat(document.getElementById('positionAvgCostInput').value),
+        sector: document.getElementById('positionSectorInput').value.trim() || null,
+        stop_loss_price: parseOptionalFloat('positionStopLossInput'),
+        take_profit_price: parseOptionalFloat('positionTakeProfitInput'),
+    };
+
+    if (!portfolioId || !payload.position_size || !payload.avg_cost) {
+        alert('请填写完整的持仓信息');
+        return;
+    }
+
+    if (editingPositionId) {
+        payload.current_price = parseOptionalFloat('positionCurrentPriceInput');
+    } else {
+        payload.portfolio_id = portfolioId;
+        payload.ts_code = document.getElementById('positionTsCode').value.trim();
+        if (!payload.ts_code) {
+            alert('请填写股票代码');
+            return;
+        }
+    }
+
+    Object.keys(payload).forEach((key) => {
+        if (payload[key] === null || payload[key] === undefined || Number.isNaN(payload[key])) {
+            delete payload[key];
+        }
+    });
+
+    try {
+        const response = await axios({
+            method: method,
+            url: url,
+            data: payload,
+        });
+
+        if (response.data.success) {
+            alert(editingPositionId ? '持仓更新成功' : '持仓新增成功');
+            bootstrap.Modal.getInstance(document.getElementById('portfolioPositionModal')).hide();
+            document.getElementById('portfolioPositionForm').reset();
+            editingPositionId = null;
+            await loadPortfolios();
+            await viewPortfolioDetail(portfolioId);
+            return;
+        }
+
+        throw new Error(response.data.message || '持仓保存失败');
+    } catch (error) {
+        console.error('持仓保存失败:', error);
+        alert('持仓保存失败: ' + (error.response?.data?.message || error.message));
+    }
+}
+
 async function deletePortfolio(portfolioId) {
     if (!confirm(`确定要删除投资组合吗？\n组合: ${portfolioId}\n该操作会将该组合下所有持仓标记为非活跃。`)) {
         return;
@@ -775,6 +913,14 @@ async function deletePortfolio(portfolioId) {
         console.error('删除投资组合失败:', error);
         alert('删除投资组合失败: ' + (error.response?.data?.error || error.message));
     }
+}
+
+function parseOptionalFloat(elementId) {
+    const value = document.getElementById(elementId).value;
+    if (value === '') {
+        return null;
+    }
+    return parseFloat(value);
 }
 
 async function deletePortfolioPosition(portfolioId, positionId) {
