@@ -81,3 +81,23 @@ def test_factor_neutral_requires_valid_factor_exposures():
 
     assert "error" in result
     assert "factor_exposures" in result["error"]
+
+
+def test_optimize_portfolio_rejects_black_litterman_placeholder():
+    optimizer = PortfolioOptimizer()
+    expected_returns = pd.Series({"A": 0.10, "B": 0.08})
+    risk_model = pd.DataFrame(
+        [[0.1, 0.0], [0.0, 0.1]],
+        index=["A", "B"],
+        columns=["A", "B"],
+    )
+
+    result = optimizer.optimize_portfolio(
+        expected_returns,
+        risk_model=risk_model,
+        method="black_litterman",
+        constraints={},
+    )
+
+    assert "error" in result
+    assert "不支持的优化方法" in result["error"]

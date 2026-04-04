@@ -20,8 +20,7 @@ class PortfolioOptimizer:
             'mean_variance': self._mean_variance_optimization,
             'risk_parity': self._risk_parity_optimization,
             'equal_weight': self._equal_weight_optimization,
-            'factor_neutral': self._factor_neutral_optimization,
-            'black_litterman': self._black_litterman_optimization
+            'factor_neutral': self._factor_neutral_optimization
         }
     
     def optimize_portfolio(self, expected_returns: pd.Series, 
@@ -58,8 +57,7 @@ class PortfolioOptimizer:
             
             # 检查优化方法
             if method not in self.optimization_methods:
-                logger.warning(f"不支持的优化方法: {method}，使用等权重方法")
-                method = 'equal_weight'
+                return {'error': f'不支持的优化方法: {method}'}
             
             # 执行优化
             optimization_func = self.optimization_methods[method]
@@ -318,20 +316,6 @@ class PortfolioOptimizer:
 
         except Exception as e:
             logger.error(f"构建因子暴露矩阵失败: {e}")
-            return None
-    
-    def _black_litterman_optimization(self, expected_returns: pd.Series, 
-                                     risk_model: pd.DataFrame,
-                                     constraints: Dict[str, Any] = None) -> pd.Series:
-        """Black-Litterman优化"""
-        try:
-            # TODO: 实现Black-Litterman模型
-            # 需要市场均衡收益率和投资者观点
-            logger.warning("Black-Litterman优化功能待实现，使用均值-方差优化")
-            return self._mean_variance_optimization(expected_returns, risk_model, constraints)
-            
-        except Exception as e:
-            logger.error(f"Black-Litterman优化失败: {e}")
             return None
     
     def _estimate_risk_model(self, ts_codes: List[str], 
