@@ -644,6 +644,7 @@ async function viewPortfolioDetail(portfolioId) {
                                     <th>权重</th>
                                     <th>市值</th>
                                     <th>浮动盈亏</th>
+                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -654,6 +655,11 @@ async function viewPortfolioDetail(portfolioId) {
                                         <td>${formatPercent((position.weight || 0) / 100)}</td>
                                         <td>${formatAmount(position.market_value || 0)}</td>
                                         <td>${formatAmount(position.unrealized_pnl || 0)}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deletePortfolioPosition('${portfolio.portfolio_id}', ${position.id})">
+                                                <i class="fas fa-trash"></i> 删除
+                                            </button>
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -689,6 +695,29 @@ async function deletePortfolio(portfolioId) {
     } catch (error) {
         console.error('删除投资组合失败:', error);
         alert('删除投资组合失败: ' + (error.response?.data?.error || error.message));
+    }
+}
+
+async function deletePortfolioPosition(portfolioId, positionId) {
+    if (!confirm(`确定要删除该持仓吗？\n组合: ${portfolioId}\n持仓ID: ${positionId}`)) {
+        return;
+    }
+
+    try {
+        const response = await axios.delete(
+            `/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${positionId}`
+        );
+        if (response.data.success) {
+            alert(`持仓删除成功: ${positionId}`);
+            await loadPortfolios();
+            await viewPortfolioDetail(portfolioId);
+            return;
+        }
+
+        throw new Error(response.data.message || '删除持仓失败');
+    } catch (error) {
+        console.error('删除持仓失败:', error);
+        alert('删除持仓失败: ' + (error.response?.data?.message || error.message));
     }
 }
 
