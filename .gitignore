@@ -90,6 +90,7 @@ reports/*.txt
 reports/*.json
 reports/*.png
 reports/*.html
+docs/
 *.png
 *.jpg
 *.jpeg
