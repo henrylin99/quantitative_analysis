@@ -51,7 +51,7 @@ def test_portfolio_template_empty_state_matches_real_crud_availability():
 def test_portfolio_template_marks_scope_as_minimal_real_crud():
     html = Path("app/templates/ml_factor/portfolio.html").read_text(encoding="utf-8")
 
-    assert "当前页面提供最小真实组合闭环，再平衡入口暂未开放。" in html
+    assert "当前页面提供真实组合管理、优化结果落库和再平衡执行入口。" in html
     assert "智能构建和优化投资组合" not in html
 
 
@@ -61,4 +61,5 @@ def test_portfolio_template_supports_rebalance_preview_entry():
     assert "再平衡预览" in html
     assert "function previewPortfolioRebalance(" in html
     assert "/api/ml-factor/portfolio/rebalance" in html
-    assert "applyPortfolioRebalance" not in html
+    assert "function applyPortfolioRebalance(" in html
+    assert "/api/ml-factor/portfolio/rebalance/apply" in html
