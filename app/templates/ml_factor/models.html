@@ -243,6 +243,7 @@
                         </div>
                     </div>
                     <small class="text-muted" id="trainingStep">等待开始...</small>
+                    <div class="form-text">关闭窗口不会中断后端训练任务，可稍后重新打开查看状态。</div>
                 </div>
 
                 <!-- 训练参数 -->
@@ -718,7 +719,7 @@ async function startTraining() {
     
     // 更新按钮状态
     document.getElementById('trainingStartBtn').style.display = 'none';
-    document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-stop"></i> 停止训练';
+    document.getElementById('trainingCancelBtn').innerHTML = '<i class="fas fa-times"></i> 继续后台训练';
     
     // 开始训练
     await executeTraining(modelId, startDate, endDate);
