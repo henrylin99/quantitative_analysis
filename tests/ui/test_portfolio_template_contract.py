@@ -12,11 +12,12 @@ def test_portfolio_template_does_not_seed_fake_portfolios():
 def test_portfolio_template_hides_fake_create_and_save_paths():
     html = Path("app/templates/ml_factor/portfolio.html").read_text(encoding="utf-8")
 
-    assert 'data-bs-target="#createPortfolioModal"' not in html
-    assert "function createPortfolio()" not in html
+    assert 'data-bs-target="#createPortfolioModal"' in html
+    assert "function createPortfolio()" in html
     assert "function saveOptimizedPortfolio()" in html
     assert "保存为投资组合" in html
     assert "/api/ml-factor/portfolio/save-optimized" in html
+    assert "/api/realtime-analysis/risk/portfolio" in html
 
 
 def test_portfolio_template_uses_real_list_and_detail_endpoints():
