@@ -121,3 +121,6 @@ local_settings.py
 
 # Local development tests
 tests/
+
+# Local backup archive
+bak/

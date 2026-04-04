@@ -550,11 +550,6 @@ pip install -r requirements_minimal.txt
 celery -A app.celery_app.celery worker -l info -P solo
 ```
 
-### 快速验证
-```bash
-bash scripts/validation/validate_data_jobs_flow.sh
-```
-
 ### 常用 API
 ```bash
 # 提交任务
