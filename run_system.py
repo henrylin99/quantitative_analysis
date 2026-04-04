@@ -75,11 +75,12 @@ class SystemManager:
         print("✅ 所有依赖检查通过")
         return True
 
-    def build_health_summary(self, connected: bool, existing_tables=None):
+    def build_health_summary(self, connected: bool, existing_tables=None, non_empty_tables=None):
         return build_health_report(
             {"DATA_JOB_EXECUTION_MODE": config["development"].DATA_JOB_EXECUTION_MODE},
             connected=connected,
             existing_tables=set(existing_tables or []),
+            non_empty_tables=set(non_empty_tables or []),
         )
 
     def inspect_runtime_health(self):
@@ -88,15 +89,24 @@ class SystemManager:
 
         with self.app.app_context():
             existing_tables = set()
+            non_empty_tables = set()
             connected = False
             try:
                 inspector = inspect(db.engine)
                 existing_tables = set(inspector.get_table_names())
                 connected = True
+                for table in existing_tables & {"stock_basic", "stock_trade_calendar", "data_job_run"}:
+                    count = db.session.execute(db.text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                    if count and int(count) > 0:
+                        non_empty_tables.add(table)
             except Exception:
                 connected = False
 
-            return self.build_health_summary(connected=connected, existing_tables=existing_tables)
+            return self.build_health_summary(
+                connected=connected,
+                existing_tables=existing_tables,
+                non_empty_tables=non_empty_tables,
+            )
 
     def print_health_summary(self, report):
         print("健康检查摘要:")
@@ -107,6 +117,9 @@ class SystemManager:
             print(f"  - 缺失关键表: {missing}")
         else:
             print("  - 关键表检查: 通过")
+        if report["database"]["empty_tables"]:
+            empty = ", ".join(report["database"]["empty_tables"])
+            print(f"  - 空表提示: {empty}")
         print(f"  - 数据任务模式: {report['data_jobs']['execution_mode']}")
     
     def setup_database(self):

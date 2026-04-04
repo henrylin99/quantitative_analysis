@@ -1,0 +1,11 @@
+from pathlib import Path
+
+
+def test_data_management_page_guides_initialization_order():
+    html = Path("app/templates/data_management/index.html").read_text(encoding="utf-8")
+
+    assert "推荐初始化顺序" in html
+    assert "1. 交易日历" in html
+    assert "2. 股票基础资料" in html
+    assert "3. 日线行情" in html
+    assert "4. 日线基本指标" in html

@@ -14,9 +14,14 @@ def build_health_report(
     *,
     connected: bool,
     existing_tables: set[str] | None = None,
+    non_empty_tables: set[str] | None = None,
 ) -> dict[str, object]:
     existing_tables = existing_tables or set()
+    non_empty_tables = non_empty_tables or set()
     missing_tables = [table for table in REQUIRED_TABLES if table not in existing_tables]
+    empty_tables = [
+        table for table in REQUIRED_TABLES if table in existing_tables and table not in non_empty_tables
+    ]
     mode = str(app_config.get("DATA_JOB_EXECUTION_MODE", "celery") or "celery").lower()
 
     return {
@@ -25,6 +30,7 @@ def build_health_report(
             "ok": bool(connected) and not missing_tables,
             "connected": bool(connected),
             "missing_tables": missing_tables,
+            "empty_tables": empty_tables,
         },
         "data_jobs": {
             "execution_mode": mode,

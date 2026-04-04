@@ -55,6 +55,55 @@
             </div>
         </div>
 
+        <div class="row mb-4">
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list-ol"></i> 推荐初始化顺序</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">新库或空库建议按下面顺序初始化，能减少依赖缺失导致的下载失败。</p>
+                        <div class="small text-muted mb-3">
+                            <div>1. 交易日历</div>
+                            <div>2. 股票基础资料</div>
+                            <div>3. 日线行情</div>
+                            <div>4. 日线基本指标</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ol class="mb-0">
+                                    <li>交易日历</li>
+                                    <li>股票基础资料</li>
+                                    <li>日线行情</li>
+                                    <li>日线基本指标</li>
+                                </ol>
+                            </div>
+                            <div class="col-md-6">
+                                <ol start="5" class="mb-0">
+                                    <li>资金流向</li>
+                                    <li>扩展技术因子</li>
+                                    <li>筹码分布</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5><i class="fas fa-info-circle"></i> 当前任务说明</h5>
+                    </div>
+                    <div class="card-body">
+                        <h6 id="selectedJobDisplayName" class="mb-2">请选择任务</h6>
+                        <p id="selectedJobDescription" class="text-muted mb-2">任务描述会显示在这里。</p>
+                        <p class="small mb-1"><strong>任务分组：</strong><span id="selectedJobGroup">-</span></p>
+                        <p class="small mb-0"><strong>依赖任务：</strong><span id="selectedJobDependencies">无</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 导航标签 -->
         <div class="row mb-4">
             <div class="col-12">
@@ -318,8 +367,9 @@
                                     <div class="col-md-4">
                                         <label for="jobTypeSelect" class="form-label">任务类型</label>
                                         <select id="jobTypeSelect" class="form-select">
-                                            <option value="stock_basic">基础资料 - stock_basic</option>
+                                            <option value="">正在加载任务列表...</option>
                                         </select>
+                                        <div class="form-text">任务按推荐顺序排序，优先执行基础依赖任务。</div>
                                     </div>
                                     <div class="col-md-3">
                                         <label for="jobStartDate" class="form-label">开始日期</label>

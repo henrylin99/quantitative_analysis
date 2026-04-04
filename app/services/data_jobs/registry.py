@@ -21,49 +21,88 @@ class JobRegistry:
         }
 
         self._jobs: Dict[str, JobDefinition] = {
-            "stock_basic": JobDefinition("stock_basic", "基础资料", "app/utils/stock_basic.py"),
-            "trade_calendar": JobDefinition("trade_calendar", "基础资料", "app/utils/trade_calendar.py"),
-            "stock_company": JobDefinition("stock_company", "基础资料", "app/utils/stock_company.py"),
+            "stock_basic": JobDefinition(
+                "stock_basic",
+                "基础资料",
+                "app/utils/stock_basic.py",
+                display_name="股票基础资料",
+                description="下载股票代码、简称、地域、行业和上市日期。",
+                recommended_order=2,
+            ),
+            "trade_calendar": JobDefinition(
+                "trade_calendar",
+                "基础资料",
+                "app/utils/trade_calendar.py",
+                display_name="交易日历",
+                description="下载交易日、开市状态和前一交易日，是日频任务的基础依赖。",
+                recommended_order=1,
+            ),
+            "stock_company": JobDefinition(
+                "stock_company",
+                "基础资料",
+                "app/utils/stock_company.py",
+                display_name="上市公司资料",
+                description="补充公司基本信息和上市主体信息。",
+                recommended_order=3,
+            ),
             "daily_history_by_code": JobDefinition(
                 "daily_history_by_code",
                 "日频行情与基本面",
                 "app/utils/daily_history_by_code.py",
+                display_name="日线行情（按股票代码）",
+                description="按股票逐只下载日线行情，依赖股票基础资料。",
                 dependencies=["stock_basic"],
+                recommended_order=5,
             ),
             "daily_history_by_date": JobDefinition(
                 "daily_history_by_date",
                 "日频行情与基本面",
                 "app/utils/daily_history_by_date.py",
+                display_name="日线行情（按交易日）",
+                description="按交易日批量下载日线行情，适合初始化全市场日线数据。",
                 dependencies=["trade_calendar"],
+                recommended_order=4,
             ),
-            "daily_basic": JobDefinition("daily_basic", "日频行情与基本面", "app/utils/daily_basic.py"),
+            "daily_basic": JobDefinition(
+                "daily_basic",
+                "日频行情与基本面",
+                "app/utils/daily_basic.py",
+                display_name="日线基本指标",
+                description="下载换手率、市盈率、市值等日线基本面指标。",
+                recommended_order=6,
+            ),
             "baostock_daily": JobDefinition(
                 "baostock_daily",
                 "日频行情与基本面",
                 "app/utils/baostock_daily.py",
+                display_name="Baostock 日线",
+                description="使用 Baostock 补充日线行情数据。",
                 dependencies=["stock_basic"],
+                recommended_order=7,
             ),
-            "min5": JobDefinition("min5", "分钟行情", "app/utils/min5.py", dependencies=["stock_basic"]),
-            "min15": JobDefinition("min15", "分钟行情", "app/utils/min15.py", dependencies=["stock_basic"]),
-            "min30": JobDefinition("min30", "分钟行情", "app/utils/min30.py", dependencies=["stock_basic"]),
-            "min60": JobDefinition("min60", "分钟行情", "app/utils/min60.py", dependencies=["stock_basic"]),
+            "min5": JobDefinition("min5", "分钟行情", "app/utils/min5.py", display_name="5 分钟行情", description="下载 5 分钟级别行情。", dependencies=["stock_basic"]),
+            "min15": JobDefinition("min15", "分钟行情", "app/utils/min15.py", display_name="15 分钟行情", description="下载 15 分钟级别行情。", dependencies=["stock_basic"]),
+            "min30": JobDefinition("min30", "分钟行情", "app/utils/min30.py", display_name="30 分钟行情", description="下载 30 分钟级别行情。", dependencies=["stock_basic"]),
+            "min60": JobDefinition("min60", "分钟行情", "app/utils/min60.py", display_name="60 分钟行情", description="下载 60 分钟级别行情。", dependencies=["stock_basic"]),
             "income_statement": JobDefinition(
-                "income_statement", "财务三表", "app/utils/income_statement.py", dependencies=["stock_basic"]
+                "income_statement", "财务三表", "app/utils/income_statement.py", display_name="利润表", description="下载上市公司利润表。", dependencies=["stock_basic"]
             ),
             "balance_sheet": JobDefinition(
-                "balance_sheet", "财务三表", "app/utils/balance_sheet.py", dependencies=["stock_basic"]
+                "balance_sheet", "财务三表", "app/utils/balance_sheet.py", display_name="资产负债表", description="下载上市公司资产负债表。", dependencies=["stock_basic"]
             ),
             "cash_flow": JobDefinition(
-                "cash_flow", "财务三表", "app/utils/cash_flow.py", dependencies=["stock_basic"]
+                "cash_flow", "财务三表", "app/utils/cash_flow.py", display_name="现金流量表", description="下载上市公司现金流量表。", dependencies=["stock_basic"]
             ),
-            "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py"),
-            "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py"),
-            "stk_factor": JobDefinition("stk_factor", "资金流与扩展因子", "app/utils/stk_factor.py"),
-            "cyq_perf": JobDefinition("cyq_perf", "资金流与扩展因子", "app/utils/cyq_perf.py"),
+            "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py", display_name="资金流向", description="下载主力、大单、中单和小单资金流数据。", recommended_order=7),
+            "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。"),
+            "stk_factor": JobDefinition("stk_factor", "资金流与扩展因子", "app/utils/stk_factor.py", display_name="扩展技术因子", description="下载或计算扩展因子字段。", recommended_order=8),
+            "cyq_perf": JobDefinition("cyq_perf", "资金流与扩展因子", "app/utils/cyq_perf.py", display_name="筹码分布", description="下载筹码成本、胜率等筹码分布指标。", recommended_order=9),
             "ma_calculator": JobDefinition(
                 "ma_calculator",
                 "衍生计算",
                 "app/utils/ma_calculator.py",
+                display_name="均线衍生计算",
+                description="基于日线行情生成均线结果，属于衍生计算任务。",
                 dangerous=True,
                 dependencies=["daily_history_by_code"],
             ),
@@ -78,7 +117,8 @@ class JobRegistry:
         return list(self._jobs.values())
 
     def list_visible_jobs(self) -> List[JobDefinition]:
-        return [job for job in self._jobs.values() if job.job_type in self._visible_job_types]
+        jobs = [job for job in self._jobs.values() if job.job_type in self._visible_job_types]
+        return sorted(jobs, key=lambda job: (job.recommended_order, job.group, job.job_type))
 
     def grouped_jobs(self) -> Dict[str, List[JobDefinition]]:
         groups: Dict[str, List[JobDefinition]] = defaultdict(list)

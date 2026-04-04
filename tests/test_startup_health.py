@@ -26,3 +26,14 @@ def test_build_health_report_marks_database_ok_when_required_tables_exist():
 
     assert report["database"]["ok"] is True
     assert report["database"]["missing_tables"] == []
+
+
+def test_build_health_report_marks_empty_core_tables():
+    report = build_health_report(
+        {"DATA_JOB_EXECUTION_MODE": "inline"},
+        connected=True,
+        existing_tables={"stock_basic", "stock_trade_calendar", "data_job_run"},
+        non_empty_tables={"data_job_run"},
+    )
+
+    assert report["database"]["empty_tables"] == ["stock_basic", "stock_trade_calendar"]

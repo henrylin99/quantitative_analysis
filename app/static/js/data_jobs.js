@@ -1,6 +1,7 @@
 (function () {
     let currentRunId = null;
     let pollingTimer = null;
+    let availableJobs = [];
 
     function showDataJobResult(message, type) {
         const box = document.getElementById("dataJobResult");
@@ -169,16 +170,43 @@
                 return;
             }
 
+            availableJobs = data.jobs.slice();
             select.innerHTML = "";
             data.jobs.forEach((job) => {
                 const option = document.createElement("option");
                 option.value = job.job_type;
-                option.textContent = `${job.group} - ${job.job_type}`;
+                option.textContent = `${job.recommended_order || "-"} - ${job.display_name || job.job_type}`;
                 select.appendChild(option);
             });
+            updateSelectedJobMeta(select.value);
         } catch (error) {
             console.error("加载任务类型失败:", error);
         }
+    }
+
+    function updateSelectedJobMeta(jobType) {
+        const job = availableJobs.find((item) => item.job_type === jobType);
+        const displayName = document.getElementById("selectedJobDisplayName");
+        const description = document.getElementById("selectedJobDescription");
+        const group = document.getElementById("selectedJobGroup");
+        const dependencies = document.getElementById("selectedJobDependencies");
+
+        if (!displayName || !description || !group || !dependencies) return;
+
+        if (!job) {
+            displayName.textContent = "请选择任务";
+            description.textContent = "任务描述会显示在这里。";
+            group.textContent = "-";
+            dependencies.textContent = "无";
+            return;
+        }
+
+        displayName.textContent = job.display_name || job.job_type;
+        description.textContent = job.description || "暂无任务说明。";
+        group.textContent = job.group || "-";
+        dependencies.textContent = Array.isArray(job.dependencies) && job.dependencies.length > 0
+            ? job.dependencies.join(", ")
+            : "无";
     }
 
     async function submitDataJob() {
@@ -236,6 +264,12 @@
         }
         if (refreshButton) {
             refreshButton.addEventListener("click", loadRunHistory);
+        }
+        const jobTypeSelect = document.getElementById("jobTypeSelect");
+        if (jobTypeSelect) {
+            jobTypeSelect.addEventListener("change", function () {
+                updateSelectedJobMeta(this.value);
+            });
         }
 
         updateProgressView(null);
