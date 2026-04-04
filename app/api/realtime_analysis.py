@@ -3,6 +3,8 @@
 提供实时数据管理、技术指标、交易信号等功能的API接口
 """
 
+import os
+
 from flask import Blueprint, request, jsonify
 from app.services.realtime_data_manager import RealtimeDataManager
 from app.models.stock_minute_data import StockMinuteData
@@ -16,7 +18,9 @@ logger = logging.getLogger(__name__)
 realtime_analysis_bp = Blueprint('realtime_analysis', __name__, url_prefix='/api/realtime-analysis')
 
 # 初始化数据管理器
-data_manager = RealtimeDataManager()
+data_manager = RealtimeDataManager(
+    tushare_token=os.getenv("TUSHARE_TOKEN") or os.getenv("tushare_token")
+)
 
 
 @realtime_analysis_bp.route('/data/sync', methods=['POST'])
