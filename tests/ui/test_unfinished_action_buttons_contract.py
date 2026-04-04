@@ -21,8 +21,9 @@ def test_portfolio_template_hides_unfinished_portfolio_actions():
     assert "function deletePortfolio(" not in html
 
 
-def test_models_template_hides_unfinished_delete_action():
+def test_models_template_uses_real_delete_action():
     html = Path("app/templates/ml_factor/models.html").read_text(encoding="utf-8")
 
-    assert "onclick=\"deleteModel(" not in html
-    assert "function deleteModel(" not in html
+    assert "onclick=\"deleteModel(" in html
+    assert "function deleteModel(" in html
+    assert "/api/ml-factor/models/" in html
