@@ -456,13 +456,10 @@ python run_system.py
 
 ### ⚠️ 依赖包兼容性问题
 
-如果遇到 `empyrical` 或 `TA-Lib` 安装失败，请使用修复版启动脚本：
+如果遇到 `empyrical` 或 `TA-Lib` 安装失败，请先使用最小化依赖安装：
 
 ```bash
-# 使用修复版快速启动（推荐）
-python quick_start_fixed.py
-
-# 或使用最小化依赖
+# 使用最小化依赖
 pip install -r requirements_minimal.txt
 ```
 
@@ -470,20 +467,16 @@ pip install -r requirements_minimal.txt
 
 1. **依赖包安装失败**
    ```bash
-   # 方案1：使用修复版启动脚本
-   python quick_start_fixed.py
-   
-   # 方案2：手动安装核心依赖
+   # 方案1：手动安装核心依赖
    pip install Flask pandas numpy scikit-learn
    
-   # 方案3：使用国内镜像
+   # 方案2：使用国内镜像
    pip install -r requirements_minimal.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
    ```
 
 2. **Python版本兼容性**
    - 推荐使用 Python 3.8-3.11
    - Python 3.12 可能有部分包兼容性问题
-   - 使用修复版脚本可以自动处理
 
 3. **数据库连接失败**
    - 检查数据库配置
