@@ -10,6 +10,7 @@ def get_stocks():
         # 获取查询参数
         industry = request.args.get('industry')
         area = request.args.get('area')
+        search = request.args.get('search')
         page = int(request.args.get('page', 1))
         page_size = min(int(request.args.get('page_size', 20)), 100)
         
@@ -17,6 +18,7 @@ def get_stocks():
         result = StockService.get_stock_list(
             industry=industry,
             area=area,
+            search=search,
             page=page,
             page_size=page_size
         )
