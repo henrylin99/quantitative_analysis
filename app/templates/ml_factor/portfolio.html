@@ -166,8 +166,11 @@ function renderPortfolios() {
                     </div>
                     <div class="col-md-4 text-end">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-outline-primary" onclick="viewPortfolioDetail('${portfolio.id}')">
+                            <button class="btn btn-outline-primary" onclick="viewPortfolioDetail('${portfolio.portfolio_id}')">
                                 <i class="fas fa-eye"></i> 详情
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deletePortfolio('${portfolio.portfolio_id}')">
+                                <i class="fas fa-trash"></i> 删除
                             </button>
                         </div>
                         <div class="mt-2">
@@ -627,6 +630,26 @@ async function viewPortfolioDetail(portfolioId) {
     } catch (error) {
         console.error('加载投资组合详情失败:', error);
         alert('加载投资组合详情失败: ' + (error.response?.data?.error || error.message));
+    }
+}
+
+async function deletePortfolio(portfolioId) {
+    if (!confirm(`确定要删除投资组合吗？\n组合: ${portfolioId}\n该操作会将该组合下所有持仓标记为非活跃。`)) {
+        return;
+    }
+
+    try {
+        const response = await axios.delete(`/api/ml-factor/portfolio/${portfolioId}`);
+        if (response.data.success) {
+            alert(`投资组合删除成功: ${portfolioId}`);
+            await loadPortfolios();
+            return;
+        }
+
+        throw new Error(response.data.error || '删除投资组合失败');
+    } catch (error) {
+        console.error('删除投资组合失败:', error);
+        alert('删除投资组合失败: ' + (error.response?.data?.error || error.message));
     }
 }
 
