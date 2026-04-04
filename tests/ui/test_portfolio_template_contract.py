@@ -14,8 +14,9 @@ def test_portfolio_template_hides_fake_create_and_save_paths():
 
     assert 'data-bs-target="#createPortfolioModal"' not in html
     assert "function createPortfolio()" not in html
-    assert "function saveOptimizedPortfolio()" not in html
-    assert "保存为投资组合" not in html
+    assert "function saveOptimizedPortfolio()" in html
+    assert "保存为投资组合" in html
+    assert "/api/ml-factor/portfolio/save-optimized" in html
 
 
 def test_portfolio_template_uses_real_list_and_detail_endpoints():

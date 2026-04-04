@@ -421,6 +421,9 @@ function showOptimizationResults(data, method, riskLevel, maxStocks, responseDat
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                        <button type="button" class="btn btn-success" onclick="saveOptimizedPortfolio()">
+                            <i class="fas fa-save"></i> 保存为投资组合
+                        </button>
                         <button type="button" class="btn btn-primary" onclick="exportOptimizationResults()">
                             <i class="fas fa-download"></i> 导出结果
                         </button>
@@ -501,6 +504,42 @@ function calculateWeightStd(weights) {
 function calculateEffectiveStocks(weights) {
     const sumSquaredWeights = Object.values(weights).reduce((sum, w) => sum + w * w, 0);
     return 1 / sumSquaredWeights;
+}
+
+async function saveOptimizedPortfolio() {
+    if (!window.currentOptimizationResult) {
+        alert('没有优化结果可保存');
+        return;
+    }
+
+    const portfolioId = prompt(
+        '请输入投资组合ID:',
+        `portfolio_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`
+    );
+
+    if (!portfolioId) {
+        return;
+    }
+
+    try {
+        const response = await axios.post('/api/ml-factor/portfolio/save-optimized', {
+            portfolio_id: portfolioId,
+            total_capital: 1000000,
+            weights: window.currentOptimizationResult.weights,
+        });
+
+        if (response.data.success) {
+            alert(`投资组合保存成功: ${portfolioId}`);
+            bootstrap.Modal.getInstance(document.getElementById('optimizationResultModal')).hide();
+            await loadPortfolios();
+            return;
+        }
+
+        throw new Error(response.data.error || '保存投资组合失败');
+    } catch (error) {
+        console.error('保存投资组合失败:', error);
+        alert('保存投资组合失败: ' + (error.response?.data?.error || error.message));
+    }
 }
 
 // 导出优化结果

@@ -12,6 +12,7 @@ from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
 from app.services.model_training_job_service import ModelTrainingJobService
 from app.models.portfolio_position import PortfolioPosition
+from app.models.stock_daily_history import StockDailyHistory
 
 # 创建蓝图
 ml_factor_bp = Blueprint('ml_factor', __name__, url_prefix='/api/ml-factor')
@@ -910,6 +911,66 @@ def delete_portfolio(portfolio_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"删除投资组合失败: {portfolio_id}, 错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/save-optimized', methods=['POST'])
+def save_optimized_portfolio():
+    """将优化结果保存为真实组合持仓"""
+    try:
+        data = request.get_json()
+        portfolio_id = data.get('portfolio_id')
+        total_capital = float(data.get('total_capital', 0))
+        weights = data.get('weights') or {}
+
+        if not portfolio_id:
+            return jsonify({'error': '缺少必需参数: portfolio_id'}), 400
+        if total_capital <= 0:
+            return jsonify({'error': 'total_capital必须大于0'}), 400
+        if not weights:
+            return jsonify({'error': '缺少必需参数: weights'}), 400
+
+        existing = PortfolioPosition.query.filter_by(
+            portfolio_id=portfolio_id,
+            is_active=True
+        ).first()
+        if existing:
+            return jsonify({'error': f'投资组合已存在: {portfolio_id}'}), 400
+
+        created_count = 0
+        for ts_code, weight in weights.items():
+            allocation = total_capital * float(weight)
+            latest_price = StockDailyHistory.query.filter(
+                StockDailyHistory.ts_code == ts_code
+            ).order_by(StockDailyHistory.trade_date.desc()).first()
+
+            close_price = float(latest_price.close) if latest_price and latest_price.close else 1.0
+            position_size = allocation / close_price if close_price > 0 else 0
+
+            position = PortfolioPosition(
+                portfolio_id=portfolio_id,
+                ts_code=ts_code,
+                position_size=position_size,
+                avg_cost=close_price,
+                current_price=close_price,
+                market_value=allocation,
+                unrealized_pnl=0.0,
+                weight=float(weight) * 100,
+            )
+            db.session.add(position)
+            created_count += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'portfolio_id': portfolio_id,
+            'created_count': created_count,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"保存优化组合失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
