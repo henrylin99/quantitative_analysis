@@ -6,13 +6,39 @@ from app.services.data_jobs.registry import JobRegistry
 from app.services.data_jobs.state_store import DataJobStateStore
 from app.tasks.data_jobs_tasks import run_data_job
 
+try:
+    from flask import current_app
+except Exception:  # pragma: no cover
+    current_app = None
+
+
+def _resolve_execution_mode(explicit_mode: Optional[str] = None) -> str:
+    if explicit_mode:
+        return explicit_mode
+
+    try:
+        if current_app:
+            mode = current_app.config.get("DATA_JOB_EXECUTION_MODE")
+            if mode:
+                return str(mode).lower()
+    except Exception:
+        pass
+
+    return "celery"
+
 
 class DataJobService:
     """Facade for data job submission and querying."""
 
-    def __init__(self, registry: Optional[JobRegistry] = None, state_store: Optional[DataJobStateStore] = None):
+    def __init__(
+        self,
+        registry: Optional[JobRegistry] = None,
+        state_store: Optional[DataJobStateStore] = None,
+        execution_mode: Optional[str] = None,
+    ):
         self.registry = registry or JobRegistry()
         self.state_store = state_store or DataJobStateStore(db.session)
+        self.execution_mode = _resolve_execution_mode(execution_mode)
 
     def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None) -> DataJobRun:
         self.registry.get_job(job_type)
@@ -25,6 +51,16 @@ class DataJobService:
 
         run = self.state_store.create_run(job_type, params)
         run = self.state_store.update_run_status(run, "queued", progress=0.0)
+
+        if self.execution_mode == "inline":
+            run_data_job(run.id)
+            refreshed = getattr(self.state_store, "get_run", None)
+            if callable(refreshed):
+                latest = refreshed(run.id)
+                if latest is not None:
+                    return latest
+            return run
+
         run_data_job.delay(run.id)
         return run
 

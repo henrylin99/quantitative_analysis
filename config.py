@@ -80,10 +80,12 @@ class Config:
 class DevelopmentConfig(Config):
     """开发环境配置"""
     DEBUG = True
+    DATA_JOB_EXECUTION_MODE = os.getenv('DATA_JOB_EXECUTION_MODE', 'inline')
 
 class ProductionConfig(Config):
     """生产环境配置"""
     DEBUG = False
+    DATA_JOB_EXECUTION_MODE = os.getenv('DATA_JOB_EXECUTION_MODE', 'celery')
 
 # 配置字典
 config = {

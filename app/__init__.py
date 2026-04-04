@@ -1,3 +1,7 @@
+from runtime_compat import ensure_click_parameter_source
+
+ensure_click_parameter_source()
+
 from flask import Flask
 from flask_cors import CORS
 from config import config
