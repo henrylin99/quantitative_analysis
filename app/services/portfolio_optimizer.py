@@ -13,6 +13,7 @@ from app.models import StockDailyHistory, FactorValues
 
 class PortfolioOptimizer:
     """组合优化器"""
+    UNSUPPORTED_CONSTRAINT_KEYS = {"industry_constraints"}
     
     def __init__(self):
         self.optimization_methods = {
@@ -31,6 +32,15 @@ class PortfolioOptimizer:
         try:
             if expected_returns.empty:
                 return {'error': '预期收益率数据为空'}
+
+            constraints = constraints or {}
+            unsupported_constraints = sorted(
+                key for key in constraints.keys() if key in self.UNSUPPORTED_CONSTRAINT_KEYS
+            )
+            if unsupported_constraints:
+                return {
+                    'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
+                }
             
             # 获取风险模型
             if risk_model is None:
@@ -400,11 +410,6 @@ class PortfolioOptimizer:
             if 'min_weight' in constraints:
                 min_weight = constraints['min_weight']
                 weights = weights.clip(lower=min_weight)
-            
-            # 行业约束
-            if 'industry_constraints' in constraints:
-                # TODO: 实现行业约束
-                pass
             
             # 个股集中度约束
             if 'max_concentration' in constraints:
