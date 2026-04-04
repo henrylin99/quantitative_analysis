@@ -28,6 +28,11 @@ def test_text2sql_guide_avoids_complete_platform_claims():
     guide = Path("docs/guides/Text2SQL功能列表.md").read_text(encoding="utf-8")
 
     assert "当前仅说明 Text2SQL 模块自身的实现状态，不代表整个仓库已达到完整交付状态。" in guide
+    assert "查询处理：整合当前 NLP 与 SQL 生成链路" in guide
+    assert "查询建议：提供当前可用的查询建议入口" in guide
+    assert "当前 Web 界面与交互入口" in guide
     assert "功能开发完成" not in guide
     assert "完全集成" not in guide
     assert "功能完整的智能查询系统" not in guide
+    assert "完整查询流程" not in guide
+    assert "完整的Web界面" not in guide
