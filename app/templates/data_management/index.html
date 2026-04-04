@@ -43,6 +43,15 @@
             font-family: 'Courier New', monospace;
             font-size: 12px;
         }
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -56,7 +65,30 @@
         </div>
 
         <div class="row mb-4">
-            <div class="col-lg-7">
+            <div class="col-lg-4">
+                <div class="card h-100" id="dataInitializationPanel">
+                    <div class="card-header">
+                        <h5><i class="fas fa-heartbeat"></i> 初始化状态</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="statusSummaryBadge" class="status-chip {% if initialization_status.database.ok %}bg-success text-white{% else %}bg-warning text-dark{% endif %} mb-3">
+                            {% if initialization_status.database.ok %}基础状态正常{% else %}需要初始化{% endif %}
+                        </div>
+                        <div class="small mb-2"><strong>数据库连接：</strong><span id="statusDatabaseConnected">{% if initialization_status.database.connected %}正常{% else %}失败{% endif %}</span></div>
+                        <div class="small mb-2"><strong>缺失关键表：</strong><span id="statusMissingTables">{% if initialization_status.database.missing_tables %}{{ initialization_status.database.missing_tables|join(', ') }}{% else %}无{% endif %}</span></div>
+                        <div class="small mb-3"><strong>空表：</strong><span id="statusEmptyTables">{% if initialization_status.database.empty_tables %}{{ initialization_status.database.empty_tables|join(', ') }}{% else %}无{% endif %}</span></div>
+                        <div class="small text-muted mb-2">推荐下一步</div>
+                        <ul id="statusNextActions" class="small mb-0 ps-3">
+                            {% for action in initialization_status.database.next_actions %}
+                            <li>{{ action }}</li>
+                            {% else %}
+                            <li>暂无建议</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
                 <div class="card h-100">
                     <div class="card-header">
                         <h5><i class="fas fa-list-ol"></i> 推荐初始化顺序</h5>
@@ -95,7 +127,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-lg-5">
+            <div class="col-lg-4">
                 <div class="card h-100">
                     <div class="card-header">
                         <h5><i class="fas fa-info-circle"></i> 当前任务说明</h5>
@@ -432,6 +464,7 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script id="dataInitializationStatusPayload" type="application/json">{{ initialization_status|tojson }}</script>
     <script src="{{ url_for('static', filename='js/data_jobs.js') }}"></script>
     
     <script>
