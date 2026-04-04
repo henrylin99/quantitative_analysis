@@ -24,6 +24,7 @@ training_job_service = None
 
 SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
 SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral"}
+UNSUPPORTED_PORTFOLIO_CONSTRAINTS = {"industry_constraints"}
 
 # JSON序列化辅助函数
 def convert_numpy_types(obj):
@@ -767,6 +768,14 @@ def optimize_portfolio():
                 'error': f"不支持的优化方法: {method}",
                 'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
             }), 400
+
+        unsupported_constraints = sorted(
+            key for key in (constraints or {}).keys() if key in UNSUPPORTED_PORTFOLIO_CONSTRAINTS
+        )
+        if unsupported_constraints:
+            return jsonify({
+                'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
+            }), 400
         
         # 转换风险模型
         risk_model_df = None
@@ -853,6 +862,14 @@ def integrated_portfolio_selection():
             return jsonify({
                 'error': f"不支持的优化方法: {optimization_method}",
                 'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
+            }), 400
+
+        unsupported_constraints = sorted(
+            key for key in (constraints or {}).keys() if key in UNSUPPORTED_PORTFOLIO_CONSTRAINTS
+        )
+        if unsupported_constraints:
+            return jsonify({
+                'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
             }), 400
         
         # 步骤1: 股票选择

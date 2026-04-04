@@ -39,3 +39,25 @@ def test_factor_neutral_weights_control_exposure():
     weights = result["weights"]
     portfolio_exposure = sum(weights[code] * exposures.loc[code, "value"] for code in weights)
     assert abs(portfolio_exposure) <= 1e-3 + 1e-6
+
+
+def test_optimize_portfolio_rejects_unsupported_industry_constraints():
+    optimizer = PortfolioOptimizer()
+    expected_returns = pd.Series({"A": 0.10, "B": 0.08})
+    risk_model = pd.DataFrame(
+        [[0.1, 0.0], [0.0, 0.1]],
+        index=["A", "B"],
+        columns=["A", "B"],
+    )
+
+    result = optimizer.optimize_portfolio(
+        expected_returns,
+        risk_model=risk_model,
+        method="equal_weight",
+        constraints={
+            "industry_constraints": {"银行": {"max_weight": 0.3}}
+        },
+    )
+
+    assert "error" in result
+    assert "industry_constraints" in result["error"]
