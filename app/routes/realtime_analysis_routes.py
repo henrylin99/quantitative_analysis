@@ -39,12 +39,30 @@ def risk():
     """风险管理页面"""
     return render_template('realtime_analysis/risk_management.html')
 
+
+@realtime_analysis_routes.route('/risk-management')
+def risk_management_legacy():
+    """旧版风险管理页面入口，跳转到规范路径。"""
+    return redirect(url_for('realtime_analysis_routes.risk'))
+
 @realtime_analysis_routes.route('/reports')
 def reports():
     """分析报告中心页面"""
     return render_template('realtime_analysis/report_management.html')
 
+
+@realtime_analysis_routes.route('/report-management')
+def report_management_legacy():
+    """旧版报告页面入口，跳转到规范路径。"""
+    return redirect(url_for('realtime_analysis_routes.reports'))
+
 @realtime_analysis_routes.route('/websocket')
 def websocket():
     """WebSocket管理页面"""
-    return render_template('realtime_analysis/websocket_management.html') 
+    return render_template('realtime_analysis/websocket_management.html')
+
+
+@realtime_analysis_routes.route('/websocket-management')
+def websocket_management_legacy():
+    """旧版 WebSocket 页面入口，跳转到规范路径。"""
+    return redirect(url_for('realtime_analysis_routes.websocket'))
