@@ -456,7 +456,7 @@ python run_system.py
 
 ### ⚠️ 依赖包兼容性问题
 
-如果遇到 `empyrical` 或 `TA-Lib` 安装失败，请先使用最小化依赖安装：
+如果遇到 `empyrical` 或 `TA-Lib` 安装失败，请优先安装标准依赖；若本地环境仍有兼容性问题，再退回最小依赖安装：
 
 ```bash
 # 使用最小化依赖
@@ -467,10 +467,10 @@ pip install -r requirements_minimal.txt
 
 1. **依赖包安装失败**
    ```bash
-   # 方案1：手动安装核心依赖
-   pip install Flask pandas numpy scikit-learn
+   # 方案1：安装标准依赖
+   pip install -r requirements.txt
    
-   # 方案2：使用国内镜像
+   # 方案2：使用国内镜像安装最小依赖
    pip install -r requirements_minimal.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
    ```
 
