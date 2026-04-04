@@ -467,6 +467,9 @@ function renderModels() {
                                 <button class="btn btn-sm btn-outline-primary" onclick="predictModel('${model.model_id}')">
                                     <i class="fas fa-chart-line"></i> 预测
                                 </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.model_id}')">
+                                    <i class="fas fa-trash"></i> 删除
+                                </button>
                             </td>
                         </tr>
                     `).join('')}
@@ -630,6 +633,30 @@ async function trainModel(modelId) {
     
     // 显示训练进度模态框
     showTrainingModal(model);
+}
+
+async function deleteModel(modelId) {
+    const model = allModels.find(item => item.model_id === modelId);
+    const modelName = model ? model.model_name : modelId;
+
+    if (!confirm(`确定要删除模型吗？\n模型: ${modelName}\n该操作会同时删除模型定义、预测结果和本地模型文件。`)) {
+        return;
+    }
+
+    try {
+        const response = await axios.delete(`/api/ml-factor/models/${modelId}`);
+        if (response.data.success) {
+            alert(`模型删除成功: ${modelName}`);
+            await loadModels();
+            return;
+        }
+
+        throw new Error(response.data.error || '删除模型失败');
+    } catch (error) {
+        console.error('删除模型失败:', error);
+        const message = error.response?.data?.error || error.message;
+        alert('删除模型失败: ' + message);
+    }
 }
 
 // 显示训练模态框
