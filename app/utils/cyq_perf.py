@@ -111,7 +111,7 @@ def main():
             conn.commit()
             total_saved += saved
             print(f"成功处理 {trade_date} 的数据，共 {saved} 条记录")
-            time.sleep(0.05)
+            time.sleep(12.5)
 
         print(
             f"[cyq_perf] 完成，start={trade_dates[0]}, end={trade_dates[-1]}, "
