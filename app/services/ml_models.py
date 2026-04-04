@@ -259,40 +259,6 @@ class MLModelManager:
             logger.error(f"计算目标变量失败: {e}")
             return pd.DataFrame(columns=['ts_code', 'trade_date', 'target'])
     
-    def _generate_simulated_targets(self, feature_df: pd.DataFrame) -> pd.DataFrame:
-        """生成基于特征的模拟目标变量"""
-        try:
-            np.random.seed(42)  # 确保可重复性
-            
-            target_data = []
-            
-            for _, row in feature_df.iterrows():
-                # 基于特征值生成合理的模拟收益率
-                # 这里使用简单的线性组合 + 随机噪声
-                base_return = np.random.normal(0.001, 0.02)  # 基础收益率
-                
-                # 添加一些基于日期的趋势（模拟市场周期）
-                date_factor = hash(str(row['trade_date'])) % 100 / 1000
-                
-                # 添加基于股票的个体效应
-                stock_factor = hash(row['ts_code']) % 100 / 2000
-                
-                simulated_return = base_return + date_factor + stock_factor
-                
-                target_data.append({
-                    'ts_code': row['ts_code'],
-                    'trade_date': row['trade_date'],
-                    'target': simulated_return
-                })
-            
-            target_df = pd.DataFrame(target_data)
-            logger.info(f"生成模拟目标变量: {len(target_df)} 条记录")
-            return target_df
-            
-        except Exception as e:
-            logger.error(f"生成模拟目标变量失败: {e}")
-            return pd.DataFrame()
-    
     def train_model(self, model_id: str, start_date: str, end_date: str, progress_callback=None) -> Dict[str, Any]:
         """训练模型"""
         try:
