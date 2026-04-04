@@ -61,3 +61,23 @@ def test_optimize_portfolio_rejects_unsupported_industry_constraints():
 
     assert "error" in result
     assert "industry_constraints" in result["error"]
+
+
+def test_factor_neutral_requires_valid_factor_exposures():
+    optimizer = PortfolioOptimizer()
+    expected_returns = pd.Series({"A": 0.10, "B": 0.08})
+    risk_model = pd.DataFrame(
+        [[0.1, 0.0], [0.0, 0.1]],
+        index=["A", "B"],
+        columns=["A", "B"],
+    )
+
+    result = optimizer.optimize_portfolio(
+        expected_returns,
+        risk_model=risk_model,
+        method="factor_neutral",
+        constraints={},
+    )
+
+    assert "error" in result
+    assert "factor_exposures" in result["error"]
