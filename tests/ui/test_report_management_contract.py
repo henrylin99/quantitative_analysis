@@ -14,3 +14,10 @@ def test_report_management_template_hides_todo_sections():
     assert "function loadStatistics()" not in html
     assert "function createTemplate()" not in html
     assert "function createSubscription()" not in html
+
+
+def test_report_management_template_describes_only_available_scope():
+    html = Path("app/templates/realtime_analysis/report_management.html").read_text(encoding="utf-8")
+
+    assert "管理分析报告、模板和订阅" not in html
+    assert "当前页面仅开放报告列表与报告生成能力" in html
