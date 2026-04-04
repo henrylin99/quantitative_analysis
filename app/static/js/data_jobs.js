@@ -10,6 +10,19 @@
         box.textContent = message;
     }
 
+    function readInitializationStatus() {
+        const node = document.getElementById("dataInitializationStatusPayload");
+        if (!node || !node.textContent) {
+            return null;
+        }
+        try {
+            return JSON.parse(node.textContent);
+        } catch (error) {
+            console.error("解析初始化状态失败:", error);
+            return null;
+        }
+    }
+
     function formatTime(text) {
         if (!text) return "-";
         try {
@@ -209,6 +222,50 @@
             : "无";
     }
 
+    function renderInitializationStatus(report) {
+        const badge = document.getElementById("statusSummaryBadge");
+        const connected = document.getElementById("statusDatabaseConnected");
+        const missing = document.getElementById("statusMissingTables");
+        const empty = document.getElementById("statusEmptyTables");
+        const nextActions = document.getElementById("statusNextActions");
+
+        if (!badge || !connected || !missing || !empty || !nextActions) {
+            return;
+        }
+
+        if (!report || !report.database) {
+            badge.className = "status-chip bg-light text-dark mb-3";
+            badge.textContent = "状态不可用";
+            connected.textContent = "-";
+            missing.textContent = "-";
+            empty.textContent = "-";
+            nextActions.innerHTML = "<li>未获取到初始化状态。</li>";
+            return;
+        }
+
+        const database = report.database;
+        const ok = Boolean(database.ok);
+        const connectedText = database.connected ? "正常" : "失败";
+        const missingTables = Array.isArray(database.missing_tables) && database.missing_tables.length > 0
+            ? database.missing_tables.join(", ")
+            : "无";
+        const emptyTables = Array.isArray(database.empty_tables) && database.empty_tables.length > 0
+            ? database.empty_tables.join(", ")
+            : "无";
+        const actions = Array.isArray(database.next_actions) && database.next_actions.length > 0
+            ? database.next_actions
+            : ["暂无建议"];
+
+        badge.className = ok
+            ? "status-chip bg-success text-white mb-3"
+            : "status-chip bg-warning text-dark mb-3";
+        badge.textContent = ok ? "基础状态正常" : "需要初始化";
+        connected.textContent = connectedText;
+        missing.textContent = missingTables;
+        empty.textContent = emptyTables;
+        nextActions.innerHTML = actions.map((action) => `<li>${action}</li>`).join("");
+    }
+
     function bindRecommendedJobButtons() {
         const buttons = document.querySelectorAll("[data-recommended-job]");
         const select = document.getElementById("jobTypeSelect");
@@ -293,6 +350,7 @@
         }
 
         bindRecommendedJobButtons();
+        renderInitializationStatus(readInitializationStatus());
         updateProgressView(null);
         loadJobTypes();
         loadRunHistory();
