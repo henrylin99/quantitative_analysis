@@ -23,3 +23,15 @@ def test_system_manager_health_summary_marks_database_ok_when_core_tables_exist(
     )
 
     assert report["database"]["ok"] is True
+
+
+def test_system_manager_health_summary_reports_empty_tables():
+    manager = SystemManager()
+
+    report = manager.build_health_summary(
+        connected=True,
+        existing_tables={"data_job_run", "stock_basic", "stock_trade_calendar"},
+        non_empty_tables={"data_job_run"},
+    )
+
+    assert report["database"]["empty_tables"] == ["stock_basic", "stock_trade_calendar"]

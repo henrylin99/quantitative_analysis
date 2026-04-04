@@ -18,6 +18,9 @@ class JobDefinition:
     job_type: str
     group: str
     script_path: str
+    display_name: str = ""
+    description: str = ""
     dangerous: bool = False
     dependencies: List[str] = field(default_factory=list)
     default_params: Dict[str, Any] = field(default_factory=dict)
+    recommended_order: int = 999
