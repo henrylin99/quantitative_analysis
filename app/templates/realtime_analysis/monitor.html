@@ -81,7 +81,7 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2><i class="bi bi-speedometer2"></i> 实时监控面板</h2>
-                        <p class="text-muted mb-0">当前提供监控数据查看入口，实际展示内容以页面返回结果为准</p>
+                        <p class="text-muted mb-0">当前页面基于已入库的 Baostock 分钟数据进行展示。</p>
                     </div>
                     <div>
                         <button class="btn btn-primary" onclick="refreshAllData()">
@@ -120,9 +120,9 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-bar-chart-line"></i> 实时行情</h5>
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary" onclick="loadQuotes('1min')">1分钟</button>
                             <button class="btn btn-outline-primary" onclick="loadQuotes('5min')">5分钟</button>
                             <button class="btn btn-outline-primary" onclick="loadQuotes('15min')">15分钟</button>
+                            <button class="btn btn-outline-primary" onclick="loadQuotes('30min')">30分钟</button>
                         </div>
                     </div>
                     <div class="card-body position-relative">
