@@ -51,7 +51,7 @@
         <div class="row mb-4">
             <div class="col-12">
                 <h2><i class="fas fa-chart-line text-primary"></i> 实时交易分析</h2>
-                <p class="text-muted">当前页面展示实时分析相关入口，部分能力仍在整改或未开放。</p>
+                <p class="text-muted">当前页面以 Baostock 分钟数据接入、聚合与衍生分析入口为主。</p>
             </div>
         </div>
 
@@ -151,7 +151,6 @@
                                         <div class="col-md-6">
                                             <label for="syncPeriodType" class="form-label">周期类型</label>
                                             <select class="form-select" id="syncPeriodType">
-                                                <option value="1min">1分钟</option>
                                                 <option value="5min">5分钟</option>
                                                 <option value="15min">15分钟</option>
                                                 <option value="30min">30分钟</option>
@@ -161,9 +160,9 @@
                                         <div class="col-md-6">
                                             <label for="syncDataSource" class="form-label">数据源</label>
                                             <select class="form-select" id="syncDataSource">
-                                                <option value="baostock">Baostock (推荐)</option>
-                                                <option value="tushare">Tushare</option>
+                                                <option value="baostock">Baostock</option>
                                             </select>
+                                            <div class="form-text">当前仅开放 Baostock 分钟数据接入。</div>
                                         </div>
                                     </div>
                                     <div class="row mb-3">
@@ -180,7 +179,7 @@
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" id="syncAllPeriods">
                                             <label class="form-check-label" for="syncAllPeriods">
-                                                同步所有周期数据 (1min, 5min, 15min, 30min, 60min)
+                                                同步所有周期数据 (5min, 15min, 30min, 60min)
                                             </label>
                                         </div>
                                     </div>
@@ -240,7 +239,6 @@
                                         <div class="col-md-6">
                                             <label for="sourcePeriod" class="form-label">源周期</label>
                                             <select class="form-select" id="sourcePeriod">
-                                                <option value="1min">1分钟</option>
                                                 <option value="5min">5分钟</option>
                                                 <option value="15min">15分钟</option>
                                                 <option value="30min">30分钟</option>
@@ -284,7 +282,6 @@
                                         <div class="col-md-3">
                                             <label for="qualityPeriod" class="form-label">周期</label>
                                             <select class="form-select" id="qualityPeriod">
-                                                <option value="1min">1分钟</option>
                                                 <option value="5min">5分钟</option>
                                                 <option value="15min">15分钟</option>
                                                 <option value="30min">30分钟</option>
@@ -904,9 +901,8 @@
             const container = document.getElementById('periodStats');
             let html = '';
             
-            const periods = ['1min', '5min', '15min', '30min', '60min'];
+            const periods = ['5min', '15min', '30min', '60min'];
             const periodNames = {
-                '1min': '1分钟',
                 '5min': '5分钟',
                 '15min': '15分钟',
                 '30min': '30分钟',
@@ -1331,7 +1327,6 @@
                             <div class="col-md-6">
                                 <label for="batchPeriodType" class="form-label">周期类型</label>
                                 <select class="form-select" id="batchPeriodType">
-                                    <option value="1min">1分钟</option>
                                     <option value="5min">5分钟</option>
                                     <option value="15min">15分钟</option>
                                     <option value="30min">30分钟</option>
@@ -1341,9 +1336,9 @@
                             <div class="col-md-6">
                                 <label for="batchDataSource" class="form-label">数据源</label>
                                 <select class="form-select" id="batchDataSource">
-                                    <option value="baostock">Baostock (推荐)</option>
-                                    <option value="tushare">Tushare</option>
+                                    <option value="baostock">Baostock</option>
                                 </select>
+                                <div class="form-text">当前仅开放 Baostock 分钟数据接入。</div>
                             </div>
                         </div>
                         <div class="row mb-3">

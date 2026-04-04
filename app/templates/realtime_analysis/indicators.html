@@ -64,7 +64,7 @@
                         </h4>
                     </div>
                     <div class="card-body">
-                        <p class="mb-0">当前提供技术指标计算与查看入口，结果以当前数据和页面返回为准</p>
+                        <p class="mb-0">当前页面基于已入库的 Baostock 分钟数据计算指标。</p>
                     </div>
                 </div>
             </div>
@@ -121,7 +121,6 @@
                                     <div class="mb-3">
                                         <label for="periodType" class="form-label">周期类型</label>
                                         <select class="form-select" id="periodType">
-                                            <option value="1min">1分钟</option>
                                             <option value="5min" selected>5分钟</option>
                                             <option value="15min">15分钟</option>
                                             <option value="30min">30分钟</option>
@@ -201,10 +200,6 @@
                                     <div class="mb-3">
                                         <label class="form-label">选择周期</label>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="1min" id="period1min" checked>
-                                            <label class="form-check-label" for="period1min">1分钟</label>
-                                        </div>
-                                        <div class="form-check">
                                             <input class="form-check-input" type="checkbox" value="5min" id="period5min" checked>
                                             <label class="form-check-label" for="period5min">5分钟</label>
                                         </div>
@@ -276,7 +271,6 @@
                                     <div class="mb-3">
                                         <label for="comparePeriod" class="form-label">周期类型</label>
                                         <select class="form-select" id="comparePeriod">
-                                            <option value="1min">1分钟</option>
                                             <option value="5min" selected>5分钟</option>
                                             <option value="15min">15分钟</option>
                                             <option value="30min">30分钟</option>

@@ -18,5 +18,5 @@ def test_realtime_analysis_template_marks_news_push_as_unavailable():
 def test_realtime_analysis_template_marks_page_scope_as_partial():
     html = Path("app/templates/realtime_analysis/index.html").read_text(encoding="utf-8")
 
-    assert "当前页面展示实时分析相关入口，部分能力仍在整改或未开放。" in html
+    assert "当前页面以 Baostock 分钟数据接入、聚合与衍生分析入口为主。" in html
     assert "实时数据管理、技术指标分析、交易信号生成和风险监控" not in html
