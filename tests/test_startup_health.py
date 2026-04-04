@@ -37,3 +37,4 @@ def test_build_health_report_marks_empty_core_tables():
     )
 
     assert report["database"]["empty_tables"] == ["stock_basic", "stock_trade_calendar"]
+    assert "优先执行交易日历和股票基础资料下载任务" in report["database"]["next_actions"][0]

@@ -209,6 +209,26 @@
             : "无";
     }
 
+    function bindRecommendedJobButtons() {
+        const buttons = document.querySelectorAll("[data-recommended-job]");
+        const select = document.getElementById("jobTypeSelect");
+
+        if (!select || buttons.length === 0) {
+            return;
+        }
+
+        buttons.forEach((button) => {
+            button.addEventListener("click", function () {
+                const jobType = this.getAttribute("data-recommended-job");
+                if (!jobType) {
+                    return;
+                }
+                select.value = jobType;
+                updateSelectedJobMeta(jobType);
+            });
+        });
+    }
+
     async function submitDataJob() {
         const select = document.getElementById("jobTypeSelect");
         const startDate = document.getElementById("jobStartDate")?.value;
@@ -272,6 +292,7 @@
             });
         }
 
+        bindRecommendedJobButtons();
         updateProgressView(null);
         loadJobTypes();
         loadRunHistory();
