@@ -31,7 +31,7 @@
     color: white;
     border-radius: 10px;
     padding: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 .metric-value {
     font-size: 2rem;
@@ -64,6 +64,12 @@
 #main-chart, #indicator-chart {
     width: 100%;
     height: 400px;
+}
+
+@media (min-width: 992px) {
+    #metrics-section .metric-card {
+        margin-bottom: 0;
+    }
 }
 </style>
 {% endblock %}
@@ -130,25 +136,25 @@
 
     <!-- 关键指标 -->
     <div id="metrics-section" class="row mb-4" style="display: none;">
-        <div class="col-md-3">
+        <div class="col-lg-3 col-md-6">
             <div class="metric-card text-center">
                 <div class="metric-value" id="current-price">--</div>
                 <div class="metric-label">当前价格</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-lg-3 col-md-6">
             <div class="metric-card text-center">
                 <div class="metric-value" id="price-change">--</div>
                 <div class="metric-label">涨跌幅</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-lg-3 col-md-6">
             <div class="metric-card text-center">
                 <div class="metric-value" id="volume">--</div>
                 <div class="metric-label">成交量</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-lg-3 col-md-6">
             <div class="metric-card text-center">
                 <div class="metric-value" id="turnover">--</div>
                 <div class="metric-label">成交额</div>
