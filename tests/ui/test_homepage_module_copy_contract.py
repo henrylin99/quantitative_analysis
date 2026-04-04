@@ -15,3 +15,13 @@ def test_homepage_banner_and_query_card_avoid_platform_level_claims():
     assert "自然语言转 SQL 查询入口，结果以当前数据库与规则为准" in html
     assert "专业股票分析平台" not in html
     assert "AI助手" not in html
+
+
+def test_homepage_feature_cards_use_current_scope_copy():
+    html = Path("app/templates/index.html").read_text(encoding="utf-8")
+
+    assert "数据更新状态以后端实际刷新结果为准" in html
+    assert "已接通的基本面、技术面、资金面与筹码面入口" in html
+    assert "按当前筛选条件收敛候选股票范围" in html
+    assert "全方位分析" not in html
+    assert "快速发现投资机会" not in html
