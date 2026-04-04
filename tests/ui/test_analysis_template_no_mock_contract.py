@@ -22,3 +22,12 @@ def test_analysis_template_marks_report_scope_as_limited():
 
     assert "当前页面展示基于真实返回结果的分析视图，报告生成与导出能力仍较基础。" in html
     assert "<h1>📊 分析报告</h1>" not in html
+
+
+def test_analysis_template_uses_neutral_best_metric_copy():
+    html = Path("app/templates/ml_factor/analysis.html").read_text(encoding="utf-8")
+
+    assert "当前最高模型R²" in html
+    assert "当前最高模型 R²" in html
+    assert "最佳模型R²" not in html
+    assert "最佳模型 R²" not in html
