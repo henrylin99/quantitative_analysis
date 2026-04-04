@@ -41,6 +41,16 @@ class PortfolioOptimizer:
                 return {
                     'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
                 }
+
+            if method == 'factor_neutral':
+                exposure_matrix = self._build_factor_exposure_matrix(
+                    expected_returns.index.tolist(),
+                    constraints.get('factor_exposures')
+                )
+                if exposure_matrix is None or exposure_matrix.empty:
+                    return {
+                        'error': 'factor_neutral优化需要有效的factor_exposures约束'
+                    }
             
             # 获取风险模型
             if risk_model is None:
@@ -219,8 +229,7 @@ class PortfolioOptimizer:
             factor_exposures = constraints.get('factor_exposures')
             exposure_matrix = self._build_factor_exposure_matrix(expected_returns.index.tolist(), factor_exposures)
             if exposure_matrix is None or exposure_matrix.empty:
-                logger.warning("未提供有效因子暴露矩阵，回退至均值-方差优化")
-                return self._mean_variance_optimization(expected_returns, risk_model, constraints)
+                raise ValueError("factor_neutral优化需要有效的factor_exposures约束")
 
             aligned_risk = risk_model.reindex(
                 index=expected_returns.index,
