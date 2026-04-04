@@ -5,7 +5,6 @@
 """
 
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
@@ -24,6 +23,9 @@ except ImportError:
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+LEGACY_REALTIME_SYNC_DISABLED_MESSAGE = 'legacy分钟数据同步已禁用，请使用真实数据源'
 
 
 class RealtimeDataManager:
@@ -82,7 +84,6 @@ class RealtimeDataManager:
                     )
                 return result
             else:
-                # 使用原有的模拟数据或Tushare数据源
                 return self._sync_minute_data_legacy(ts_code, start_date, end_date, period_type)
             
         except Exception as e:
@@ -111,6 +112,18 @@ class RealtimeDataManager:
             同步结果字典
         """
         try:
+            if not use_baostock:
+                logger.warning("批量分钟数据legacy同步已禁用")
+                return {
+                    'success': False,
+                    'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
+                    'total_stocks': len(stock_list),
+                    'success_stocks': 0,
+                    'failed_stocks': len(stock_list),
+                    'total_data_count': 0,
+                    'period_type': period_type
+                }
+
             if use_baostock:
                 # 使用Baostock数据源
                 with self.minute_sync_service as sync_service:
@@ -118,30 +131,6 @@ class RealtimeDataManager:
                         stock_list, period_type, start_date, end_date, batch_size
                     )
                 return result
-            else:
-                # 使用原有方式逐个同步
-                total_stocks = len(stock_list)
-                success_stocks = 0
-                failed_stocks = 0
-                total_data_count = 0
-                
-                for ts_code in stock_list:
-                    result = self.sync_minute_data(ts_code, start_date, end_date, period_type, False)
-                    if result['success']:
-                        success_stocks += 1
-                        total_data_count += result.get('data_count', 0)
-                    else:
-                        failed_stocks += 1
-                
-                return {
-                    'success': True,
-                    'message': '批量同步完成',
-                    'total_stocks': total_stocks,
-                    'success_stocks': success_stocks,
-                    'failed_stocks': failed_stocks,
-                    'total_data_count': total_data_count,
-                    'period_type': period_type
-                }
                 
         except Exception as e:
             logger.error(f"批量同步异常: {e}")
@@ -168,20 +157,19 @@ class RealtimeDataManager:
             同步结果字典
         """
         try:
+            if not use_baostock:
+                logger.warning("全周期分钟数据legacy同步已禁用")
+                return {
+                    'success': False,
+                    'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
+                    'ts_code': ts_code,
+                    'period_types': ['1min', '5min', '15min', '30min', '60min']
+                }
+
             if use_baostock:
                 with self.minute_sync_service as sync_service:
                     result = sync_service.sync_all_periods_for_stock(ts_code, start_date, end_date)
                 return result
-            else:
-                # 使用原有方式
-                results = {}
-                period_types = ['1min', '5min', '15min', '30min', '60min']
-                
-                for period_type in period_types:
-                    result = self.sync_minute_data(ts_code, start_date, end_date, period_type, False)
-                    results[period_type] = result
-                
-                return results
                 
         except Exception as e:
             logger.error(f"同步所有周期数据异常: {e}")
@@ -202,99 +190,13 @@ class RealtimeDataManager:
         logger.warning("legacy 分钟数据同步已禁用，避免写入模拟行情数据")
         return {
             'success': False,
-            'message': 'legacy分钟数据同步已禁用，请使用真实数据源',
+            'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
             'data_count': 0,
             'ts_code': ts_code,
             'start_date': start_date,
             'end_date': end_date,
             'period_type': period_type
         }
-    
-    def _fetch_minute_data_from_source(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        从数据源获取分钟数据（模拟实现）
-        实际使用时应该替换为真实的数据源API调用
-        """
-        try:
-            # 这里使用模拟数据，实际应该调用真实API
-            # 例如: self.pro.stk_mins(ts_code=ts_code, start_date=start_date, end_date=end_date)
-            
-            # 生成模拟的分钟数据
-            start_dt = datetime.strptime(start_date, '%Y%m%d')
-            end_dt = datetime.strptime(end_date, '%Y%m%d')
-            
-            # 生成交易时间范围内的分钟数据
-            data_list = []
-            current_dt = start_dt
-            base_price = 10.0  # 基础价格
-            
-            while current_dt <= end_dt:
-                # 只在交易时间生成数据 (9:30-11:30, 13:00-15:00)
-                if current_dt.weekday() < 5:  # 工作日
-                    # 上午时段
-                    for hour in range(9, 12):
-                        start_minute = 30 if hour == 9 else 0
-                        end_minute = 30 if hour == 11 else 60
-                        
-                        for minute in range(start_minute, end_minute):
-                            dt = current_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                            
-                            # 生成模拟价格数据
-                            price_change = np.random.normal(0, 0.01)  # 随机价格变动
-                            open_price = base_price * (1 + price_change)
-                            high_price = open_price * (1 + abs(np.random.normal(0, 0.005)))
-                            low_price = open_price * (1 - abs(np.random.normal(0, 0.005)))
-                            close_price = open_price + np.random.normal(0, 0.005)
-                            volume = np.random.randint(1000, 10000)
-                            amount = volume * close_price
-                            
-                            data_list.append({
-                                'trade_date': dt.strftime('%Y%m%d'),
-                                'trade_time': dt.strftime('%H%M'),
-                                'open': round(open_price, 2),
-                                'high': round(high_price, 2),
-                                'low': round(low_price, 2),
-                                'close': round(close_price, 2),
-                                'vol': volume,
-                                'amount': round(amount, 2)
-                            })
-                            
-                            base_price = close_price  # 更新基础价格
-                    
-                    # 下午时段
-                    for hour in range(13, 15):
-                        for minute in range(0, 60):
-                            dt = current_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                            
-                            # 生成模拟价格数据
-                            price_change = np.random.normal(0, 0.01)
-                            open_price = base_price * (1 + price_change)
-                            high_price = open_price * (1 + abs(np.random.normal(0, 0.005)))
-                            low_price = open_price * (1 - abs(np.random.normal(0, 0.005)))
-                            close_price = open_price + np.random.normal(0, 0.005)
-                            volume = np.random.randint(1000, 10000)
-                            amount = volume * close_price
-                            
-                            data_list.append({
-                                'trade_date': dt.strftime('%Y%m%d'),
-                                'trade_time': dt.strftime('%H%M'),
-                                'open': round(open_price, 2),
-                                'high': round(high_price, 2),
-                                'low': round(low_price, 2),
-                                'close': round(close_price, 2),
-                                'vol': volume,
-                                'amount': round(amount, 2)
-                            })
-                            
-                            base_price = close_price
-                
-                current_dt += timedelta(days=1)
-            
-            return pd.DataFrame(data_list)
-            
-        except Exception as e:
-            logger.error(f"获取数据源数据失败: {str(e)}")
-            return pd.DataFrame()
     
     def _convert_to_model_format(self, df: pd.DataFrame, ts_code: str, period_type: str) -> List[Dict]:
         """
