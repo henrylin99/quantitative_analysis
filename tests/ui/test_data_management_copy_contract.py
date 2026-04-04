@@ -9,3 +9,5 @@ def test_data_management_page_guides_initialization_order():
     assert "2. 股票基础资料" in html
     assert "3. 日线行情" in html
     assert "4. 日线基本指标" in html
+    assert "data-recommended-job=\"trade_calendar\"" in html
+    assert "data-recommended-job=\"stock_basic\"" in html

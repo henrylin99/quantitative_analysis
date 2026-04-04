@@ -35,3 +35,4 @@ def test_system_manager_health_summary_reports_empty_tables():
     )
 
     assert report["database"]["empty_tables"] == ["stock_basic", "stock_trade_calendar"]
+    assert report["database"]["next_actions"]

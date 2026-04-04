@@ -121,6 +121,11 @@ class SystemManager:
             empty = ", ".join(report["database"]["empty_tables"])
             print(f"  - 空表提示: {empty}")
         print(f"  - 数据任务模式: {report['data_jobs']['execution_mode']}")
+        next_actions = report["database"].get("next_actions") or []
+        if next_actions:
+            print("  - 推荐下一步:")
+            for action in next_actions:
+                print(f"    * {action}")
     
     def setup_database(self):
         """设置数据库"""
