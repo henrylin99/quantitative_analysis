@@ -117,11 +117,16 @@ pip install -r requirements.txt
 
 ### 3. 启动系统
 ```bash
-# 使用真实启动脚本
-python run_system.py
-
-# 按提示选择初始化数据库或启动 Web 服务
+# 常规启动入口
+python run.py
 ```
+
+常规 Web 启动统一使用 `python run.py`。
+
+- `run.py`：唯一标准 Web 启动入口
+- `run_system.py` 用于初始化与诊断：检查依赖、校验数据库和补建基础表，不作为日常启动入口
+  run_system.py 用于初始化与诊断。
+
 # 遇到以下问题
 ```
 Traceback (most recent call last):
@@ -139,12 +144,17 @@ Traceback (most recent call last):
 
 ## 📖 使用指南
 
-### 系统启动器
-运行 `python run_system.py` 后，选择相应操作：
+### 启动方式
+
+#### 1. 常规启动
+运行 `python run.py` 后，系统会输出启动检查摘要，并默认在开发环境下启动 Web 服务。
+
+#### 2. 初始化与诊断
+运行 `python run_system.py` 后，可执行以下操作：
 
 1. **检查系统依赖** - 验证Python版本和必需包
 2. **初始化数据库** - 创建数据表和内置因子
-3. **启动Web服务器** - 启动开发模式服务器
+3. **启动Web服务器** - 启动开发模式服务器（调试用途）
 4. **启动Web服务器(生产模式)** - 启动生产模式服务器
 5. **运行系统演示** - 运行当前已接通功能入口
 6. **显示系统信息** - 查看系统功能概览
@@ -527,12 +537,17 @@ pip install -r requirements_minimal.txt
 - 任务能力：提交、查询、重试、状态过滤、进度轮询、历史展示
 
 ### 运行要求
-1. 启动 Redis
-2. 启动 Flask 服务
-3. 启动 Celery Worker
+开发环境默认使用 `inline` 执行模式：
+
+1. 运行 `python run.py`
+2. 直接在页面提交任务
+
+此模式下，日频数据中心任务会在当前 Web 进程内执行，无需额外启动 Celery Worker。
+
+如需切换到队列模式，可显式设置 `DATA_JOB_EXECUTION_MODE=celery`，再额外启动 Worker：
 
 ```bash
-celery -A app.celery_app.celery worker -l info
+celery -A app.celery_app.celery worker -l info -P solo
 ```
 
 ### 快速验证
@@ -543,13 +558,13 @@ bash scripts/validation/validate_data_jobs_flow.sh
 ### 常用 API
 ```bash
 # 提交任务
-curl -X POST http://127.0.0.1:5001/api/data-jobs/submit \
+curl -X POST http://127.0.0.1:5000/api/data-jobs/submit \
   -H 'Content-Type: application/json' \
   -d '{"job_type":"daily_basic","params":{"start_date":"2026-01-01","end_date":"2026-01-31"}}'
 
 # 查看最近任务
-curl "http://127.0.0.1:5001/api/data-jobs/list?limit=20"
+curl "http://127.0.0.1:5000/api/data-jobs/list?limit=20"
 
 # 仅看失败任务
-curl "http://127.0.0.1:5001/api/data-jobs/list?status=failed&limit=20"
+curl "http://127.0.0.1:5000/api/data-jobs/list?status=failed&limit=20"
 ```

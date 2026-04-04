@@ -32,6 +32,12 @@ def backtest():
     """策略回测页面"""
     return render_template('backtest.html')
 
+
+@main_bp.route('/data-management')
+def data_management():
+    """数据管理页面"""
+    return render_template('realtime_analysis/index.html')
+
 @main_bp.route('/realtime-analysis')
 def realtime_analysis():
     """实时交易分析页面"""

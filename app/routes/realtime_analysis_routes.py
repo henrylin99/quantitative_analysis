@@ -17,7 +17,7 @@ def index():
 @realtime_analysis_routes.route('/data')
 def data():
     """数据管理页面"""
-    return render_template('realtime_analysis/index.html')
+    return redirect(url_for('main.data_management'))
 
 @realtime_analysis_routes.route('/indicators')
 def indicators():
