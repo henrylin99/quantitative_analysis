@@ -16,7 +16,7 @@ class StockService:
     
     @staticmethod
     @cached(expire=1800, key_prefix='stock_basic')
-    def get_stock_list(industry=None, area=None, page=1, page_size=20):
+    def get_stock_list(industry=None, area=None, search=None, page=1, page_size=20):
         """获取股票列表"""
         try:
             query = StockBasic.query
@@ -26,6 +26,16 @@ class StockService:
                 query = query.filter(StockBasic.industry == industry)
             if area:
                 query = query.filter(StockBasic.area == area)
+            if search:
+                keyword = f"%{str(search).strip()}%"
+                if keyword != "%%":
+                    query = query.filter(
+                        or_(
+                            StockBasic.ts_code.ilike(keyword),
+                            StockBasic.symbol.ilike(keyword),
+                            StockBasic.name.ilike(keyword),
+                        )
+                    )
             
             # 分页
             offset = (page - 1) * page_size
