@@ -10,6 +10,7 @@ from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
 from app.services.model_training_job_service import ModelTrainingJobService
+from app.models.portfolio_position import PortfolioPosition
 
 # 创建蓝图
 ml_factor_bp = Blueprint('ml_factor', __name__, url_prefix='/api/ml-factor')
@@ -815,6 +816,70 @@ def optimize_portfolio():
         
     except Exception as e:
         logger.error(f"组合优化失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/list', methods=['GET'])
+def get_portfolio_list():
+    """基于真实持仓表返回投资组合列表摘要"""
+    try:
+        rows = PortfolioPosition.query.with_entities(
+            PortfolioPosition.portfolio_id
+        ).filter_by(is_active=True).distinct().all()
+
+        portfolios = []
+        for row in rows:
+            portfolio_id = row[0]
+            metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
+            first_position = PortfolioPosition.query.filter_by(
+                portfolio_id=portfolio_id,
+                is_active=True
+            ).order_by(PortfolioPosition.created_at.asc()).first()
+
+            portfolios.append({
+                'portfolio_id': portfolio_id,
+                'name': portfolio_id,
+                'position_count': metrics.get('total_positions', 0),
+                'current_value': metrics.get('total_market_value', 0.0),
+                'unrealized_pnl': metrics.get('total_unrealized_pnl', 0.0),
+                'return_rate': (metrics.get('total_pnl_percentage', 0.0) or 0.0) / 100.0,
+                'max_position_weight': (metrics.get('max_position_weight', 0.0) or 0.0) / 100.0,
+                'created_at': first_position.created_at.isoformat() if first_position and first_position.created_at else None,
+            })
+
+        return jsonify({
+            'success': True,
+            'portfolios': portfolios,
+            'total_count': len(portfolios),
+        })
+
+    except Exception as e:
+        logger.error(f"获取投资组合列表失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>', methods=['GET'])
+def get_portfolio_detail(portfolio_id):
+    """获取真实投资组合详情"""
+    try:
+        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
+        metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
+
+        if not positions or not metrics:
+            return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
+
+        return jsonify({
+            'success': True,
+            'portfolio': {
+                'portfolio_id': portfolio_id,
+                'name': portfolio_id,
+                'metrics': metrics,
+                'positions': [position.to_dict() for position in positions],
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"获取投资组合详情失败: {portfolio_id}, 错误: {e}")
         return jsonify({'error': str(e)}), 500
 
 

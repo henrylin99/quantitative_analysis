@@ -16,3 +16,11 @@ def test_portfolio_template_hides_fake_create_and_save_paths():
     assert "function createPortfolio()" not in html
     assert "function saveOptimizedPortfolio()" not in html
     assert "保存为投资组合" not in html
+
+
+def test_portfolio_template_uses_real_list_and_detail_endpoints():
+    html = Path("app/templates/ml_factor/portfolio.html").read_text(encoding="utf-8")
+
+    assert "/api/ml-factor/portfolio/list" in html
+    assert "/api/ml-factor/portfolio/" in html
+    assert "portfolios.find(" not in html

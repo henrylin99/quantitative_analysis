@@ -111,7 +111,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // 加载投资组合列表
 async function loadPortfolios() {
     try {
-        portfolios = [];
+        const response = await axios.get('/api/ml-factor/portfolio/list');
+        portfolios = response.data.portfolios || [];
         renderPortfolios();
     } catch (error) {
         console.error('加载投资组合失败:', error);
@@ -142,24 +143,24 @@ function renderPortfolios() {
                         <p class="card-text text-muted">${portfolio.description}</p>
                         <div class="row">
                             <div class="col-md-3">
-                                <small class="text-muted">初始资金</small>
-                                <div class="fw-bold">${formatAmount(portfolio.initial_capital)}</div>
-                            </div>
-                            <div class="col-md-3">
                                 <small class="text-muted">当前价值</small>
-                                <div class="fw-bold text-${portfolio.current_value > portfolio.initial_capital ? 'success' : 'danger'}">
+                                <div class="fw-bold">
                                     ${formatAmount(portfolio.current_value)}
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <small class="text-muted">收益率</small>
+                                <small class="text-muted">浮动收益率</small>
                                 <div class="fw-bold text-${portfolio.return_rate > 0 ? 'success' : 'danger'}">
                                     ${formatPercent(portfolio.return_rate)}
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <small class="text-muted">夏普比率</small>
-                                <div class="fw-bold">${portfolio.sharpe_ratio.toFixed(2)}</div>
+                                <small class="text-muted">持仓数</small>
+                                <div class="fw-bold">${portfolio.position_count || 0}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">最大权重</small>
+                                <div class="fw-bold">${formatPercent(portfolio.max_position_weight || 0)}</div>
                             </div>
                         </div>
                     </div>
@@ -170,7 +171,7 @@ function renderPortfolios() {
                             </button>
                         </div>
                         <div class="mt-2">
-                            <small class="text-muted">创建于 ${portfolio.created_at}</small>
+                            <small class="text-muted">创建于 ${portfolio.created_at || '--'}</small>
                         </div>
                     </div>
                 </div>
@@ -543,18 +544,21 @@ function exportOptimizationResults() {
 }
 
 // 查看组合详情
-function viewPortfolioDetail(portfolioId) {
-    const portfolio = portfolios.find(p => p.id === portfolioId);
-    if (!portfolio) return;
-    
-    document.getElementById('portfolioDetailTitle').textContent = portfolio.name;
-    
-    const detailHtml = `
+async function viewPortfolioDetail(portfolioId) {
+    try {
+        const response = await axios.get(`/api/ml-factor/portfolio/${portfolioId}`);
+        const portfolio = response.data.portfolio;
+        const metrics = portfolio.metrics || {};
+        const positions = portfolio.positions || [];
+
+        document.getElementById('portfolioDetailTitle').textContent = portfolio.name;
+        
+        const detailHtml = `
         <div class="row mb-4">
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body">
-                        <h4 class="text-primary">${formatAmount(portfolio.current_value)}</h4>
+                        <h4 class="text-primary">${formatAmount(metrics.total_market_value || 0)}</h4>
                         <p class="card-text">当前价值</p>
                     </div>
                 </div>
@@ -562,24 +566,24 @@ function viewPortfolioDetail(portfolioId) {
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body">
-                        <h4 class="text-success">${formatPercent(portfolio.return_rate)}</h4>
-                        <p class="card-text">总收益率</p>
+                        <h4 class="text-success">${formatPercent((metrics.total_pnl_percentage || 0) / 100)}</h4>
+                        <p class="card-text">浮动收益率</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body">
-                        <h4 class="text-warning">${formatPercent(portfolio.volatility)}</h4>
-                        <p class="card-text">波动率</p>
+                        <h4 class="text-warning">${metrics.total_positions || 0}</h4>
+                        <p class="card-text">持仓数量</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body">
-                        <h4 class="text-info">${portfolio.sharpe_ratio.toFixed(2)}</h4>
-                        <p class="card-text">夏普比率</p>
+                        <h4 class="text-info">${formatPercent((metrics.max_position_weight || 0) / 100)}</h4>
+                        <p class="card-text">最大权重</p>
                     </div>
                 </div>
             </div>
@@ -588,24 +592,26 @@ function viewPortfolioDetail(portfolioId) {
         <div class="row">
             <div class="col-12">
                 <h6>持仓明细</h6>
-                ${portfolio.holdings.length > 0 ? `
+                ${positions.length > 0 ? `
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
                                 <tr>
+                                    <th>持仓ID</th>
                                     <th>股票代码</th>
-                                    <th>股票名称</th>
                                     <th>权重</th>
                                     <th>市值</th>
+                                    <th>浮动盈亏</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${portfolio.holdings.map(holding => `
+                                ${positions.map(position => `
                                     <tr>
-                                        <td><code>${holding.ts_code}</code></td>
-                                        <td>${holding.name}</td>
-                                        <td>${formatPercent(holding.weight)}</td>
-                                        <td>${formatAmount(holding.value)}</td>
+                                        <td>${position.id}</td>
+                                        <td><code>${position.ts_code}</code></td>
+                                        <td>${formatPercent((position.weight || 0) / 100)}</td>
+                                        <td>${formatAmount(position.market_value || 0)}</td>
+                                        <td>${formatAmount(position.unrealized_pnl || 0)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -615,9 +621,13 @@ function viewPortfolioDetail(portfolioId) {
             </div>
         </div>
     `;
-    
-    document.getElementById('portfolioDetailContent').innerHTML = detailHtml;
-    new bootstrap.Modal(document.getElementById('portfolioDetailModal')).show();
+
+        document.getElementById('portfolioDetailContent').innerHTML = detailHtml;
+        new bootstrap.Modal(document.getElementById('portfolioDetailModal')).show();
+    } catch (error) {
+        console.error('加载投资组合详情失败:', error);
+        alert('加载投资组合详情失败: ' + (error.response?.data?.error || error.message));
+    }
 }
 
 // 格式化金额
