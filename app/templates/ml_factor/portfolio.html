@@ -10,7 +10,7 @@
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <h1>💼 投资组合</h1>
-                    <p class="text-muted">当前页面提供最小真实组合闭环，再平衡入口暂未开放。</p>
+                    <p class="text-muted">当前页面提供真实组合管理、优化结果落库和再平衡执行入口。</p>
                 </div>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPortfolioModal">
                     <i class="fas fa-plus"></i> 创建组合
@@ -153,6 +153,12 @@
                     <div class="text-muted">暂无再平衡结果</div>
                 </div>
             </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="applyRebalanceButton" onclick="applyPortfolioRebalance()" style="display: none;">
+                    <i class="fas fa-check"></i> 执行再平衡
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -212,6 +218,7 @@
 let portfolios = [];
 let currentPortfolioId = null;
 let editingPositionId = null;
+let currentRebalancePreview = null;
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -739,15 +746,22 @@ async function previewPortfolioRebalance() {
 function renderRebalancePreview(portfolioId, result) {
     const instructions = Object.entries(result.trade_instructions || {});
     const content = document.getElementById('rebalancePreviewContent');
+    const applyButton = document.getElementById('applyRebalanceButton');
+    currentRebalancePreview = {
+        portfolioId: portfolioId,
+        targetWeights: window.currentOptimizationResult?.weights || {},
+    };
 
     if (instructions.length === 0) {
+        applyButton.style.display = 'none';
         content.innerHTML = `<div class="alert alert-info mb-0">组合 ${portfolioId} 当前权重已与目标权重一致，无需再平衡。</div>`;
         return;
     }
 
+    applyButton.style.display = 'inline-block';
     content.innerHTML = `
         <div class="alert alert-warning">
-            当前仅提供再平衡预览，不会自动改写真实持仓。
+            请先确认预览结果，再执行真实持仓调整。
         </div>
         <div class="row mb-3">
             <div class="col-md-4">
@@ -781,6 +795,38 @@ function renderRebalancePreview(portfolioId, result) {
             </table>
         </div>
     `;
+}
+
+async function applyPortfolioRebalance() {
+    if (!currentRebalancePreview) {
+        alert('没有可执行的再平衡结果');
+        return;
+    }
+
+    if (!confirm(`确认执行再平衡吗？\n组合: ${currentRebalancePreview.portfolioId}\n该操作会更新现有持仓并停用不再保留的仓位。`)) {
+        return;
+    }
+
+    try {
+        const response = await axios.post('/api/ml-factor/portfolio/rebalance/apply', {
+            portfolio_id: currentRebalancePreview.portfolioId,
+            target_weights: currentRebalancePreview.targetWeights,
+        });
+
+        if (response.data.success) {
+            alert(`再平衡执行成功: ${currentRebalancePreview.portfolioId}`);
+            bootstrap.Modal.getInstance(document.getElementById('rebalancePreviewModal')).hide();
+            await loadPortfolios();
+            await viewPortfolioDetail(currentRebalancePreview.portfolioId);
+            currentRebalancePreview = null;
+            return;
+        }
+
+        throw new Error(response.data.error || '再平衡执行失败');
+    } catch (error) {
+        console.error('再平衡执行失败:', error);
+        alert('再平衡执行失败: ' + (error.response?.data?.error || error.message));
+    }
 }
 
 // 导出优化结果

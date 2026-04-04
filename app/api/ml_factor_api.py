@@ -1010,6 +1010,92 @@ def rebalance_portfolio():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/portfolio/rebalance/apply', methods=['POST'])
+def apply_portfolio_rebalance():
+    """按目标权重执行真实组合再平衡"""
+    try:
+        data = request.get_json()
+        portfolio_id = data.get('portfolio_id')
+        target_weights = data.get('target_weights') or {}
+
+        if not portfolio_id:
+            return jsonify({'error': '缺少必需参数: portfolio_id'}), 400
+        if not target_weights:
+            return jsonify({'error': '缺少必需参数: target_weights'}), 400
+
+        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
+        if not positions:
+            return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
+
+        total_market_value = sum((position.market_value or 0) for position in positions)
+        if total_market_value <= 0:
+            return jsonify({'error': '组合缺少有效市值数据，无法执行再平衡'}), 400
+
+        existing_by_code = {position.ts_code: position for position in positions}
+        updated_count = 0
+        created_count = 0
+        deactivated_count = 0
+
+        for ts_code, weight in target_weights.items():
+            target_weight = float(weight)
+            allocation = total_market_value * target_weight
+            latest_price = StockDailyHistory.query.filter(
+                StockDailyHistory.ts_code == ts_code
+            ).order_by(StockDailyHistory.trade_date.desc()).first()
+
+            existing_position = PortfolioPosition.get_position_by_stock(portfolio_id, ts_code)
+            close_price = None
+            if latest_price and latest_price.close:
+                close_price = float(latest_price.close)
+            elif existing_position and existing_position.current_price:
+                close_price = float(existing_position.current_price)
+            elif existing_position and existing_position.avg_cost:
+                close_price = float(existing_position.avg_cost)
+            else:
+                close_price = 1.0
+
+            position_size = allocation / close_price if close_price > 0 else 0
+
+            if existing_position:
+                existing_position.position_size = position_size
+                existing_position.current_price = close_price
+                existing_position.market_value = allocation
+                existing_position.weight = target_weight * 100
+                updated_count += 1
+            else:
+                db.session.add(PortfolioPosition(
+                    portfolio_id=portfolio_id,
+                    ts_code=ts_code,
+                    position_size=position_size,
+                    avg_cost=close_price,
+                    current_price=close_price,
+                    market_value=allocation,
+                    unrealized_pnl=0.0,
+                    weight=target_weight * 100,
+                ))
+                created_count += 1
+
+        for ts_code, position in existing_by_code.items():
+            if ts_code not in target_weights and position.is_active:
+                position.is_active = False
+                deactivated_count += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'portfolio_id': portfolio_id,
+            'updated_count': updated_count,
+            'created_count': created_count,
+            'deactivated_count': deactivated_count,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"执行组合再平衡失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/portfolio/integrated-selection', methods=['POST'])
 def integrated_portfolio_selection():
     """集成选股和组合优化"""
