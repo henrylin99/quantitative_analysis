@@ -140,6 +140,23 @@
     </div>
 </div>
 
+<!-- 再平衡预览模态框 -->
+<div class="modal fade" id="rebalancePreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">再平衡预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="rebalancePreviewContent">
+                    <div class="text-muted">暂无再平衡结果</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 持仓编辑模态框 -->
 <div class="modal fade" id="portfolioPositionModal" tabindex="-1">
     <div class="modal-dialog">
@@ -551,6 +568,9 @@ function showOptimizationResults(data, method, riskLevel, maxStocks, responseDat
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="previewPortfolioRebalance()">
+                            <i class="fas fa-balance-scale"></i> 再平衡预览
+                        </button>
                         <button type="button" class="btn btn-success" onclick="saveOptimizedPortfolio()">
                             <i class="fas fa-save"></i> 保存为投资组合
                         </button>
@@ -670,6 +690,97 @@ async function saveOptimizedPortfolio() {
         console.error('保存投资组合失败:', error);
         alert('保存投资组合失败: ' + (error.response?.data?.error || error.message));
     }
+}
+
+async function previewPortfolioRebalance() {
+    if (!window.currentOptimizationResult) {
+        alert('没有优化结果可用于再平衡');
+        return;
+    }
+
+    const portfolioId = prompt('请输入要对比的现有组合ID:', currentPortfolioId || portfolios[0]?.portfolio_id || '');
+    if (!portfolioId) {
+        return;
+    }
+
+    try {
+        const detailResponse = await axios.get(`/api/ml-factor/portfolio/${portfolioId}`);
+        const portfolio = detailResponse.data.portfolio;
+        const positions = portfolio.positions || [];
+
+        if (positions.length === 0) {
+            throw new Error('该组合暂无可用于再平衡的持仓');
+        }
+
+        const totalMarketValue = positions.reduce((sum, position) => sum + (position.market_value || 0), 0);
+        if (!totalMarketValue) {
+            throw new Error('该组合缺少有效市值数据，无法计算当前权重');
+        }
+
+        const currentWeights = {};
+        positions.forEach((position) => {
+            currentWeights[position.ts_code] = (position.market_value || 0) / totalMarketValue;
+        });
+
+        const rebalanceResponse = await axios.post('/api/ml-factor/portfolio/rebalance', {
+            current_weights: currentWeights,
+            target_weights: window.currentOptimizationResult.weights,
+            transaction_cost: 0.001,
+        });
+
+        renderRebalancePreview(portfolioId, rebalanceResponse.data);
+        new bootstrap.Modal(document.getElementById('rebalancePreviewModal')).show();
+    } catch (error) {
+        console.error('再平衡预览失败:', error);
+        alert('再平衡预览失败: ' + (error.response?.data?.error || error.message));
+    }
+}
+
+function renderRebalancePreview(portfolioId, result) {
+    const instructions = Object.entries(result.trade_instructions || {});
+    const content = document.getElementById('rebalancePreviewContent');
+
+    if (instructions.length === 0) {
+        content.innerHTML = `<div class="alert alert-info mb-0">组合 ${portfolioId} 当前权重已与目标权重一致，无需再平衡。</div>`;
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="alert alert-warning">
+            当前仅提供再平衡预览，不会自动改写真实持仓。
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <strong>组合ID:</strong> ${portfolioId}
+            </div>
+            <div class="col-md-4">
+                <strong>换手率:</strong> ${formatPercent(result.turnover || 0)}
+            </div>
+            <div class="col-md-4">
+                <strong>估算成本:</strong> ${formatPercent(result.transaction_cost || 0)}
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>股票代码</th>
+                        <th>调整方向</th>
+                        <th>权重变化</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${instructions.map(([tsCode, weight]) => `
+                        <tr>
+                            <td><code>${tsCode}</code></td>
+                            <td>${weight > 0 ? '增持/买入' : '减持/卖出'}</td>
+                            <td class="text-${weight > 0 ? 'success' : 'danger'}">${formatPercent(Math.abs(weight))}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
 // 导出优化结果
