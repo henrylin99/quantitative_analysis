@@ -12,7 +12,9 @@
                     <h1>💼 投资组合</h1>
                     <p class="text-muted">智能构建和优化投资组合</p>
                 </div>
-                <span class="badge bg-secondary">真实组合 CRUD 整改中</span>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPortfolioModal">
+                    <i class="fas fa-plus"></i> 创建组合
+                </button>
             </div>
         </div>
     </div>
@@ -81,6 +83,46 @@
     </div>
 </div>
 
+<!-- 创建组合模态框 -->
+<div class="modal fade" id="createPortfolioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建真实投资组合</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createPortfolioForm">
+                    <div class="mb-3">
+                        <label for="portfolioId" class="form-label">组合ID *</label>
+                        <input type="text" class="form-control" id="portfolioId" placeholder="例如 growth_a" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="portfolioTsCode" class="form-label">首个持仓股票代码 *</label>
+                        <input type="text" class="form-control" id="portfolioTsCode" placeholder="例如 000001.SZ" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="portfolioPositionSize" class="form-label">持仓数量 *</label>
+                        <input type="number" class="form-control" id="portfolioPositionSize" value="1000" min="1" step="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="portfolioAvgCost" class="form-label">平均成本 *</label>
+                        <input type="number" class="form-control" id="portfolioAvgCost" value="10" min="0.01" step="0.01" required>
+                    </div>
+                    <div class="mb-0">
+                        <label for="portfolioSector" class="form-label">行业</label>
+                        <input type="text" class="form-control" id="portfolioSector" placeholder="例如 银行">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createPortfolio()">创建组合</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 组合详情模态框 -->
 <div class="modal fade" id="portfolioDetailModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
@@ -107,6 +149,43 @@ let portfolios = [];
 document.addEventListener('DOMContentLoaded', function() {
     loadPortfolios();
 });
+
+async function createPortfolio() {
+    const portfolioId = document.getElementById('portfolioId').value.trim();
+    const tsCode = document.getElementById('portfolioTsCode').value.trim();
+    const positionSize = parseFloat(document.getElementById('portfolioPositionSize').value);
+    const avgCost = parseFloat(document.getElementById('portfolioAvgCost').value);
+    const sector = document.getElementById('portfolioSector').value.trim();
+
+    if (!portfolioId || !tsCode || !positionSize || !avgCost) {
+        alert('请填写所有必填字段');
+        return;
+    }
+
+    try {
+        const response = await axios.post('/api/realtime-analysis/risk/portfolio', {
+            portfolio_id: portfolioId,
+            ts_code: tsCode,
+            position_size: positionSize,
+            avg_cost: avgCost,
+            sector: sector || null,
+        });
+
+        if (response.data.success) {
+            alert(`投资组合创建成功: ${portfolioId}`);
+            bootstrap.Modal.getInstance(document.getElementById('createPortfolioModal')).hide();
+            document.getElementById('createPortfolioForm').reset();
+            await loadPortfolios();
+            await viewPortfolioDetail(portfolioId);
+            return;
+        }
+
+        throw new Error(response.data.message || '创建投资组合失败');
+    } catch (error) {
+        console.error('创建投资组合失败:', error);
+        alert('创建投资组合失败: ' + (error.response?.data?.message || error.message));
+    }
+}
 
 // 加载投资组合列表
 async function loadPortfolios() {
