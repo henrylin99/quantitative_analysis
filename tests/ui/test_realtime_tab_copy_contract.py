@@ -47,3 +47,12 @@ def test_realtime_analysis_monitor_and_indicator_sections_avoid_feature_checklis
     assert "智能异动评分" not in html
     assert "历史数据回测" not in html
     assert "统计分析报告" not in html
+
+
+def test_realtime_analysis_monitor_and_websocket_details_avoid_smart_capability_claims():
+    html = Path("app/templates/realtime_analysis/index.html").read_text(encoding="utf-8")
+
+    assert "异动结果与说明以监控页实际返回为准" in html
+    assert "缓存与投递策略以后端当前实现为准" in html
+    assert "智能识别价格和成交量异常变动的股票" not in html
+    assert "智能数据缓存机制" not in html
