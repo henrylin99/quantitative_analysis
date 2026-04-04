@@ -600,8 +600,28 @@ function displayBacktestResults(data) {
     updateRiskMetrics(riskMetrics);
 }
 
+function renderChartEmptyState(containerId, title, message) {
+    const container = document.getElementById(containerId);
+    const instance = echarts.getInstanceByDom(container);
+    if (instance) {
+        instance.dispose();
+    }
+    container.innerHTML = `
+        <div class="d-flex flex-column justify-content-center align-items-center h-100 text-muted small">
+            <div class="fw-bold mb-2">${title}</div>
+            <div>${message}</div>
+        </div>
+    `;
+}
+
 // 绘制收益曲线图
 function drawReturnsChart(data) {
+    if (!data || data.length === 0) {
+        renderChartEmptyState('returnsChart', '累计收益曲线', '暂无累计收益数据');
+        return;
+    }
+
+    document.getElementById('returnsChart').innerHTML = '';
     const chart = echarts.init(document.getElementById('returnsChart'));
     
     const option = {
@@ -649,6 +669,12 @@ function drawReturnsChart(data) {
 
 // 绘制回撤图
 function drawDrawdownChart(data) {
+    if (!data || data.length === 0) {
+        renderChartEmptyState('drawdownChart', '回撤分析', '暂无回撤数据');
+        return;
+    }
+
+    document.getElementById('drawdownChart').innerHTML = '';
     const chart = echarts.init(document.getElementById('drawdownChart'));
     
     const option = {
@@ -689,6 +715,12 @@ function drawDrawdownChart(data) {
 
 // 绘制滚动收益图
 function drawRollingReturnsChart(data) {
+    if (!data || data.length === 0) {
+        renderChartEmptyState('rollingReturnsChart', '月度收益对比', '暂无月度收益数据');
+        return;
+    }
+
+    document.getElementById('rollingReturnsChart').innerHTML = '';
     const chart = echarts.init(document.getElementById('rollingReturnsChart'));
     
     const option = {
@@ -732,6 +764,12 @@ function drawRollingReturnsChart(data) {
 
 // 绘制行业分布图
 function drawIndustryChart(data) {
+    if (!data || data.length === 0) {
+        renderChartEmptyState('industryChart', '行业分布', '暂无行业分布数据');
+        return;
+    }
+
+    document.getElementById('industryChart').innerHTML = '';
     const chart = echarts.init(document.getElementById('industryChart'));
     
     const option = {
@@ -764,6 +802,12 @@ function drawIndustryChart(data) {
 
 // 绘制收益分布图
 function drawReturnsDistributionChart(data) {
+    if (!data || data.length === 0) {
+        renderChartEmptyState('returnsDistributionChart', '收益分布', '暂无收益分布数据');
+        return;
+    }
+
+    document.getElementById('returnsDistributionChart').innerHTML = '';
     const chart = echarts.init(document.getElementById('returnsDistributionChart'));
     
     const option = {
