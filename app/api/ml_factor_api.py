@@ -434,6 +434,24 @@ def get_model_list():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/models/<model_id>', methods=['DELETE'])
+def delete_model(model_id):
+    """删除模型定义、预测结果和本地模型文件"""
+    try:
+        result = get_ml_manager().delete_model(model_id)
+
+        if result.get('success'):
+            return jsonify(result)
+
+        error_message = result.get('error', '删除模型失败')
+        status_code = 404 if '未找到模型定义' in error_message else 500
+        return jsonify({'error': error_message}), status_code
+
+    except Exception as e:
+        logger.error(f"删除模型失败: {model_id}, 错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/scoring/factor-based', methods=['POST'])
 def factor_based_scoring():
     """基于因子的股票打分"""
