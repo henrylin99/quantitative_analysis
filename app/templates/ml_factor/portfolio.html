@@ -255,7 +255,7 @@ function renderPortfolios() {
     const container = document.getElementById('portfolioList');
     
     if (portfolios.length === 0) {
-        container.innerHTML = '<div class="alert alert-warning mb-0">投资组合管理功能整改中，当前不再提供演示数据，请先完成真实组合 CRUD 后再开放此页面。</div>';
+        container.innerHTML = '<div class="alert alert-info mb-0">暂无真实投资组合，请先创建组合或保存优化结果。</div>';
         return;
     }
     
