@@ -13,8 +13,10 @@ def test_homepage_banner_and_query_card_avoid_platform_level_claims():
 
     assert "当前页面汇总已接通的股票分析与量化入口" in html
     assert "自然语言转 SQL 查询入口，结果以当前数据库与规则为准" in html
+    assert "Text2SQL 查询" in html
     assert "专业股票分析平台" not in html
     assert "AI助手" not in html
+    assert "智能查询" not in html
 
 
 def test_homepage_feature_cards_use_current_scope_copy():
