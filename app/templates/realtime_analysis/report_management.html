@@ -68,7 +68,7 @@
 
         <!-- 统计概览 -->
         <div class="row mb-4">
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <div class="card bg-primary text-white">
                     <div class="card-body">
                         <div class="d-flex justify-content-between">
@@ -83,37 +83,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card bg-success text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 id="totalTemplates">0</h4>
-                                <p class="mb-0">模板数量</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="bi bi-layout-text-window fs-1"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-warning text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 id="totalSubscriptions">0</h4>
-                                <p class="mb-0">订阅数量</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="bi bi-bell fs-1"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <div class="card bg-info text-white">
                     <div class="card-body">
                         <div class="d-flex justify-content-between">
@@ -224,7 +194,6 @@
     <script>
         // 全局变量
         let reports = [];
-        let templates = [];
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -244,10 +213,7 @@
 
         // 加载初始数据
         async function loadInitialData() {
-            await Promise.all([
-                loadReports(),
-                loadTemplates()
-            ]);
+            await loadReports();
         }
 
         // 加载报告列表
@@ -313,95 +279,6 @@
                     </div>
                 </div>
             `).join('');
-        }
-
-        // 加载模板列表
-        async function loadTemplates() {
-            try {
-                const response = await fetch('/api/realtime-analysis/reports/templates');
-                const result = await response.json();
-                
-                if (result.success) {
-                    templates = result.data;
-                    renderTemplates();
-                    updateTemplateSelects();
-                } else {
-                    showAlert('加载模板失败: ' + result.message, 'danger');
-                }
-            } catch (error) {
-                showAlert('加载模板失败: ' + error.message, 'danger');
-            }
-        }
-
-        // 渲染模板列表
-        function renderTemplates() {
-            const container = document.getElementById('templatesContainer');
-            
-            if (templates.length === 0) {
-                container.innerHTML = `
-                    <div class="col-12">
-                        <div class="text-center py-4">
-                            <i class="bi bi-layout-text-window fs-1 text-muted"></i>
-                            <p class="text-muted mt-2">暂无模板数据</p>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
-            container.innerHTML = templates.map(template => `
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card template-card fade-in">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="card-title">${template.template_name}</h6>
-                                <div>
-                                    ${template.is_default ? '<span class="badge bg-primary">默认</span>' : ''}
-                                    ${template.is_active ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>'}
-                                </div>
-                            </div>
-                            <p class="card-text text-muted small">
-                                类型: ${getReportTypeText(template.template_type)}<br>
-                                创建时间: ${formatDateTime(template.created_at)}<br>
-                                ${template.description || '无描述'}
-                            </p>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary" onclick="editTemplate(${template.id})">
-                                    <i class="bi bi-pencil"></i> 编辑
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTemplate(${template.id})">
-                                    <i class="bi bi-trash"></i> 删除
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // 更新模板选择框
-        function updateTemplateSelects() {
-            const selects = ['templateId', 'subscriptionTemplateId'];
-            
-            selects.forEach(selectId => {
-                const select = document.getElementById(selectId);
-                if (select) {
-                    // 保留第一个选项
-                    const firstOption = select.children[0];
-                    select.innerHTML = '';
-                    select.appendChild(firstOption);
-                    
-                    // 添加模板选项
-                    templates.forEach(template => {
-                        if (template.is_active) {
-                            const option = document.createElement('option');
-                            option.value = template.id;
-                            option.textContent = template.template_name;
-                            select.appendChild(option);
-                        }
-                    });
-                }
-            });
         }
 
         // 生成报告
