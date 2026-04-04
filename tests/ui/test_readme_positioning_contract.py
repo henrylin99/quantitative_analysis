@@ -42,3 +42,10 @@ def test_readme_avoids_complete_system_summary_claims():
 
     assert "多因子选股系统原型，适合继续补齐后再扩展使用" in readme
     assert "完整的多因子选股系统" not in readme
+
+
+def test_readme_uses_neutral_scoring_copy():
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "基础选股评分" in readme
+    assert "智能选股" not in readme
