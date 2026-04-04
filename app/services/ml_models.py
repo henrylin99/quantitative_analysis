@@ -710,38 +710,49 @@ class MLModelManager:
             logger.error(f"获取模型列表失败: {e}")
             return []
     
-    def delete_model(self, model_id: str) -> bool:
+    def delete_model(self, model_id: str) -> Dict[str, Any]:
         """删除模型"""
         try:
-            # 删除数据库记录
             model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
-            if model_def:
-                db.session.delete(model_def)
-            
-            # 删除预测结果
-            MLPredictions.query.filter_by(model_id=model_id).delete()
+            if not model_def:
+                return {
+                    'success': False,
+                    'error': f'未找到模型定义: {model_id}'
+                }
+
+            db.session.delete(model_def)
+            deleted_prediction_count = MLPredictions.query.filter_by(model_id=model_id).delete()
             
             db.session.commit()
             
-            # 删除模型文件
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
-            
+            deleted_files = []
+
             if os.path.exists(model_path):
                 os.remove(model_path)
+                deleted_files.append(model_path)
             if os.path.exists(scaler_path):
                 os.remove(scaler_path)
-            
-            # 清除缓存
+                deleted_files.append(scaler_path)
+
             if model_id in self.models:
                 del self.models[model_id]
             if model_id in self.scalers:
                 del self.scalers[model_id]
             
             logger.info(f"成功删除模型: {model_id}")
-            return True
+            return {
+                'success': True,
+                'model_id': model_id,
+                'deleted_prediction_count': int(deleted_prediction_count or 0),
+                'deleted_files': deleted_files
+            }
             
         except Exception as e:
             db.session.rollback()
             logger.error(f"删除模型失败: {model_id}, 错误: {e}")
-            return False 
+            return {
+                'success': False,
+                'error': str(e)
+            }
