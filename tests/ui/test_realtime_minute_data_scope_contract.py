@@ -1,10 +1,10 @@
 from pathlib import Path
 
 
-def test_realtime_index_exposes_baostock_minute_data_scope_only():
-    html = Path("app/templates/realtime_analysis/index.html").read_text(encoding="utf-8")
+def test_data_management_page_exposes_baostock_minute_data_scope_only():
+    html = Path("app/templates/data_management/index.html").read_text(encoding="utf-8")
 
-    assert "当前页面以 Baostock 分钟数据接入、聚合与衍生分析入口为主。" in html
+    assert "当前页面用于日频任务、Baostock 分钟数据接入、聚合与质量检查。" in html
     assert 'option value="tushare"' not in html
     assert 'option value="1min"' not in html
     assert "同步所有周期数据 (5min, 15min, 30min, 60min)" in html
