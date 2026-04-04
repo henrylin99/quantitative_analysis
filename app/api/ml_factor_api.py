@@ -4,6 +4,7 @@ from loguru import logger
 import pandas as pd
 import numpy as np
 
+from app.extensions import db
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
@@ -880,6 +881,35 @@ def get_portfolio_detail(portfolio_id):
 
     except Exception as e:
         logger.error(f"获取投资组合详情失败: {portfolio_id}, 错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>', methods=['DELETE'])
+def delete_portfolio(portfolio_id):
+    """软删除整个投资组合下的所有持仓"""
+    try:
+        positions = PortfolioPosition.query.filter_by(
+            portfolio_id=portfolio_id,
+            is_active=True
+        ).all()
+
+        if not positions:
+            return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
+
+        for position in positions:
+            position.is_active = False
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'portfolio_id': portfolio_id,
+            'deactivated_count': len(positions),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"删除投资组合失败: {portfolio_id}, 错误: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -24,3 +24,4 @@ def test_portfolio_template_uses_real_list_and_detail_endpoints():
     assert "/api/ml-factor/portfolio/list" in html
     assert "/api/ml-factor/portfolio/" in html
     assert "portfolios.find(" not in html
+    assert "portfolio.portfolio_id" in html
