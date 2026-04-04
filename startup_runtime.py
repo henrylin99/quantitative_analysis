@@ -53,6 +53,36 @@ def build_health_report(
     }
 
 
+def build_health_summary_lines(report: Mapping[str, object]) -> list[str]:
+    database = report.get("database", {})
+    data_jobs = report.get("data_jobs", {})
+    missing_tables = database.get("missing_tables", [])
+    empty_tables = database.get("empty_tables", [])
+    next_actions = database.get("next_actions", [])
+
+    lines = [
+        "健康检查摘要:",
+        f"  - 主启动入口: {report.get('entrypoint', 'run.py')}",
+        f"  - 数据库连接: {'正常' if database.get('connected') else '失败'}",
+    ]
+
+    if missing_tables:
+        lines.append(f"  - 缺失关键表: {', '.join(missing_tables)}")
+    else:
+        lines.append("  - 关键表检查: 通过")
+
+    if empty_tables:
+        lines.append(f"  - 空表提示: {', '.join(empty_tables)}")
+
+    lines.append(f"  - 数据任务模式: {data_jobs.get('execution_mode', '-')}")
+
+    if next_actions:
+        lines.append("  - 推荐下一步:")
+        lines.extend([f"    * {action}" for action in next_actions])
+
+    return lines
+
+
 def build_startup_report(app_config: Mapping[str, object]) -> list[str]:
     mode = str(app_config.get("DATA_JOB_EXECUTION_MODE", "celery") or "celery").lower()
     lines = [

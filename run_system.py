@@ -26,7 +26,7 @@ from app import create_app
 from app.extensions import db
 from app.services.factor_engine import FactorEngine
 from config import config
-from startup_runtime import build_health_report, build_startup_report
+from startup_runtime import build_health_report, build_health_summary_lines, build_startup_report
 
 
 class SystemManager:
@@ -109,23 +109,8 @@ class SystemManager:
             )
 
     def print_health_summary(self, report):
-        print("健康检查摘要:")
-        print(f"  - 主启动入口: {report['entrypoint']}")
-        print(f"  - 数据库连接: {'正常' if report['database']['connected'] else '失败'}")
-        if report["database"]["missing_tables"]:
-            missing = ", ".join(report["database"]["missing_tables"])
-            print(f"  - 缺失关键表: {missing}")
-        else:
-            print("  - 关键表检查: 通过")
-        if report["database"]["empty_tables"]:
-            empty = ", ".join(report["database"]["empty_tables"])
-            print(f"  - 空表提示: {empty}")
-        print(f"  - 数据任务模式: {report['data_jobs']['execution_mode']}")
-        next_actions = report["database"].get("next_actions") or []
-        if next_actions:
-            print("  - 推荐下一步:")
-            for action in next_actions:
-                print(f"    * {action}")
+        for line in build_health_summary_lines(report):
+            print(line)
     
     def setup_database(self):
         """设置数据库"""

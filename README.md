@@ -125,7 +125,8 @@ python run.py
 
 - `run.py`：唯一标准 Web 启动入口
 - `run_system.py` 用于初始化与诊断：检查依赖、校验数据库和补建基础表，不作为日常启动入口
-  run_system.py 用于初始化与诊断。
+
+run_system.py 用于初始化与诊断，不作为日常启动入口。
 
 # 遇到以下问题
 ```
@@ -326,7 +327,7 @@ stock_analysis/
 ├── examples/             # 使用示例
 ├── config.py             # 配置文件
 ├── requirements.txt      # 依赖包
-├── run_system.py         # 系统启动器
+├── run_system.py         # 初始化与诊断工具
 └── README.md            # 说明文档
 ```
 
@@ -408,7 +409,7 @@ LOG_FILE = 'logs/app.log'
 # 运行当前演示入口
 python examples/complete_system_example.py
 
-# 或通过启动器运行
+# 或通过初始化/诊断工具运行
 python run_system.py
 # 选择 "5. 运行系统演示"
 ```
