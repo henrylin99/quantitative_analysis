@@ -2,12 +2,13 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
+import json
 from loguru import logger
 import warnings
 warnings.filterwarnings('ignore')
 
 from app.extensions import db
-from app.models import StockBasic, StockDailyHistory, FactorValues, MLPredictions
+from app.models import StockBasic, StockDailyHistory, FactorValues, MLPredictions, BacktestRun
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
@@ -66,6 +67,13 @@ class BacktestEngine:
         """
         try:
             logger.info(f"开始回测: {start_date} to {end_date}")
+            backtest_run = BacktestRun.create_run(
+                strategy_config=strategy_config,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                rebalance_frequency=rebalance_frequency,
+            )
             
             # 生成交易日期
             trade_dates = self._generate_trade_dates(start_date, end_date, rebalance_frequency)
@@ -107,9 +115,11 @@ class BacktestEngine:
                     )
                     
                     # 执行再平衡
-                    new_positions, new_cash, turnover = self._rebalance_portfolio(
+                    new_positions, new_cash, turnover, _cost_breakdown = self._rebalance_portfolio(
                         positions, cash, target_weights, current_prices, 
-                        current_portfolio_value, strategy_config.get('transaction_cost', 0.001)
+                        current_portfolio_value,
+                        commission_rate=float(strategy_config.get('commission_rate', 0.001)),
+                        slippage_rate=float(strategy_config.get('slippage_rate', 0.0)),
                     )
                     
                     # 更新状态
@@ -143,9 +153,15 @@ class BacktestEngine:
             )
             
             # 获取基准收益
-            benchmark_returns = self._get_benchmark_returns(start_date, end_date)
-            
-            return self._build_response_payload(
+            benchmark_returns = self._get_benchmark_returns(
+                start_date,
+                end_date,
+                benchmark_code=strategy_config.get('benchmark_index', '000300.SH'),
+            )
+            execution_assumptions = self._build_execution_assumptions(strategy_config)
+            trade_constraints = self._build_trade_constraints(strategy_config)
+
+            result = self._build_response_payload(
                 strategy_config=strategy_config,
                 start_date=start_date,
                 end_date=end_date,
@@ -158,7 +174,18 @@ class BacktestEngine:
                 performance_metrics=performance_metrics,
                 benchmark_returns=benchmark_returns,
                 final_prices=last_prices,
+                run_id=backtest_run.id,
+                execution_assumptions=execution_assumptions,
+                trade_constraints=trade_constraints,
             )
+            backtest_run.summary_json = json.dumps({
+                'final_value': total_value,
+                'total_return': result.get('total_return'),
+                'annual_return': performance_metrics.get('annualized_return'),
+                'max_drawdown': performance_metrics.get('max_drawdown'),
+            })
+            db.session.commit()
+            return result
             
         except Exception as e:
             logger.error(f"回测失败: {e}")
@@ -313,10 +340,19 @@ class BacktestEngine:
             logger.error(f"计算组合价值失败: {e}")
             return cash
     
+    def _apply_trade_costs(self, trade_value: float, commission_rate: float, slippage_rate: float) -> Dict[str, float]:
+        commission = float(trade_value) * float(commission_rate or 0.0)
+        slippage = float(trade_value) * float(slippage_rate or 0.0)
+        return {
+            'commission': commission,
+            'slippage': slippage,
+            'total_cost': commission + slippage,
+        }
+
     def _rebalance_portfolio(self, current_positions: Dict[str, int], 
                            current_cash: float, target_weights: Dict[str, float],
                            prices: Dict[str, float], total_value: float,
-                           transaction_cost: float) -> Tuple[Dict[str, int], float, float]:
+                           commission_rate: float, slippage_rate: float) -> Tuple[Dict[str, int], float, float, Dict[str, float]]:
         """执行组合再平衡"""
         try:
             new_positions = {}
@@ -341,7 +377,8 @@ class BacktestEngine:
                     total_trade_value += trade_value
             
             turnover = total_trade_value / total_value if total_value > 0 else 0
-            transaction_costs = total_trade_value * transaction_cost
+            cost_breakdown = self._apply_trade_costs(total_trade_value, commission_rate, slippage_rate)
+            transaction_costs = cost_breakdown['total_cost']
             
             # 计算新的现金余额
             new_cash = current_cash
@@ -356,11 +393,11 @@ class BacktestEngine:
             
             new_cash -= transaction_costs
             
-            return new_positions, new_cash, turnover
+            return new_positions, new_cash, turnover, cost_breakdown
             
         except Exception as e:
             logger.error(f"组合再平衡失败: {e}")
-            return current_positions, current_cash, 0.0
+            return current_positions, current_cash, 0.0, self._apply_trade_costs(0.0, commission_rate, slippage_rate)
     
     def _calculate_performance_metrics(self, portfolio_values: List[Dict[str, Any]], 
                                      daily_returns: List[float],
@@ -423,10 +460,10 @@ class BacktestEngine:
             logger.error(f"计算回测指标失败: {e}")
             return {}
     
-    def _get_benchmark_returns(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
-        """获取基准收益率 (使用沪深300指数)"""
+    def _get_benchmark_returns(self, start_date: str, end_date: str, benchmark_code: str = "000300.SH") -> List[Dict[str, Any]]:
+        """获取基准收益率"""
         try:
-            benchmark_codes = ["000300.SH", "399300.SZ"]
+            benchmark_codes = [benchmark_code, "000300.SH", "399300.SZ"]
             benchmark_rows: List[Tuple[Any, Any]] = []
 
             for benchmark_code in benchmark_codes:
@@ -626,6 +663,22 @@ class BacktestEngine:
             'calmar_ratio': performance_metrics.get('calmar_ratio'),
         }
 
+    def _build_execution_assumptions(self, strategy_config: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            'commission_rate': float(strategy_config.get('commission_rate', 0.001)),
+            'slippage_rate': float(strategy_config.get('slippage_rate', 0.0)),
+            'benchmark_index': strategy_config.get('benchmark_index', '000300.SH'),
+            'rebalance_policy': strategy_config.get('rebalance_policy', 'close_to_close'),
+        }
+
+    def _build_trade_constraints(self, strategy_config: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            'max_position_count': int(strategy_config.get('top_n', 50)),
+            'min_trade_weight': float(strategy_config.get('min_trade_weight', 0.0)),
+            'suspend_policy': strategy_config.get('suspend_policy', 'skip'),
+            'limit_up_down_policy': strategy_config.get('limit_up_down_policy', 'skip'),
+        }
+
     def _normalize_benchmark_returns(self, benchmark_returns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         normalized = []
         for row in benchmark_returns or []:
@@ -650,6 +703,9 @@ class BacktestEngine:
         performance_metrics: Dict[str, Any],
         benchmark_returns: List[Dict[str, Any]],
         final_prices: Dict[str, float],
+        run_id: Optional[int] = None,
+        execution_assumptions: Optional[Dict[str, Any]] = None,
+        trade_constraints: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         performance_metrics = dict(performance_metrics or {})
         benchmark_returns = self._normalize_benchmark_returns(benchmark_returns)
@@ -659,6 +715,7 @@ class BacktestEngine:
         industry_distribution = self._build_industry_distribution(positions)
         return {
             'success': True,
+            'run_id': run_id,
             'strategy_config': strategy_config,
             'backtest_period': f"{start_date} to {end_date}",
             'initial_capital': initial_capital,
@@ -677,6 +734,8 @@ class BacktestEngine:
             'positions': positions,
             'industry_distribution': industry_distribution,
             'risk_metrics': self._build_risk_metrics(performance_metrics),
+            'execution_assumptions': execution_assumptions or {},
+            'trade_constraints': trade_constraints or {},
         }
     
     def compare_strategies(self, strategies: List[Dict[str, Any]], 

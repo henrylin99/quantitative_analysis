@@ -8,6 +8,7 @@ from datetime import datetime
 import logging
 
 from app.services.realtime_report_generator import RealtimeReportGenerator
+from app.services.report_dispatch_service import ReportDispatchService
 from app.models.realtime_report import ReportTemplate, RealtimeReport, ReportSubscription
 from app.extensions import db
 
@@ -18,6 +19,7 @@ realtime_report_bp = Blueprint('realtime_report', __name__)
 
 # 初始化服务
 report_generator = RealtimeReportGenerator()
+report_dispatch_service = ReportDispatchService(report_generator)
 
 
 @realtime_report_bp.route('/generate-report', methods=['POST'])
@@ -394,6 +396,17 @@ def delete_subscription(subscription_id):
         
     except Exception as e:
         logger.error(f"删除订阅API错误: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@realtime_report_bp.route('/subscriptions/dispatch', methods=['POST'])
+def dispatch_subscriptions():
+    """分发待发送订阅"""
+    try:
+        result = report_dispatch_service.dispatch_pending_subscriptions()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"分发订阅API错误: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 

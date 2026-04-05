@@ -13,14 +13,15 @@ from app.models import StockDailyHistory, FactorValues
 
 class PortfolioOptimizer:
     """组合优化器"""
-    UNSUPPORTED_CONSTRAINT_KEYS = {"industry_constraints"}
+    UNSUPPORTED_CONSTRAINT_KEYS = set()
     
     def __init__(self):
         self.optimization_methods = {
             'mean_variance': self._mean_variance_optimization,
             'risk_parity': self._risk_parity_optimization,
             'equal_weight': self._equal_weight_optimization,
-            'factor_neutral': self._factor_neutral_optimization
+            'factor_neutral': self._factor_neutral_optimization,
+            'black_litterman': self._black_litterman_optimization,
         }
     
     def optimize_portfolio(self, expected_returns: pd.Series, 
@@ -290,6 +291,69 @@ class PortfolioOptimizer:
             logger.error(f"因子中性优化失败: {e}")
             return None
 
+    def _black_litterman_optimization(
+        self,
+        expected_returns: pd.Series,
+        risk_model: pd.DataFrame,
+        constraints: Dict[str, Any] = None,
+    ) -> pd.Series:
+        """简化版 Black-Litterman 优化。
+
+        当前阶段仅提供研究型可用实现：
+        - 使用 tau 对协方差做缩放
+        - 若给定 views / view_confidences，则做线性混合
+        - 最终沿用均值方差求权重
+        """
+        try:
+            constraints = constraints or {}
+            tau = float(constraints.get("tau", 0.05))
+            scaled_risk = risk_model * max(tau, 1e-6)
+
+            posterior_returns = expected_returns.copy().astype(float)
+            views = constraints.get("views") or {}
+            view_confidences = constraints.get("view_confidences") or {}
+
+            for ts_code, view_return in views.items():
+                if ts_code not in posterior_returns.index:
+                    continue
+                confidence = float(view_confidences.get(ts_code, 0.5))
+                confidence = min(max(confidence, 0.0), 1.0)
+                posterior_returns.loc[ts_code] = (
+                    (1.0 - confidence) * posterior_returns.loc[ts_code]
+                    + confidence * float(view_return)
+                )
+
+            blended_constraints = dict(constraints)
+            blended_constraints.setdefault("risk_aversion", 1.0)
+            if not hasattr(cp, "Variable"):
+                return self._heuristic_weight_optimization(posterior_returns, blended_constraints)
+            return self._mean_variance_optimization(posterior_returns, scaled_risk, blended_constraints)
+
+        except Exception as e:
+            logger.error(f"Black-Litterman优化失败: {e}")
+            return None
+
+    def _heuristic_weight_optimization(
+        self,
+        expected_returns: pd.Series,
+        constraints: Dict[str, Any] = None,
+    ) -> pd.Series:
+        """在缺少求解器时提供研究型回退权重。"""
+        try:
+            constraints = constraints or {}
+            shifted = expected_returns.astype(float) - float(expected_returns.min())
+            base = shifted + 1e-6
+
+            if float(base.sum()) <= 0:
+                return self._equal_weight_optimization(expected_returns, None, constraints)
+
+            weights = base / base.sum()
+            return self._apply_constraints(weights, constraints)
+
+        except Exception as e:
+            logger.error(f"启发式权重优化失败: {e}")
+            return None
+
     def _build_factor_exposure_matrix(self, ts_codes: List[str], factor_exposures: Any) -> Optional[pd.DataFrame]:
         """构建并对齐因子暴露矩阵（index=股票代码，columns=因子）。"""
         if factor_exposures is None:
@@ -416,6 +480,27 @@ class PortfolioOptimizer:
                     other_stocks = weights[weights <= max_conc]
                     if len(other_stocks) > 0:
                         weights[weights <= max_conc] += excess_weight / len(other_stocks)
+
+            industry_constraints = constraints.get('industry_constraints') or {}
+            industry_map = constraints.get('industry_map') or {}
+            if industry_constraints and industry_map:
+                for industry, industry_rule in industry_constraints.items():
+                    members = [code for code in weights.index if industry_map.get(code) == industry]
+                    if not members:
+                        continue
+                    max_weight = float((industry_rule or {}).get('max_weight', 1.0))
+                    industry_weight = float(weights.loc[members].sum())
+                    if industry_weight <= max_weight:
+                        continue
+
+                    scale = max_weight / industry_weight if industry_weight > 0 else 1.0
+                    weights.loc[members] = weights.loc[members] * scale
+
+                    remaining_codes = [code for code in weights.index if code not in members]
+                    remaining_weight = float(weights.loc[remaining_codes].sum()) if remaining_codes else 0.0
+                    target_remaining = 1.0 - float(weights.loc[members].sum())
+                    if remaining_codes and remaining_weight > 0 and target_remaining > 0:
+                        weights.loc[remaining_codes] = weights.loc[remaining_codes] * (target_remaining / remaining_weight)
             
             # 重新归一化
             weights = weights / weights.sum()

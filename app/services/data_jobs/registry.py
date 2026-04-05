@@ -28,6 +28,8 @@ class JobRegistry:
                 display_name="股票基础资料",
                 description="下载股票代码、简称、地域、行业和上市日期。",
                 recommended_order=2,
+                source_name="tushare",
+                source_mode="full",
             ),
             "trade_calendar": JobDefinition(
                 "trade_calendar",
@@ -36,6 +38,9 @@ class JobRegistry:
                 display_name="交易日历",
                 description="下载交易日、开市状态和前一交易日，是日频任务的基础依赖。",
                 recommended_order=1,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
             "stock_company": JobDefinition(
                 "stock_company",
@@ -44,6 +49,8 @@ class JobRegistry:
                 display_name="上市公司资料",
                 description="补充公司基本信息和上市主体信息。",
                 recommended_order=3,
+                source_name="tushare",
+                source_mode="full",
             ),
             "daily_history_by_code": JobDefinition(
                 "daily_history_by_code",
@@ -53,6 +60,9 @@ class JobRegistry:
                 description="按股票逐只下载日线行情，依赖股票基础资料。",
                 dependencies=["stock_basic"],
                 recommended_order=5,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
             "daily_history_by_date": JobDefinition(
                 "daily_history_by_date",
@@ -62,6 +72,9 @@ class JobRegistry:
                 description="按交易日批量下载日线行情，适合初始化全市场日线数据。",
                 dependencies=["trade_calendar"],
                 recommended_order=4,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
             "daily_basic": JobDefinition(
                 "daily_basic",
@@ -70,6 +83,9 @@ class JobRegistry:
                 display_name="日线基本指标",
                 description="下载换手率、市盈率、市值等日线基本面指标。",
                 recommended_order=6,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
             "baostock_daily": JobDefinition(
                 "baostock_daily",
@@ -79,24 +95,27 @@ class JobRegistry:
                 description="使用 Baostock 补充日线行情数据。",
                 dependencies=["stock_basic"],
                 recommended_order=7,
+                source_name="baostock",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
-            "min5": JobDefinition("min5", "分钟行情", "app/utils/min5.py", display_name="5 分钟行情", description="下载 5 分钟级别行情。", dependencies=["stock_basic"]),
-            "min15": JobDefinition("min15", "分钟行情", "app/utils/min15.py", display_name="15 分钟行情", description="下载 15 分钟级别行情。", dependencies=["stock_basic"]),
-            "min30": JobDefinition("min30", "分钟行情", "app/utils/min30.py", display_name="30 分钟行情", description="下载 30 分钟级别行情。", dependencies=["stock_basic"]),
-            "min60": JobDefinition("min60", "分钟行情", "app/utils/min60.py", display_name="60 分钟行情", description="下载 60 分钟级别行情。", dependencies=["stock_basic"]),
+            "min5": JobDefinition("min5", "分钟行情", "app/utils/min5.py", display_name="5 分钟行情", description="下载 5 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
+            "min15": JobDefinition("min15", "分钟行情", "app/utils/min15.py", display_name="15 分钟行情", description="下载 15 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
+            "min30": JobDefinition("min30", "分钟行情", "app/utils/min30.py", display_name="30 分钟行情", description="下载 30 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
+            "min60": JobDefinition("min60", "分钟行情", "app/utils/min60.py", display_name="60 分钟行情", description="下载 60 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
             "income_statement": JobDefinition(
-                "income_statement", "财务三表", "app/utils/income_statement.py", display_name="利润表", description="下载上市公司利润表。", dependencies=["stock_basic"]
+                "income_statement", "财务三表", "app/utils/income_statement.py", display_name="利润表", description="下载上市公司利润表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
             ),
             "balance_sheet": JobDefinition(
-                "balance_sheet", "财务三表", "app/utils/balance_sheet.py", display_name="资产负债表", description="下载上市公司资产负债表。", dependencies=["stock_basic"]
+                "balance_sheet", "财务三表", "app/utils/balance_sheet.py", display_name="资产负债表", description="下载上市公司资产负债表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
             ),
             "cash_flow": JobDefinition(
-                "cash_flow", "财务三表", "app/utils/cash_flow.py", display_name="现金流量表", description="下载上市公司现金流量表。", dependencies=["stock_basic"]
+                "cash_flow", "财务三表", "app/utils/cash_flow.py", display_name="现金流量表", description="下载上市公司现金流量表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
             ),
-            "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py", display_name="资金流向", description="下载主力、大单、中单和小单资金流数据。", recommended_order=7),
-            "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。"),
-            "stk_factor": JobDefinition("stk_factor", "资金流与扩展因子", "app/utils/stk_factor.py", display_name="扩展技术因子", description="下载或计算扩展因子字段。", recommended_order=8),
-            "cyq_perf": JobDefinition("cyq_perf", "资金流与扩展因子", "app/utils/cyq_perf.py", display_name="筹码分布", description="下载筹码成本、胜率等筹码分布指标。", recommended_order=9),
+            "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py", display_name="资金流向", description="下载主力、大单、中单和小单资金流数据。", recommended_order=7, source_name="tushare", source_mode="incremental", supports_incremental=True),
+            "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。", source_name="ths", source_mode="incremental", supports_incremental=True),
+            "stk_factor": JobDefinition("stk_factor", "资金流与扩展因子", "app/utils/stk_factor.py", display_name="扩展技术因子", description="下载或计算扩展因子字段。", recommended_order=8, source_name="tushare", source_mode="incremental", supports_incremental=True),
+            "cyq_perf": JobDefinition("cyq_perf", "资金流与扩展因子", "app/utils/cyq_perf.py", display_name="筹码分布", description="下载筹码成本、胜率等筹码分布指标。", recommended_order=9, source_name="tushare", source_mode="incremental", supports_incremental=True),
             "ma_calculator": JobDefinition(
                 "ma_calculator",
                 "衍生计算",
@@ -105,6 +124,8 @@ class JobRegistry:
                 description="基于日线行情生成均线结果，属于衍生计算任务。",
                 dangerous=True,
                 dependencies=["daily_history_by_code"],
+                source_name="derived",
+                source_mode="derived",
             ),
         }
 

@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时交易信号 - 多因子模型系统</title>
+{% extends "base.html" %}
+
+{% block title %}实时交易信号 - 多因子模型系统{% endblock %}
+
+{% block extra_css %}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
@@ -38,8 +37,9 @@
             font-size: 0.875rem;
         }
     </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
     <div class="container-fluid py-4">
         <!-- 页面标题 -->
         <div class="row mb-4">
@@ -406,7 +406,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // 全局变量
         let supportedStrategies = [];
@@ -955,5 +954,4 @@
             logModal.show();
         }
     </script>
-</body>
-</html> 
+{% endblock %}

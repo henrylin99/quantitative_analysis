@@ -24,3 +24,6 @@ class JobDefinition:
     dependencies: List[str] = field(default_factory=list)
     default_params: Dict[str, Any] = field(default_factory=dict)
     recommended_order: int = 999
+    source_name: str = "unknown"
+    source_mode: str = "full"
+    supports_incremental: bool = False

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pandas as pd
 import numpy as np
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
 from app.services.factor_engine import FactorEngine
@@ -12,6 +13,8 @@ from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
 from app.services.model_training_job_service import ModelTrainingJobService
 from app.models.portfolio_position import PortfolioPosition
+from app.models.portfolio_rebalance_run import PortfolioRebalanceRun
+from app.models.backtest_run import BacktestRun
 from app.models.stock_daily_history import StockDailyHistory
 
 # 创建蓝图
@@ -26,8 +29,7 @@ backtest_engine = None
 training_job_service = None
 
 SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
-SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral"}
-UNSUPPORTED_PORTFOLIO_CONSTRAINTS = {"industry_constraints"}
+SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral", "black_litterman"}
 
 # JSON序列化辅助函数
 def convert_numpy_types(obj):
@@ -790,14 +792,6 @@ def optimize_portfolio():
                 'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
             }), 400
 
-        unsupported_constraints = sorted(
-            key for key in (constraints or {}).keys() if key in UNSUPPORTED_PORTFOLIO_CONSTRAINTS
-        )
-        if unsupported_constraints:
-            return jsonify({
-                'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
-            }), 400
-        
         # 转换风险模型
         risk_model_df = None
         if risk_model:
@@ -1017,6 +1011,7 @@ def apply_portfolio_rebalance():
         data = request.get_json()
         portfolio_id = data.get('portfolio_id')
         target_weights = data.get('target_weights') or {}
+        rebalance_note = data.get('rebalance_note')
 
         if not portfolio_id:
             return jsonify({'error': '缺少必需参数: portfolio_id'}), 400
@@ -1080,6 +1075,25 @@ def apply_portfolio_rebalance():
                 position.is_active = False
                 deactivated_count += 1
 
+        rebalance_summary = {
+            'updated_count': updated_count,
+            'created_count': created_count,
+            'deactivated_count': deactivated_count,
+            'target_weight_count': len(target_weights),
+        }
+        rebalance_run = None
+        try:
+            rebalance_run = PortfolioRebalanceRun.create_run(
+                portfolio_id=portfolio_id,
+                target_weights=target_weights,
+                summary=rebalance_summary,
+                rebalance_note=rebalance_note,
+            )
+        except SQLAlchemyError as audit_error:
+            # 审计表迁移尚未补齐时，不阻断研究型再平衡主流程。
+            db.session.rollback()
+            logger.warning(f"再平衡审计记录写入失败，已降级跳过: {audit_error}")
+
         db.session.commit()
 
         return jsonify({
@@ -1088,6 +1102,8 @@ def apply_portfolio_rebalance():
             'updated_count': updated_count,
             'created_count': created_count,
             'deactivated_count': deactivated_count,
+            'rebalance_run_id': rebalance_run.id if rebalance_run else None,
+            'rebalance_note': rebalance_note,
         })
 
     except Exception as e:
@@ -1124,14 +1140,6 @@ def integrated_portfolio_selection():
                 'supported_methods': sorted(SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS)
             }), 400
 
-        unsupported_constraints = sorted(
-            key for key in (constraints or {}).keys() if key in UNSUPPORTED_PORTFOLIO_CONSTRAINTS
-        )
-        if unsupported_constraints:
-            return jsonify({
-                'error': f"不支持的约束条件: {', '.join(unsupported_constraints)}"
-            }), 400
-        
         # 步骤1: 股票选择
         if selection_method == 'ml_based' and model_ids:
             # 基于ML模型选股
@@ -1241,6 +1249,22 @@ def run_backtest():
         
     except Exception as e:
         logger.error(f"回测失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/backtest/runs/<int:run_id>', methods=['GET'])
+def get_backtest_run(run_id):
+    """获取回测运行记录"""
+    try:
+        run = BacktestRun.query.filter_by(id=run_id).first()
+        if run is None:
+            return jsonify({'error': '回测记录不存在'}), 404
+        return jsonify({
+            'success': True,
+            'run': run.to_dict(),
+        })
+    except Exception as e:
+        logger.error(f"获取回测记录失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
