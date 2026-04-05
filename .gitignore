@@ -124,3 +124,7 @@ tests/
 
 # Local backup archive
 bak/
+
+# Local-only engineering scaffolding
+.github/
+migrations/
