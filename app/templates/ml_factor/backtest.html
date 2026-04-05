@@ -160,6 +160,13 @@
                 <div class="card-body">
                     <!-- 关键指标 -->
                     <div class="row mb-4">
+                        <div class="col-md-12 mb-3">
+                            <div class="small text-muted">
+                                回测运行ID: <span id="backtestRunId">--</span> |
+                                执行假设: <span id="executionAssumptionsText">--</span> |
+                                交易约束: <span id="tradeConstraintsText">--</span>
+                            </div>
+                        </div>
                         <div class="col-md-2">
                             <div class="text-center">
                                 <h4 class="text-primary" id="totalReturn">--</h4>
@@ -465,7 +472,12 @@ async function startBacktest() {
                     min_weight: 0.01
                 }
             },
-            transaction_cost: config.commission_rate + config.slippage_rate
+            commission_rate: config.commission_rate,
+            slippage_rate: config.slippage_rate,
+            benchmark_index: config.benchmark_index,
+            min_trade_weight: 0.01,
+            suspend_policy: 'skip',
+            limit_up_down_policy: 'skip',
         };
         
         // 为选择的因子设置等权重
@@ -566,8 +578,17 @@ function displayBacktestResults(data) {
     document.getElementById('riskAnalysis').style.display = 'block';
     
     // 从后端数据中提取指标
+    const runId = data.run_id || '--';
     const totalReturn = data.total_return || 0;
     const performanceMetrics = data.performance_metrics || {};
+    const executionAssumptions = data.execution_assumptions || {};
+    const tradeConstraints = data.trade_constraints || {};
+
+    document.getElementById('backtestRunId').textContent = runId;
+    document.getElementById('executionAssumptionsText').textContent =
+        `手续费 ${(executionAssumptions.commission_rate || 0) * 100}% / 滑点 ${(executionAssumptions.slippage_rate || 0) * 100}% / 基准 ${executionAssumptions.benchmark_index || '--'}`;
+    document.getElementById('tradeConstraintsText').textContent =
+        `持股上限 ${tradeConstraints.max_position_count || '--'} / 最小交易权重 ${(tradeConstraints.min_trade_weight || 0) * 100}% / 停牌 ${tradeConstraints.suspend_policy || '--'} / 涨跌停 ${tradeConstraints.limit_up_down_policy || '--'}`;
     
     // 更新关键指标
     document.getElementById('totalReturn').textContent = (totalReturn * 100).toFixed(2) + '%';

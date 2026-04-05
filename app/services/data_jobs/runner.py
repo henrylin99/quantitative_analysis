@@ -35,6 +35,9 @@ class ScriptRunner:
             end_date = params.get("end_date")
             trade_date = params.get("trade_date")
             full_refresh = params.get("full_refresh")
+            source_name = params.get("source_name")
+            source_mode = params.get("source_mode")
+            snapshot_tag = params.get("snapshot_tag")
             if start_date:
                 merged_env["DATA_JOB_START_DATE"] = str(start_date)
             if end_date:
@@ -43,6 +46,12 @@ class ScriptRunner:
                 merged_env["DATA_JOB_TRADE_DATE"] = str(trade_date)
             if full_refresh is not None:
                 merged_env["DATA_JOB_FULL_REFRESH"] = str(full_refresh)
+            if source_name:
+                merged_env["DATA_JOB_SOURCE_NAME"] = str(source_name)
+            if source_mode:
+                merged_env["DATA_JOB_SOURCE_MODE"] = str(source_mode)
+            if snapshot_tag:
+                merged_env["DATA_JOB_SNAPSHOT_TAG"] = str(snapshot_tag)
 
             for key, value in params.items():
                 if value is None:

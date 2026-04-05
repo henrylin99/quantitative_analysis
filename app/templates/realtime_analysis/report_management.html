@@ -1,151 +1,158 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>报告管理 - 实时分析系统</title>
+{% extends "base.html" %}
+
+{% block title %}报告管理 - 实时分析系统{% endblock %}
+
+{% block extra_css %}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
     <style>
-        .report-card {
+        .report-card, .template-card, .subscription-card {
+            border-left: 4px solid #0d6efd;
             transition: transform 0.2s;
-            border-left: 4px solid #007bff;
         }
-        .report-card:hover {
+        .template-card { border-left-color: #198754; }
+        .subscription-card { border-left-color: #ffc107; }
+        .report-card:hover, .template-card:hover, .subscription-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .status-badge {
-            font-size: 0.75rem;
+        .summary-card {
+            min-height: 120px;
         }
-        .template-card {
-            border-left: 4px solid #28a745;
-        }
-        .subscription-card {
-            border-left: 4px solid #ffc107;
-        }
-        .nav-pills .nav-link.active {
-            background-color: #007bff;
-        }
-        .chart-container {
-            height: 300px;
-            margin: 20px 0;
-        }
-        .loading-spinner {
-            display: none;
-        }
-        .fade-in {
-            animation: fadeIn 0.5s;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+        .json-block {
+            white-space: pre-wrap;
+            font-size: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
         }
     </style>
-</head>
-<body>
-    <div class="container-fluid">
-        <!-- 页面标题 -->
+{% endblock %}
+
+{% block content %}
+    <div class="container-fluid py-4">
         <div class="row mb-4">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h2><i class="bi bi-file-earmark-text"></i> 报告管理</h2>
-                        <p class="text-muted">当前页面仅开放报告列表与报告生成能力</p>
+            <div class="col-12 d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1"><i class="bi bi-file-earmark-text"></i> 报告管理</h2>
+                    <p class="text-muted mb-0">管理分析报告、模板和订阅</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" onclick="showGenerateReportModal()">
+                        <i class="bi bi-plus-circle"></i> 生成报告
+                    </button>
+                    <button class="btn btn-outline-success" onclick="showCreateTemplateModal()">
+                        <i class="bi bi-journal-plus"></i> 新建模板
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="showCreateSubscriptionModal()">
+                        <i class="bi bi-bell"></i> 新建订阅
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="refreshData()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card summary-card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="small">总报告数</div>
+                        <div class="fs-3 fw-bold" id="totalReports">0</div>
                     </div>
-                    <div>
-                        <button class="btn btn-primary" onclick="showGenerateReportModal()">
-                            <i class="bi bi-plus-circle"></i> 生成报告
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="refreshData()">
-                            <i class="bi bi-arrow-clockwise"></i> 刷新
-                        </button>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card summary-card bg-success text-white">
+                    <div class="card-body">
+                        <div class="small">总模板数</div>
+                        <div class="fs-3 fw-bold" id="totalTemplates">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card summary-card bg-warning text-dark">
+                    <div class="card-body">
+                        <div class="small">总订阅数</div>
+                        <div class="fs-3 fw-bold" id="totalSubscriptions">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card summary-card bg-info text-white">
+                    <div class="card-body">
+                        <div class="small">成功率</div>
+                        <div class="fs-3 fw-bold" id="successRate">0%</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 统计概览 -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card bg-primary text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 id="totalReports">0</h4>
-                                <p class="mb-0">总报告数</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="bi bi-file-earmark-text fs-1"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card bg-info text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 id="successRate">0%</h4>
-                                <p class="mb-0">成功率</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="bi bi-check-circle fs-1"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 功能标签页 -->
         <ul class="nav nav-pills mb-4" id="reportTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="reports-tab" data-bs-toggle="pill" data-bs-target="#reports" type="button" role="tab">
-                    <i class="bi bi-file-earmark-text"></i> 报告列表
-                </button>
-            </li>
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#reports" type="button">报告列表</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#templates" type="button">模板管理</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#subscriptions" type="button">订阅管理</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#statistics" type="button">统计分析</button></li>
         </ul>
 
-        <!-- 标签页内容 -->
-        <div class="tab-content" id="reportTabsContent">
-            <!-- 报告列表 -->
+        <div class="tab-content">
             <div class="tab-pane fade show active" id="reports" role="tabpanel">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">报告列表</h5>
-                        <div>
-                            <select class="form-select form-select-sm" id="reportTypeFilter" onchange="filterReports()">
-                                <option value="">所有类型</option>
-                                <option value="daily_summary">每日总结</option>
-                                <option value="portfolio_analysis">组合分析</option>
-                                <option value="risk_assessment">风险评估</option>
-                                <option value="signal_analysis">信号分析</option>
-                                <option value="market_overview">市场概览</option>
-                            </select>
-                        </div>
+                        <span>报告列表</span>
+                        <select class="form-select form-select-sm w-auto" id="reportTypeFilter" onchange="filterReports()">
+                            <option value="">所有类型</option>
+                            <option value="daily_summary">每日市场总结</option>
+                            <option value="portfolio_analysis">投资组合分析</option>
+                            <option value="risk_assessment">风险评估报告</option>
+                            <option value="signal_analysis">交易信号分析</option>
+                            <option value="market_overview">市场概览报告</option>
+                        </select>
                     </div>
                     <div class="card-body">
-                        <div id="reportsContainer" class="row">
-                            <!-- 报告卡片将在这里动态生成 -->
-                        </div>
-                        <div class="text-center mt-3">
-                            <div class="loading-spinner">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">加载中...</span>
-                                </div>
-                            </div>
-                        </div>
+                        <div id="reportsContainer" class="row"></div>
                     </div>
                 </div>
             </div>
 
+            <div class="tab-pane fade" id="templates" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>模板管理</span>
+                        <button class="btn btn-sm btn-outline-success" onclick="showCreateTemplateModal()">新增模板</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="templatesContainer" class="row"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="subscriptions" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>订阅管理</span>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-warning" onclick="showCreateSubscriptionModal()">新增订阅</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="dispatchSubscriptions()">立即分发</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="subscriptionsContainer" class="row"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="statistics" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">统计分析</div>
+                    <div class="card-body">
+                        <div id="statisticsContainer" class="json-block">暂无统计数据</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- 生成报告模态框 -->
     <div class="modal fade" id="generateReportModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -168,12 +175,12 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">报告名称</label>
-                            <input type="text" class="form-control" id="reportName" placeholder="留空则由当前页面按规则补全">
+                            <input type="text" class="form-control" id="reportName" placeholder="留空则自动生成报告名称">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">模板</label>
                             <select class="form-select" id="templateId">
-                                <option value="">使用当前已接入模板</option>
+                                <option value="">使用默认模板或选择现有模板</option>
                             </select>
                         </div>
                         <div class="mb-3" id="portfolioIdGroup" style="display: none;">
@@ -190,270 +197,294 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // 全局变量
-        let reports = [];
+    <div class="modal fade" id="createTemplateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">模板名称</label>
+                        <input type="text" class="form-control" id="templateName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">模板类型</label>
+                        <select class="form-select" id="templateType">
+                            <option value="daily_summary">每日市场总结</option>
+                            <option value="portfolio_analysis">投资组合分析</option>
+                            <option value="risk_assessment">风险评估报告</option>
+                            <option value="signal_analysis">交易信号分析</option>
+                            <option value="market_overview">市场概览报告</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="templateDescription" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="createTemplate()">创建模板</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // 页面加载完成后初始化
+    <div class="modal fade" id="createSubscriptionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建订阅</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">订阅名称</label>
+                        <input type="text" class="form-control" id="subscriptionName" placeholder="订阅名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">模板</label>
+                        <select class="form-select" id="subscriptionTemplateId"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">邮箱</label>
+                        <input type="email" class="form-control" id="subscriberEmail">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">通知渠道</label>
+                        <select class="form-select" id="notificationChannels" multiple>
+                            <option value="email">email</option>
+                            <option value="log" selected>log</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-warning" onclick="createSubscription()">创建订阅</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let reports = [];
+        let templates = [];
+        let subscriptions = [];
+
         document.addEventListener('DOMContentLoaded', function() {
-            loadInitialData();
             setupEventListeners();
+            refreshData();
         });
 
-        // 设置事件监听器
         function setupEventListeners() {
-            // 报告类型变化时显示/隐藏组合ID输入框
             document.getElementById('reportType').addEventListener('change', function() {
                 const portfolioGroup = document.getElementById('portfolioIdGroup');
-                const needsPortfolio = ['portfolio_analysis', 'risk_assessment'].includes(this.value);
-                portfolioGroup.style.display = needsPortfolio ? 'block' : 'none';
+                portfolioGroup.style.display = ['portfolio_analysis', 'risk_assessment'].includes(this.value) ? 'block' : 'none';
             });
         }
 
-        // 加载初始数据
-        async function loadInitialData() {
-            await loadReports();
+        async function refreshData() {
+            await Promise.all([loadReports(), loadTemplates(), loadSubscriptions(), loadStatistics()]);
         }
 
-        // 加载报告列表
         async function loadReports() {
-            try {
-                showLoading();
-                const response = await fetch('/api/realtime-analysis/reports/reports');
-                const result = await response.json();
-                
-                if (result.success) {
-                    reports = result.data;
-                    renderReports();
-                } else {
-                    showAlert('加载报告失败: ' + result.message, 'danger');
-                }
-            } catch (error) {
-                showAlert('加载报告失败: ' + error.message, 'danger');
-            } finally {
-                hideLoading();
-            }
+            const response = await fetch('/api/realtime-analysis/reports/reports');
+            const result = await response.json();
+            reports = result.success ? (result.data || []) : [];
+            renderReports();
         }
 
-        // 渲染报告列表
+        async function loadTemplates() {
+            const response = await fetch('/api/realtime-analysis/reports/templates');
+            const result = await response.json();
+            templates = result.success ? (result.data || []) : [];
+            renderTemplates();
+            updateTemplateSelects();
+        }
+
+        async function loadSubscriptions() {
+            const response = await fetch('/api/realtime-analysis/reports/subscriptions');
+            const result = await response.json();
+            subscriptions = result.success ? (result.data || []) : [];
+            renderSubscriptions();
+        }
+
+        async function loadStatistics() {
+            const response = await fetch('/api/realtime-analysis/reports/statistics');
+            const result = await response.json();
+            const stats = result.success ? (result.data || {}) : {};
+            document.getElementById('totalReports').textContent = stats.reports ? stats.reports.total : 0;
+            document.getElementById('totalTemplates').textContent = stats.templates ? stats.templates.total : 0;
+            document.getElementById('totalSubscriptions').textContent = stats.subscriptions ? stats.subscriptions.total : 0;
+            document.getElementById('successRate').textContent = stats.reports ? `${(stats.reports.success_rate || 0).toFixed(1)}%` : '0%';
+            document.getElementById('statisticsContainer').textContent = JSON.stringify(stats, null, 2);
+        }
+
         function renderReports() {
+            const filter = document.getElementById('reportTypeFilter').value;
+            const visibleReports = filter ? reports.filter(item => item.report_type === filter) : reports;
             const container = document.getElementById('reportsContainer');
-            
-            if (reports.length === 0) {
-                container.innerHTML = `
-                    <div class="col-12">
-                        <div class="text-center py-4">
-                            <i class="bi bi-file-earmark-text fs-1 text-muted"></i>
-                            <p class="text-muted mt-2">暂无报告数据</p>
-                        </div>
-                    </div>
-                `;
+            if (!visibleReports.length) {
+                container.innerHTML = '<div class="col-12 text-muted">暂无报告数据</div>';
                 return;
             }
-
-            container.innerHTML = reports.map(report => `
+            container.innerHTML = visibleReports.map(report => `
                 <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card report-card fade-in">
+                    <div class="card report-card">
                         <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="card-title">${report.report_name}</h6>
-                                <span class="badge ${getStatusBadgeClass(report.report_status)} status-badge">
-                                    ${getStatusText(report.report_status)}
-                                </span>
-                            </div>
-                            <p class="card-text text-muted small">
-                                类型: ${getReportTypeText(report.report_type)}<br>
-                                生成时间: ${formatDateTime(report.generated_at)}<br>
-                                ${report.generation_time ? `耗时: ${report.generation_time.toFixed(2)}秒` : ''}
-                            </p>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary" onclick="viewReport(${report.id})">
-                                    <i class="bi bi-eye"></i> 查看
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport(${report.id})">
-                                    <i class="bi bi-trash"></i> 删除
-                                </button>
-                            </div>
+                            <div class="fw-bold">${report.report_name}</div>
+                            <div class="small text-muted mb-2">${report.report_type}</div>
+                            <div class="small">状态: ${report.report_status || '-'}</div>
+                            <div class="small">生成时间: ${report.generated_at || '-'}</div>
                         </div>
                     </div>
                 </div>
             `).join('');
         }
 
-        // 生成报告
-        async function generateReport() {
-            const form = document.getElementById('generateReportForm');
-            const formData = new FormData(form);
-            
-            const data = {
-                report_type: document.getElementById('reportType').value,
-                report_name: document.getElementById('reportName').value || null,
-                template_id: document.getElementById('templateId').value || null,
-                parameters: {},
-                generated_by: 'user'
-            };
-
-            // 如果需要组合ID
-            const portfolioId = document.getElementById('portfolioId').value;
-            if (portfolioId && ['portfolio_analysis', 'risk_assessment'].includes(data.report_type)) {
-                data.parameters.portfolio_id = portfolioId;
+        function renderTemplates() {
+            const container = document.getElementById('templatesContainer');
+            if (!templates.length) {
+                container.innerHTML = '<div class="col-12 text-muted">暂无模板数据</div>';
+                return;
             }
+            container.innerHTML = templates.map(template => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card template-card">
+                        <div class="card-body">
+                            <div class="fw-bold">${template.template_name}</div>
+                            <div class="small text-muted mb-2">${template.template_type}</div>
+                            <div class="small">${template.description || '无描述'}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-            try {
-                const response = await fetch('/api/realtime-analysis/reports/generate-report', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-                
-                if (result.success) {
-                    showAlert('报告生成成功', 'success');
-                    bootstrap.Modal.getInstance(document.getElementById('generateReportModal')).hide();
-                    form.reset();
-                    await loadReports();
-                } else {
-                    showAlert('报告生成失败: ' + result.message, 'danger');
-                }
-            } catch (error) {
-                showAlert('报告生成失败: ' + error.message, 'danger');
+        function renderSubscriptions() {
+            const container = document.getElementById('subscriptionsContainer');
+            if (!subscriptions.length) {
+                container.innerHTML = '<div class="col-12 text-muted">暂无订阅数据</div>';
+                return;
             }
+            container.innerHTML = subscriptions.map(item => `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card subscription-card">
+                        <div class="card-body">
+                            <div class="fw-bold">${item.subscription_name}</div>
+                            <div class="small text-muted mb-2">${item.template_name || '-'}</div>
+                            <div class="small">邮箱: ${item.subscriber_email || '-'}</div>
+                            <div class="small">下次发送: ${item.next_send_at || '-'}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        // 工具函数
-        function getStatusBadgeClass(status) {
-            const classes = {
-                'completed': 'bg-success',
-                'failed': 'bg-danger',
-                'generating': 'bg-warning'
-            };
-            return classes[status] || 'bg-secondary';
+        function updateTemplateSelects() {
+            const reportSelect = document.getElementById('templateId');
+            const subSelect = document.getElementById('subscriptionTemplateId');
+            const options = ['<option value="">使用默认模板或选择现有模板</option>'].concat(
+                templates.map(template => `<option value="${template.id}">${template.template_name}</option>`)
+            ).join('');
+            reportSelect.innerHTML = options;
+            subSelect.innerHTML = templates.map(template => `<option value="${template.id}">${template.template_name}</option>`).join('');
         }
 
-        function getStatusText(status) {
-            const texts = {
-                'completed': '已完成',
-                'failed': '失败',
-                'generating': '生成中'
-            };
-            return texts[status] || status;
+        function filterReports() {
+            renderReports();
         }
 
-        function getReportTypeText(type) {
-            const texts = {
-                'daily_summary': '每日总结',
-                'portfolio_analysis': '组合分析',
-                'risk_assessment': '风险评估',
-                'signal_analysis': '信号分析',
-                'market_overview': '市场概览',
-                'custom': '自定义'
-            };
-            return texts[type] || type;
-        }
-
-        function formatDateTime(dateStr) {
-            if (!dateStr) return '-';
-            return new Date(dateStr).toLocaleString('zh-CN');
-        }
-
-        function showAlert(message, type = 'info') {
-            // 简单的提示实现
-            alert(message);
-        }
-
-        function showLoading() {
-            document.querySelector('.loading-spinner').style.display = 'block';
-        }
-
-        function hideLoading() {
-            document.querySelector('.loading-spinner').style.display = 'none';
-        }
-
-        // 模态框显示函数
         function showGenerateReportModal() {
             new bootstrap.Modal(document.getElementById('generateReportModal')).show();
         }
 
-        // 刷新数据
-        function refreshData() {
-            loadInitialData();
+        function showCreateTemplateModal() {
+            new bootstrap.Modal(document.getElementById('createTemplateModal')).show();
         }
 
-        function filterReports() {
-            const type = document.getElementById('reportTypeFilter').value;
-            const filtered = type ? reports.filter(report => report.report_type === type) : reports;
-            const container = document.getElementById('reportsContainer');
-
-            if (filtered.length === 0) {
-                container.innerHTML = `
-                    <div class="col-12">
-                        <div class="text-center py-4">
-                            <i class="bi bi-file-earmark-text fs-1 text-muted"></i>
-                            <p class="text-muted mt-2">没有匹配的报告</p>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
-            container.innerHTML = filtered.map(report => `
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card report-card fade-in">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="card-title">${report.report_name}</h6>
-                                <span class="badge ${getStatusBadgeClass(report.report_status)} status-badge">
-                                    ${getStatusText(report.report_status)}
-                                </span>
-                            </div>
-                            <p class="card-text text-muted small">
-                                类型: ${getReportTypeText(report.report_type)}<br>
-                                生成时间: ${formatDateTime(report.generated_at)}<br>
-                                ${report.generation_time ? `耗时: ${report.generation_time.toFixed(2)}秒` : ''}
-                            </p>
-                                <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary" onclick="viewReport(${report.id})">
-                                    <i class="bi bi-eye"></i> 查看
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport(${report.id})">
-                                    <i class="bi bi-trash"></i> 删除
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+        function showCreateSubscriptionModal() {
+            new bootstrap.Modal(document.getElementById('createSubscriptionModal')).show();
         }
 
-        function viewReport(id) {
-            window.location.href = `/api/realtime-analysis/reports/reports/${id}`;
+        async function generateReport() {
+            const payload = {
+                report_type: document.getElementById('reportType').value,
+                template_id: document.getElementById('templateId').value || null,
+                report_name: document.getElementById('reportName').value || null,
+                parameters: {},
+                generated_by: 'ui',
+            };
+            const portfolioId = document.getElementById('portfolioId').value.trim();
+            if (portfolioId) {
+                payload.parameters.portfolio_id = portfolioId;
+            }
+            const response = await fetch('/api/realtime-analysis/reports/generate-report', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            showAlert(result.success ? '报告生成成功' : `报告生成失败: ${result.message}`, result.success ? 'success' : 'danger');
+            if (result.success) refreshData();
         }
 
-        async function deleteReport(id) {
-            if (!confirm('确定要删除这份报告吗？')) {
-                return;
-            }
+        async function createTemplate() {
+            const payload = {
+                template_name: document.getElementById('templateName').value,
+                template_type: document.getElementById('templateType').value,
+                description: document.getElementById('templateDescription').value,
+                created_by: 'ui',
+            };
+            const response = await fetch('/api/realtime-analysis/reports/templates', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            showAlert(result.success ? '模板创建成功' : `模板创建失败: ${result.message}`, result.success ? 'success' : 'danger');
+            if (result.success) refreshData();
+        }
 
-            try {
-                const response = await fetch(`/api/realtime-analysis/reports/reports/${id}`, {
-                    method: 'DELETE'
-                });
-                const result = await response.json();
+        async function createSubscription() {
+            const payload = {
+                subscription_name: document.getElementById('subscriptionName').value,
+                template_id: document.getElementById('subscriptionTemplateId').value,
+                subscriber_email: document.getElementById('subscriberEmail').value || null,
+                schedule_type: 'daily',
+                schedule_config: {"parameters": {}},
+                notification_channels: Array.from(document.getElementById('notificationChannels').selectedOptions).map(option => option.value),
+                created_by: 'ui',
+            };
+            const response = await fetch('/api/realtime-analysis/reports/subscriptions', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            showAlert(result.success ? '订阅创建成功' : `订阅创建失败: ${result.message}`, result.success ? 'success' : 'danger');
+            if (result.success) refreshData();
+        }
 
-                if (result.success) {
-                    showAlert('报告删除成功', 'success');
-                    await loadReports();
-                } else {
-                    showAlert('报告删除失败: ' + result.message, 'danger');
-                }
-            } catch (error) {
-                showAlert('报告删除失败: ' + error.message, 'danger');
-            }
+        async function dispatchSubscriptions() {
+            const response = await fetch('/api/realtime-analysis/reports/subscriptions/dispatch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+            });
+            const result = await response.json();
+            showAlert(result.success ? `分发完成: 成功 ${result.dispatched}` : `分发失败: ${result.message}`, result.success ? 'success' : 'danger');
+            if (result.success) refreshData();
+        }
+
+        function showAlert(message, type) {
+            const div = document.createElement('div');
+            div.className = `alert alert-${type} position-fixed`;
+            div.style.cssText = 'top:20px;right:20px;z-index:9999;min-width:320px;';
+            div.textContent = message;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 2500);
         }
     </script>
-</body>
-</html> 
+{% endblock %}

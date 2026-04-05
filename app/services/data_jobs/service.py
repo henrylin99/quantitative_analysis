@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from app.extensions import db
@@ -41,7 +42,7 @@ class DataJobService:
         self.execution_mode = _resolve_execution_mode(execution_mode)
 
     def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None) -> DataJobRun:
-        self.registry.get_job(job_type)
+        definition = self.registry.get_job(job_type)
         params = params or {}
         find_active_duplicate = getattr(self.state_store, "find_active_duplicate", None)
         if callable(find_active_duplicate):
@@ -49,8 +50,36 @@ class DataJobService:
             if duplicate_run is not None:
                 raise ValueError(f"duplicate running job: {duplicate_run.id}")
 
-        run = self.state_store.create_run(job_type, params)
-        run = self.state_store.update_run_status(run, "queued", progress=0.0)
+        snapshot_tag = datetime.utcnow().strftime("%Y-%m-%d")
+        try:
+            run = self.state_store.create_run(
+                job_type,
+                params,
+                source_name=definition.source_name,
+                source_mode=definition.source_mode,
+                snapshot_tag=snapshot_tag,
+                progress_message="已创建任务，等待调度",
+            )
+        except TypeError:
+            run = self.state_store.create_run(job_type, params)
+            for field_name, field_value in {
+                "source_name": definition.source_name,
+                "source_mode": definition.source_mode,
+                "snapshot_tag": snapshot_tag,
+                "progress_message": "已创建任务，等待调度",
+            }.items():
+                if hasattr(run, field_name):
+                    setattr(run, field_name, field_value)
+
+        try:
+            run = self.state_store.update_run_status(
+                run,
+                "queued",
+                progress=0.0,
+                progress_message="任务已入队",
+            )
+        except TypeError:
+            run = self.state_store.update_run_status(run, "queued", progress=0.0)
 
         if self.execution_mode == "inline":
             run_data_job(run.id)

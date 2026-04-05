@@ -70,7 +70,11 @@
         badge.textContent = status;
 
         const percent = typeof run.progress === "number" ? `${run.progress.toFixed(1)}%` : "-";
-        progress.textContent = `run_id=${run.id} | status=${status} | progress=${percent} | started=${formatTime(run.started_at)} | finished=${formatTime(run.finished_at)}`;
+        const progressMessage = run.progress_message || "暂无详细进度";
+        const sourceName = run.source_name || "-";
+        const sourceMode = run.source_mode || "-";
+        const snapshotTag = run.snapshot_tag || "-";
+        progress.textContent = `run_id=${run.id} | status=${status} | progress=${percent} | message=${progressMessage} | source=${sourceName}/${sourceMode} | snapshot=${snapshotTag} | started=${formatTime(run.started_at)} | finished=${formatTime(run.finished_at)}`;
 
         const resultJson = run.result_json || {};
         const stdout = resultJson.stdout || "";
@@ -94,11 +98,15 @@
         const rows = runs
             .map((run) => {
                 const progress = typeof run.progress === "number" ? `${run.progress.toFixed(1)}%` : "-";
+                const progressMessage = run.progress_message || "-";
+                const sourceName = run.source_name || "-";
                 return `<tr data-run-id="${run.id}">
                     <td>${run.id}</td>
                     <td>${run.job_type}</td>
                     <td>${run.status}</td>
                     <td>${progress}</td>
+                    <td>${sourceName}</td>
+                    <td>${progressMessage}</td>
                     <td>${formatTime(run.finished_at || run.started_at || run.queued_at)}</td>
                 </tr>`;
             })
@@ -113,6 +121,8 @@
                             <th>任务</th>
                             <th>状态</th>
                             <th>进度</th>
+                            <th>来源</th>
+                            <th>进度消息</th>
                             <th>时间</th>
                         </tr>
                     </thead>
@@ -229,6 +239,8 @@
         dependencies.textContent = Array.isArray(job.dependencies) && job.dependencies.length > 0
             ? job.dependencies.join(", ")
             : "无";
+        const auditSummary = [job.source_name || "-", job.source_mode || "-"].join(" / ");
+        description.textContent = `${job.description || "暂无任务说明。"} 数据来源: ${auditSummary}`;
     }
 
     function renderInitializationStatus(report) {
