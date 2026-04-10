@@ -96,3 +96,31 @@ Tests use a real Flask app fixture (no DB — tests mock at the service boundary
 ### Python Version
 
 Supports Python 3.8–3.11. Python 3.12 has partial compatibility issues with some optional packages. The `runtime_compat.py` module patches `click.ParameterSource` for older Click versions.
+
+## Harness Rules
+
+长流程需求（涉及 2 个以上模块）开发时遵守以下规则：
+
+- **验收标准前置**：设计文档必须包含"验收标准"节，列出结构性合约（测试文件 + marker）和数值软目标（里程碑 checklist）
+- **测试先行**：实施计划的第一个 task 必须是"写结构性合约测试（预期失败）"
+- **marker 必打**：新测试必须打对应模块 marker（见 `acceptance/<module>.md`）
+- **模块顺序**：模块 marker 测试全绿前，不得开始下一模块的实现（流程约定，不做 git hook 强制）
+- **数值记录**：里程碑数值软目标结果记录在 `acceptance/milestones.md`，附日志截图
+
+### 本地验收命令
+
+```bash
+# 单模块验收
+pytest -m module_factor_engine -q
+
+# 里程碑验收（M2 为例）
+pytest -m "module_factor_engine or module_feature_engineering" -q
+
+# 全量回归
+pytest -q
+```
+
+### 模块注册表
+
+各模块的职责、合约测试、数值软目标见 `acceptance/<module>.md`。
+里程碑 checklist 见 `acceptance/milestones.md`。
