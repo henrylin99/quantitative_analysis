@@ -19,7 +19,7 @@
 | 注册表 | tests/data_jobs/test_registry.py | module_data_jobs |
 | Celery 任务 | tests/data_jobs/test_celery_tasks.py | module_data_jobs |
 
-## 数值软目标（里程碑 review 时人工确认）
+## 数值软目标（M1 里程碑 review 时人工确认）
 - 无（数据下载模块以结构性合约为主，数值目标由下游模块负责）
 
 ## 上游依赖
