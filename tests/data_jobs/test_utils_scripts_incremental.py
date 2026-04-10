@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.module_data_jobs
+
 
 SCRIPTS = [
     "app/utils/daily_history_by_code.py",
