@@ -232,7 +232,12 @@ class FactorEngine:
         data = {}
 
         def _exec_df(conn, stmt):
-            """Execute ORM statement and return DataFrame with Decimal columns cast to float."""
+            """Execute ORM statement and return DataFrame with Decimal columns cast to float.
+
+            pandas 3.0 no longer accepts SQLAlchemy ORM query.statement in read_sql(),
+            and MySQL DECIMAL columns come back as decimal.Decimal objects instead of float.
+            This helper normalises both issues.
+            """
             import decimal as _decimal
             r = conn.execute(stmt)
             df = pd.DataFrame(r.fetchall(), columns=list(r.keys()))
@@ -242,8 +247,8 @@ class FactorEngine:
                         df[col] = df[col].apply(
                             lambda x: float(x) if isinstance(x, _decimal.Decimal) else x
                         )
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        logger.debug(f"_exec_df: could not convert column '{col}' to float: {_e}")
             return df
 
         # 扩展日期范围以获取足够的历史数据
