@@ -230,10 +230,25 @@ class FactorEngine:
                         start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
         """获取计算因子所需的数据"""
         data = {}
-        
+
+        def _exec_df(conn, stmt):
+            """Execute ORM statement and return DataFrame with Decimal columns cast to float."""
+            import decimal as _decimal
+            r = conn.execute(stmt)
+            df = pd.DataFrame(r.fetchall(), columns=list(r.keys()))
+            for col in df.columns:
+                if df[col].dtype == object:
+                    try:
+                        df[col] = df[col].apply(
+                            lambda x: float(x) if isinstance(x, _decimal.Decimal) else x
+                        )
+                    except Exception:
+                        pass
+            return df
+
         # 扩展日期范围以获取足够的历史数据
         extended_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=252)).strftime('%Y-%m-%d')
-        
+
         try:
             # 基础行情数据
             if any(x in factor_id for x in ['momentum', 'volatility', 'volume', 'price']):
@@ -243,10 +258,11 @@ class FactorEngine:
                     StockDailyHistory.trade_date <= end_date
                 ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
                 
-                history_data = pd.read_sql(history_query.statement, db.engine)
+                with db.engine.connect() as conn:
+                    history_data = _exec_df(conn, history_query.statement)
                 data['history'] = history_data
                 logger.info(f"获取历史数据: {len(history_data)} 条记录")
-            
+
             # 基本面数据
             if any(x in factor_id for x in ['pe', 'pb', 'ps']):
                 basic_query = StockDailyBasic.query.filter(
@@ -254,10 +270,11 @@ class FactorEngine:
                     StockDailyBasic.trade_date >= start_date,
                     StockDailyBasic.trade_date <= end_date
                 ).order_by(StockDailyBasic.ts_code, StockDailyBasic.trade_date)
-                
-                basic_data = pd.read_sql(basic_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    basic_data = _exec_df(conn, basic_query.statement)
                 data['basic'] = basic_data
-            
+
             # 技术因子数据
             if 'ma' in factor_id:
                 factor_query = StockFactor.query.filter(
@@ -265,10 +282,11 @@ class FactorEngine:
                     StockFactor.trade_date >= start_date,
                     StockFactor.trade_date <= end_date
                 ).order_by(StockFactor.ts_code, StockFactor.trade_date)
-                
-                factor_data = pd.read_sql(factor_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    factor_data = _exec_df(conn, factor_query.statement)
                 data['factor'] = factor_data
-            
+
             # 资金流向数据
             if 'money' in factor_id:
                 money_query = StockMoneyflow.query.filter(
@@ -276,10 +294,11 @@ class FactorEngine:
                     StockMoneyflow.trade_date >= extended_start,
                     StockMoneyflow.trade_date <= end_date
                 ).order_by(StockMoneyflow.ts_code, StockMoneyflow.trade_date)
-                
-                money_data = pd.read_sql(money_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    money_data = _exec_df(conn, money_query.statement)
                 data['moneyflow'] = money_data
-            
+
             # 筹码数据
             if 'chip' in factor_id or 'winner' in factor_id:
                 cyq_query = StockCyqPerf.query.filter(
@@ -287,25 +306,28 @@ class FactorEngine:
                     StockCyqPerf.trade_date >= extended_start,
                     StockCyqPerf.trade_date <= end_date
                 ).order_by(StockCyqPerf.ts_code, StockCyqPerf.trade_date)
-                
-                cyq_data = pd.read_sql(cyq_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    cyq_data = _exec_df(conn, cyq_query.statement)
                 data['cyq'] = cyq_data
-            
+
             # 财务数据
             if any(x in factor_id for x in ['roe', 'roa', 'revenue', 'profit']):
                 # 获取最近4个季度的财务数据
                 income_query = StockIncomeStatement.query.filter(
                     StockIncomeStatement.ts_code.in_(ts_codes)
                 ).order_by(StockIncomeStatement.ts_code, StockIncomeStatement.end_date.desc())
-                
-                income_data = pd.read_sql(income_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    income_data = _exec_df(conn, income_query.statement)
                 data['income'] = income_data
-                
+
                 balance_query = StockBalanceSheet.query.filter(
                     StockBalanceSheet.ts_code.in_(ts_codes)
                 ).order_by(StockBalanceSheet.ts_code, StockBalanceSheet.end_date.desc())
-                
-                balance_data = pd.read_sql(balance_query.statement, db.engine)
+
+                with db.engine.connect() as conn:
+                    balance_data = _exec_df(conn, balance_query.statement)
                 data['balance'] = balance_data
             
         except Exception as e:
@@ -912,9 +934,11 @@ class FactorEngine:
                 trade_date=trade_date
             ).order_by(FactorValues.z_score.desc())
             
-            result = pd.read_sql(query.statement, db.engine)
+            with db.engine.connect() as conn:
+                _r = conn.execute(query.statement)
+                result = pd.DataFrame(_r.fetchall(), columns=list(_r.keys()))
             return result
-            
+
         except Exception as e:
             logger.error(f"获取因子暴露度失败: {factor_id}, {trade_date}, 错误: {e}")
             return pd.DataFrame()
@@ -944,7 +968,9 @@ class FactorEngine:
                 StockDailyHistory.trade_date <= end_date
             ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
 
-            history_df = pd.read_sql(query.statement, db.engine)
+            with db.engine.connect() as conn:
+                _r = conn.execute(query.statement)
+                history_df = pd.DataFrame(_r.fetchall(), columns=list(_r.keys()))
             if history_df.empty:
                 return pd.DataFrame()
 
