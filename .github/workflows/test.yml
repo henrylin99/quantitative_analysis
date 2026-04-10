@@ -1,0 +1,47 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_minimal.txt
+          pip install pytest
+      - name: Run tests
+        run: |
+          python -m pytest -q
+
+  module-gates:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module:
+          - module_data_jobs
+          - module_factor_engine
+          - module_feature_engineering
+          - module_ml_model
+          - module_backtest
+          - module_portfolio
+          - module_scoring
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_minimal.txt
+          pip install pytest
+      - name: Run module gate
+        run: pytest -m ${{ matrix.module }} -q
