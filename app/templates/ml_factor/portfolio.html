@@ -238,7 +238,7 @@ async function createPortfolio() {
     }
 
     try {
-        const response = await axios.post('/api/realtime-analysis/risk/portfolio', {
+        const response = await axios.post('/api/ml-factor/portfolio', {
             portfolio_id: portfolioId,
             ts_code: tsCode,
             position_size: positionSize,
@@ -248,10 +248,9 @@ async function createPortfolio() {
 
         if (response.data.success) {
             alert(`投资组合创建成功: ${portfolioId}`);
-            bootstrap.Modal.getInstance(document.getElementById('createPortfolioModal')).hide();
+            await closeModal('createPortfolioModal');
             document.getElementById('createPortfolioForm').reset();
             await loadPortfolios();
-            await viewPortfolioDetail(portfolioId);
             return;
         }
 
@@ -272,6 +271,31 @@ async function loadPortfolios() {
         console.error('加载投资组合失败:', error);
         showError('portfolioList', '加载投资组合失败');
     }
+}
+
+async function closeModal(modalId) {
+    const modalElement = document.getElementById(modalId);
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+    if (!modalInstance) {
+        return;
+    }
+
+    await new Promise((resolve) => {
+        const handleHidden = () => {
+            modalElement.removeEventListener('hidden.bs.modal', handleHidden);
+            resolve();
+        };
+        modalElement.addEventListener('hidden.bs.modal', handleHidden);
+        modalInstance.hide();
+    });
+
+    modalInstance.dispose();
+    cleanupModalArtifacts();
+}
+
+function cleanupModalArtifacts() {
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
 }
 
 // 渲染投资组合列表
@@ -996,8 +1020,8 @@ async function submitPortfolioPosition() {
     const portfolioId = currentPortfolioId;
     const method = editingPositionId ? 'put' : 'post';
     const url = editingPositionId
-        ? `/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${editingPositionId}`
-        : '/api/realtime-analysis/risk/portfolio';
+        ? `/api/ml-factor/portfolio/${portfolioId}/positions/${editingPositionId}`
+        : '/api/ml-factor/portfolio';
     const payload = {
         position_size: parseFloat(document.getElementById('positionSizeInput').value),
         avg_cost: parseFloat(document.getElementById('positionAvgCostInput').value),
@@ -1087,7 +1111,7 @@ async function deletePortfolioPosition(portfolioId, positionId) {
 
     try {
         const response = await axios.delete(
-            `/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${positionId}`
+            `/api/ml-factor/portfolio/${portfolioId}/positions/${positionId}`
         );
         if (response.data.success) {
             alert(`持仓删除成功: ${positionId}`);

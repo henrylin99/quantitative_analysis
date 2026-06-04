@@ -1279,6 +1279,104 @@ def save_optimized_portfolio():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/portfolio', methods=['POST'])
+def create_portfolio_position():
+    """创建真实投资组合的首个持仓（parquet 存储）。"""
+    try:
+        data = request.get_json()
+        portfolio_id = data.get('portfolio_id')
+        ts_code = data.get('ts_code')
+        position_size = data.get('position_size')
+        avg_cost = data.get('avg_cost')
+        sector = data.get('sector')
+
+        if not all([portfolio_id, ts_code, position_size, avg_cost]):
+            return jsonify({'success': False, 'message': '必填字段不能为空'}), 400
+
+        existing_position = _portfolio_repo.get_position_by_stock(portfolio_id, ts_code)
+        if existing_position:
+            return jsonify({'success': False, 'message': '该股票持仓已存在'}), 200
+
+        position = _portfolio_repo.upsert_position(
+            {
+                'portfolio_id': portfolio_id,
+                'ts_code': ts_code,
+                'position_size': float(position_size),
+                'avg_cost': float(avg_cost),
+                'current_price': float(avg_cost),
+                'market_value': float(position_size) * float(avg_cost),
+                'unrealized_pnl': 0.0,
+                'sector': sector,
+                'is_active': True,
+            }
+        )
+
+        return jsonify({
+            'success': True,
+            'data': position,
+            'message': '持仓创建成功',
+        })
+
+    except Exception as e:
+        logger.error(f"创建持仓失败: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/positions/<int:position_id>', methods=['PUT'])
+def update_portfolio_position(portfolio_id, position_id):
+    """更新真实投资组合持仓（parquet 存储）。"""
+    try:
+        data = request.get_json()
+        positions = _portfolio_repo.list_positions(portfolio_id, active_only=False)
+        target = next((pos for pos in positions if int(pos.get('id') or 0) == int(position_id)), None)
+        if not target:
+            return jsonify({'success': False, 'message': '持仓记录不存在'}), 404
+
+        target.update({
+            'position_size': float(data.get('position_size', target.get('position_size') or 0)),
+            'avg_cost': float(data.get('avg_cost', target.get('avg_cost') or 0)),
+            'current_price': float(data.get('current_price', target.get('current_price') or data.get('avg_cost', 0))),
+            'sector': data.get('sector', target.get('sector')),
+            'stop_loss_price': data.get('stop_loss_price', target.get('stop_loss_price')),
+            'take_profit_price': data.get('take_profit_price', target.get('take_profit_price')),
+            'is_active': True,
+        })
+        target['market_value'] = float(target['position_size']) * float(target['current_price'])
+        target['unrealized_pnl'] = (float(target['current_price']) - float(target['avg_cost'])) * float(target['position_size'])
+        _portfolio_repo.upsert_position(target)
+
+        return jsonify({
+            'success': True,
+            'data': target,
+            'message': '持仓更新成功',
+        })
+
+    except Exception as e:
+        logger.error(f"更新持仓失败: {portfolio_id}, {position_id}, 错误: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/positions/<int:position_id>', methods=['DELETE'])
+def delete_portfolio_position(portfolio_id, position_id):
+    """删除真实投资组合持仓（parquet 存储）。"""
+    try:
+        positions = _portfolio_repo.list_positions(portfolio_id, active_only=False)
+        target = next((pos for pos in positions if int(pos.get('id') or 0) == int(position_id)), None)
+        if not target:
+            return jsonify({'success': False, 'message': '持仓记录不存在'}), 404
+
+        target['is_active'] = False
+        _portfolio_repo.upsert_position(target)
+        return jsonify({
+            'success': True,
+            'message': '持仓删除成功',
+        })
+
+    except Exception as e:
+        logger.error(f"删除持仓失败: {portfolio_id}, {position_id}, 错误: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @ml_factor_bp.route('/portfolio/rebalance', methods=['POST'])
 def rebalance_portfolio():
     """组合再平衡"""

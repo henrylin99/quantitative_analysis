@@ -642,7 +642,7 @@ function renderMetrics(data) {
     document.getElementById('price-change').textContent = formatPercent(priceChange);
     document.getElementById('price-change').className = `metric-value ${priceChange >= 0 ? 'text-success' : 'text-danger'}`;
     document.getElementById('volume').textContent = formatNumber(volume / 10000, 1) + '万';
-    document.getElementById('turnover').textContent = formatNumber(turnover / 100000000, 2) + '亿';
+    document.getElementById('turnover').textContent = formatNumber(turnover / 100000, 2) + '亿';
 }
 
 // 渲染主图表
