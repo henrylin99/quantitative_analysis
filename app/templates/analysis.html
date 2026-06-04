@@ -20,15 +20,16 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(30, 30, 30, 0.8);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10;
 }
 .metric-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--obs-surface);
+    border: 1px solid var(--obs-border-light);
+    color: var(--obs-text);
     border-radius: 10px;
     padding: 20px;
     margin-bottom: 16px;
@@ -42,7 +43,7 @@
     opacity: 0.8;
 }
 .chart-tabs {
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--obs-border);
     margin-bottom: 20px;
 }
 .chart-tab {
@@ -54,12 +55,12 @@
     transition: all 0.3s;
 }
 .chart-tab.active {
-    border-bottom-color: #007bff;
-    color: #007bff;
+    border-bottom-color: var(--obs-primary);
+    color: var(--obs-primary);
     font-weight: bold;
 }
 .chart-tab:hover {
-    background-color: #f8f9fa;
+    background-color: var(--obs-surface);
 }
 #main-chart, #indicator-chart {
     width: 100%;
@@ -79,7 +80,7 @@
     <!-- 页面标题 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h1 class="h2">📈 技术分析</h1>
+            <h1 class="h2">技术分析</h1>
             <p class="text-muted">当前提供K线与技术指标查看入口，结果以实际数据返回为准</p>
         </div>
     </div>
@@ -513,9 +514,9 @@ function showAnalysisLoading() {
     if (mainChart) {
         mainChart.showLoading('default', {
             text: '正在加载数据...',
-            color: '#007bff',
-            textColor: '#000',
-            maskColor: 'rgba(255, 255, 255, 0.8)',
+            color: 'var(--obs-primary)',
+            textColor: 'var(--obs-text)',
+            maskColor: 'rgba(30, 30, 30, 0.8)',
             zlevel: 0
         });
     }
