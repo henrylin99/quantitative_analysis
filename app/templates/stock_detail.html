@@ -463,12 +463,17 @@ function renderFactorsChart(data) {
     const dates = reversedData.map(item => item.trade_date);
     
     const factorsOption = {
+        backgroundColor: 'transparent',
         title: {
             text: '技术指标趋势',
-            left: 'center'
+            left: 'center',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 let result = params[0].name + '<br/>';
                 params.forEach(param => {
@@ -480,7 +485,11 @@ function renderFactorsChart(data) {
         legend: {
             data: ['MACD DIF', 'MACD DEA', 'MACD', 'RSI(6)', 'RSI(12)', 'KDJ K', 'KDJ D'],
             top: 30,
-            type: 'scroll'
+            type: 'scroll',
+            textStyle: { color: '#94a3b8', fontSize: 11 },
+            pageTextStyle: { color: '#94a3b8' },
+            pageIconColor: '#818cf8',
+            pageIconInactiveColor: '#475569'
         },
         grid: {
             left: '3%',
@@ -491,32 +500,43 @@ function renderFactorsChart(data) {
         xAxis: {
             type: 'category',
             data: dates,
-            axisLabel: {
-                rotate: 45
-            }
+            axisLabel: { rotate: 45, color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisTick: { lineStyle: { color: '#334155' } },
+            splitLine: { show: false }
         },
         yAxis: [
             {
                 type: 'value',
                 name: 'MACD',
                 position: 'left',
+                nameTextStyle: { color: '#94a3b8', fontSize: 11 },
                 axisLabel: {
+                    color: '#64748b',
+                    fontSize: 10,
                     formatter: function(value) {
                         return formatNumber(value, 4);
                     }
-                }
+                },
+                axisLine: { lineStyle: { color: '#334155' } },
+                splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
             },
             {
                 type: 'value',
-                name: 'RSI/KDJ',
+                name: 'RSI / KDJ',
                 position: 'right',
                 min: 0,
                 max: 100,
+                nameTextStyle: { color: '#94a3b8', fontSize: 11 },
                 axisLabel: {
+                    color: '#64748b',
+                    fontSize: 10,
                     formatter: function(value) {
                         return value + '';
                     }
-                }
+                },
+                axisLine: { lineStyle: { color: '#334155' } },
+                splitLine: { show: false }
             }
         ],
         dataZoom: [
@@ -530,7 +550,15 @@ function renderFactorsChart(data) {
                 type: 'slider',
                 top: '90%',
                 start: 70,
-                end: 100
+                end: 100,
+                borderColor: '#334155',
+                fillerColor: 'rgba(99,102,241,0.15)',
+                handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
+                textStyle: { color: '#64748b' },
+                dataBackground: {
+                    lineStyle: { color: '#475569' },
+                    areaStyle: { color: 'rgba(71,85,105,0.3)' }
+                }
             }
         ],
         series: [
@@ -539,16 +567,18 @@ function renderFactorsChart(data) {
                 type: 'line',
                 yAxisIndex: 0,
                 data: reversedData.map(item => item.macd_dif || 0),
-                itemStyle: { color: '#ff4d4f' },
-                lineStyle: { width: 2 }
+                itemStyle: { color: '#f87171' },
+                lineStyle: { width: 2, color: '#f87171' },
+                showSymbol: false
             },
             {
                 name: 'MACD DEA',
                 type: 'line',
                 yAxisIndex: 0,
                 data: reversedData.map(item => item.macd_dea || 0),
-                itemStyle: { color: '#52c41a' },
-                lineStyle: { width: 2 }
+                itemStyle: { color: '#818cf8' },
+                lineStyle: { width: 2, color: '#818cf8' },
+                showSymbol: false
             },
             {
                 name: 'MACD',
@@ -557,7 +587,7 @@ function renderFactorsChart(data) {
                 data: reversedData.map(item => item.macd || 0),
                 itemStyle: {
                     color: function(params) {
-                        return params.value >= 0 ? '#ff4d4f' : '#52c41a';
+                        return params.value >= 0 ? 'rgba(248,113,113,0.6)' : 'rgba(74,222,128,0.6)';
                     }
                 }
             },
@@ -566,28 +596,36 @@ function renderFactorsChart(data) {
                 type: 'line',
                 yAxisIndex: 1,
                 data: reversedData.map(item => item.rsi_6 || 0),
-                itemStyle: { color: '#1890ff' }
+                itemStyle: { color: '#fbbf24' },
+                lineStyle: { width: 1.5, color: '#fbbf24' },
+                showSymbol: false
             },
             {
                 name: 'RSI(12)',
                 type: 'line',
                 yAxisIndex: 1,
                 data: reversedData.map(item => item.rsi_12 || 0),
-                itemStyle: { color: '#722ed1' }
+                itemStyle: { color: '#a78bfa' },
+                lineStyle: { width: 1.5, color: '#a78bfa' },
+                showSymbol: false
             },
             {
                 name: 'KDJ K',
                 type: 'line',
                 yAxisIndex: 1,
                 data: reversedData.map(item => item.kdj_k || 0),
-                itemStyle: { color: '#fa8c16' }
+                itemStyle: { color: '#22d3ee' },
+                lineStyle: { width: 1.5, color: '#22d3ee' },
+                showSymbol: false
             },
             {
                 name: 'KDJ D',
                 type: 'line',
                 yAxisIndex: 1,
                 data: reversedData.map(item => item.kdj_d || 0),
-                itemStyle: { color: '#13c2c2' }
+                itemStyle: { color: '#34d399' },
+                lineStyle: { width: 1.5, color: '#34d399' },
+                showSymbol: false
             }
         ]
     };
