@@ -28,6 +28,7 @@ class ParquetDataReader:
         "cyq_perf": "cyq_perf/daily",
         "income_statement": "income_statement",
         "balance_sheet": "balance_sheet",
+        "cash_flow": "cash_flow",
     }
 
     # 标准列：过滤 parquet 中可能混入的额外列（None = 不过滤，保留全部列）
@@ -57,6 +58,7 @@ class ParquetDataReader:
         "cyq_perf": None,
         "income_statement": None,
         "balance_sheet": None,
+        "cash_flow": None,
     }
 
     def __init__(self, data_dir: str = None):
@@ -136,6 +138,14 @@ class ParquetDataReader:
     def get_balance_sheet(self, ts_codes: List[str]) -> pd.DataFrame:
         """读取资产负债表数据（季度分区，按 ts_codes 过滤，按 end_date 倒序）。"""
         df = self._read_table("balance_sheet", ts_codes, None, None)
+        if not df.empty and "end_date" in df.columns:
+            df["end_date"] = df["end_date"].astype(str)
+            df = df.sort_values(["ts_code", "end_date"], ascending=[True, False])
+        return df
+
+    def get_cash_flow(self, ts_codes: List[str]) -> pd.DataFrame:
+        """读取现金流量表数据（季度分区，按 ts_codes 过滤，按 end_date 倒序）。"""
+        df = self._read_table("cash_flow", ts_codes, None, None)
         if not df.empty and "end_date" in df.columns:
             df["end_date"] = df["end_date"].astype(str)
             df = df.sort_values(["ts_code", "end_date"], ascending=[True, False])
