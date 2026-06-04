@@ -1101,12 +1101,17 @@ function renderCyqCharts(data) {
     const dates = orderedData.map(item => item.trade_date);
     
     const costOption = {
+        backgroundColor: 'transparent',
         title: {
             text: '成本分位曲线',
-            left: 'center'
+            left: 'center',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 let result = params[0].name + '<br/>';
                 params.forEach(param => {
@@ -1117,7 +1122,8 @@ function renderCyqCharts(data) {
         },
         legend: {
             data: ['5%成本', '15%成本', '50%成本', '85%成本', '95%成本', '加权平均'],
-            top: 30
+            top: 30,
+            textStyle: { color: '#94a3b8', fontSize: 11 }
         },
         grid: {
             left: '3%',
@@ -1128,56 +1134,71 @@ function renderCyqCharts(data) {
         xAxis: {
             type: 'category',
             data: dates,
-            axisLabel: {
-                rotate: 45
-            }
+            axisLabel: { rotate: 45, color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisTick: { lineStyle: { color: '#334155' } },
+            splitLine: { show: false }
         },
         yAxis: {
             type: 'value',
             axisLabel: {
+                color: '#64748b',
+                fontSize: 10,
                 formatter: function(value) {
                     return formatNumber(value, 2);
                 }
-            }
+            },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [
             {
                 name: '5%成本',
                 type: 'line',
                 data: orderedData.map(item => item.cost_5pct || 0),
-                itemStyle: { color: '#ff7875' }
+                itemStyle: { color: '#f87171' },
+                lineStyle: { width: 1.5, color: '#f87171' },
+                showSymbol: false
             },
             {
                 name: '15%成本',
                 type: 'line',
                 data: orderedData.map(item => item.cost_15pct || 0),
-                itemStyle: { color: '#ffa940' }
+                itemStyle: { color: '#fbbf24' },
+                lineStyle: { width: 1.5, color: '#fbbf24' },
+                showSymbol: false
             },
             {
                 name: '50%成本',
                 type: 'line',
                 data: orderedData.map(item => item.cost_50pct || 0),
-                itemStyle: { color: '#1890ff' },
-                lineStyle: { width: 3 }
+                itemStyle: { color: '#818cf8' },
+                lineStyle: { width: 3, color: '#818cf8' },
+                showSymbol: false
             },
             {
                 name: '85%成本',
                 type: 'line',
                 data: orderedData.map(item => item.cost_85pct || 0),
-                itemStyle: { color: '#73d13d' }
+                itemStyle: { color: '#34d399' },
+                lineStyle: { width: 1.5, color: '#34d399' },
+                showSymbol: false
             },
             {
                 name: '95%成本',
                 type: 'line',
                 data: orderedData.map(item => item.cost_95pct || 0),
-                itemStyle: { color: '#b37feb' }
+                itemStyle: { color: '#a78bfa' },
+                lineStyle: { width: 1.5, color: '#a78bfa' },
+                showSymbol: false
             },
             {
                 name: '加权平均',
                 type: 'line',
                 data: orderedData.map(item => item.weight_avg || 0),
-                itemStyle: { color: '#f759ab' },
-                lineStyle: { width: 2, type: 'dashed' }
+                itemStyle: { color: '#f472b6' },
+                lineStyle: { width: 2, type: 'dashed', color: '#f472b6' },
+                showSymbol: false
             }
         ]
     };
@@ -1188,12 +1209,17 @@ function renderCyqCharts(data) {
     const winnerChart = echarts.init(document.getElementById('winner-rate-chart'));
     
     const winnerOption = {
+        backgroundColor: 'transparent',
         title: {
             text: '胜率变化',
-            left: 'center'
+            left: 'center',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 const data = params[0];
                 return `${data.name}<br/>胜率: ${formatPercent(data.value)}`;
@@ -1208,27 +1234,32 @@ function renderCyqCharts(data) {
         xAxis: {
             type: 'category',
             data: dates,
-            axisLabel: {
-                rotate: 45
-            }
+            axisLabel: { rotate: 45, color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisTick: { lineStyle: { color: '#334155' } },
+            splitLine: { show: false }
         },
         yAxis: {
             type: 'value',
             min: 0,
             max: 100,
             axisLabel: {
+                color: '#64748b',
+                fontSize: 10,
                 formatter: function(value) {
                     return value + '%';
                 }
-            }
+            },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [{
             name: '胜率',
             type: 'line',
             data: data.map(item => item.winner_rate || 0).reverse(),
-            itemStyle: {
-                color: '#52c41a'
-            },
+            itemStyle: { color: '#4ade80' },
+            lineStyle: { width: 2, color: '#4ade80' },
+            showSymbol: false,
             areaStyle: {
                 color: {
                     type: 'linear',
@@ -1237,9 +1268,9 @@ function renderCyqCharts(data) {
                     x2: 0,
                     y2: 1,
                     colorStops: [{
-                        offset: 0, color: 'rgba(82, 196, 26, 0.3)'
+                        offset: 0, color: 'rgba(74, 222, 128, 0.2)'
                     }, {
-                        offset: 1, color: 'rgba(82, 196, 26, 0.1)'
+                        offset: 1, color: 'rgba(74, 222, 128, 0.02)'
                     }]
                 }
             },
@@ -1248,9 +1279,10 @@ function renderCyqCharts(data) {
                     { yAxis: 50, name: '50%基准线' }
                 ],
                 lineStyle: {
-                    color: '#ff4d4f',
+                    color: '#f87171',
                     type: 'dashed'
-                }
+                },
+                label: { color: '#f87171', fontSize: 10 }
             }
         }]
     };
@@ -1282,25 +1314,25 @@ function renderCyqIndicators(data) {
     
     const html = `
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);">
                 <h5 class="text-primary">${formatNumber(concentration, 1)}%</h5>
                 <small class="text-muted">筹码集中度</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.15);">
                 <h5 class="text-success">${formatNumber(data.weight_avg || 0, 2)}</h5>
                 <small class="text-muted">加权平均成本</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(${(data.winner_rate || 0) >= 50 ? '34,197,94' : '239,68,68'},0.08);border:1px solid rgba(${(data.winner_rate || 0) >= 50 ? '34,197,94' : '239,68,68'},0.15);">
                 <h5 class="${(data.winner_rate || 0) >= 50 ? 'text-success' : 'text-danger'}">${formatPercent(data.winner_rate || 0)}</h5>
                 <small class="text-muted">当前胜率</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.15);">
                 <h5 class="text-warning">${pricePosition === null ? '--' : `${formatNumber(pricePosition, 1)}%`}</h5>
                 <small class="text-muted">价格相对位置</small>
             </div>
