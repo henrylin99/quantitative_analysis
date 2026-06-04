@@ -15,7 +15,7 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">当前页面展示日线历史、技术因子、资金流向和筹码分布数据，均按已入库接口结果加载。</p>
+                    <p class="text-muted mb-3">当前页面展示日线历史、技术因子、资金流向、筹码分布和财务数据，均按已入库接口结果加载。</p>
                     <div id="stock-info" class="row">
                         <div class="col-12 text-center py-3">
                             <div class="spinner-border text-primary" role="status">
@@ -51,6 +51,11 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="cyq-tab" data-bs-toggle="tab" data-bs-target="#cyq" type="button" role="tab">
                         🎯 筹码分布
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials" type="button" role="tab">
+                        📊 财务数据
                     </button>
                 </li>
             </ul>
@@ -126,6 +131,22 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 财务数据 -->
+                <div class="tab-pane fade" id="financials" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">财务数据</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="financials-content">
+                                <div class="text-center py-4">
+                                    <p class="text-muted">切换标签页后按当前接口返回加载</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -156,6 +177,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case '#cyq':
                     loadCyqData();
+                    break;
+                case '#financials':
+                    loadFinancialsData();
                     break;
             }
         });
@@ -1246,6 +1270,140 @@ function renderCyqIndicators(data) {
     `;
     
     container.innerHTML = html;
+}
+
+// 加载财务数据
+async function loadFinancialsData() {
+    if (document.getElementById('financials-content').innerHTML.includes('加载中')) return;
+
+    showLoading('financials-content');
+
+    try {
+        const response = await apiRequest(`/stocks/${tsCode}/financials`);
+        if (response.code === 200) {
+            renderFinancialsData(response.data);
+        } else {
+            showError('financials-content', '财务数据加载失败');
+        }
+    } catch (error) {
+        showError('financials-content', '财务数据加载失败');
+        console.error('加载财务数据失败:', error);
+    }
+}
+
+const FINANCIAL_FIELD_META = {
+    balance_sheet: [
+        ['total_assets', '总资产', 'monetary'],
+        ['total_cur_assets', '流动资产合计', 'monetary'],
+        ['money_cap', '货币资金', 'monetary'],
+        ['accounts_receiv', '应收账款', 'monetary'],
+        ['inventories', '存货', 'monetary'],
+        ['fix_assets', '固定资产', 'monetary'],
+        ['intan_assets', '无形资产', 'monetary'],
+        ['goodwill', '商誉', 'monetary'],
+        ['total_liab', '总负债', 'monetary'],
+        ['total_cur_liab', '流动负债合计', 'monetary'],
+        ['st_borr', '短期借款', 'monetary'],
+        ['lt_borr', '长期借款', 'monetary'],
+        ['total_hldr_eqy_inc_min_int', '所有者权益合计', 'monetary'],
+        ['total_share', '总股本', 'monetary'],
+        ['undistr_porfit', '未分配利润', 'monetary'],
+        ['surplus_rese', '盈余公积', 'monetary'],
+    ],
+    income_statement: [
+        ['total_revenue', '营业总收入', 'monetary'],
+        ['revenue', '营业收入', 'monetary'],
+        ['total_cogs', '营业总成本', 'monetary'],
+        ['oper_cost', '营业成本', 'monetary'],
+        ['sell_exp', '销售费用', 'monetary'],
+        ['admin_exp', '管理费用', 'monetary'],
+        ['fin_exp', '财务费用', 'monetary'],
+        ['rd_exp', '研发费用', 'monetary'],
+        ['operate_profit', '营业利润', 'monetary'],
+        ['total_profit', '利润总额', 'monetary'],
+        ['income_tax', '所得税', 'monetary'],
+        ['n_income', '净利润', 'monetary'],
+        ['n_income_attr_p', '归属净利润', 'monetary'],
+        ['basic_eps', '基本每股收益', 'eps'],
+        ['diluted_eps', '稀释每股收益', 'eps'],
+    ],
+    cash_flow: [
+        ['n_cashflow_act', '经营活动现金流净额', 'monetary'],
+        ['c_inf_fr_operate_a', '经营活动现金流入小计', 'monetary'],
+        ['st_cash_out_act', '经营活动现金流出小计', 'monetary'],
+        ['n_cashflow_inv_act', '投资活动现金流净额', 'monetary'],
+        ['stot_inflows_inv_act', '投资活动现金流入小计', 'monetary'],
+        ['stot_out_inv_act', '投资活动现金流出小计', 'monetary'],
+        ['n_cash_flows_fnc_act', '筹资活动现金流净额', 'monetary'],
+        ['stot_cash_in_fnc_act', '筹资活动现金流入小计', 'monetary'],
+        ['stot_cashout_fnc_act', '筹资活动现金流出小计', 'monetary'],
+        ['n_incr_cash_cash_equ', '现金及等价物净增加额', 'monetary'],
+        ['c_cash_equ_end_period', '期末现金及等价物余额', 'monetary'],
+    ],
+};
+
+function renderFinancialsData(data) {
+    const container = document.getElementById('financials-content');
+
+    if (!data || (!data.balance_sheet && !data.income_statement && !data.cash_flow)) {
+        container.innerHTML = '<div class="text-center py-4"><p class="text-muted">暂无财务数据</p></div>';
+        return;
+    }
+
+    const sections = [
+        ['balance_sheet', '资产负债表'],
+        ['income_statement', '利润表'],
+        ['cash_flow', '现金流量表'],
+    ].map(([key, title]) => {
+        const row = data[key];
+        return `
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">${title}</h6>
+                    <span class="text-muted small">报告期：${row?.end_date || '--'}</span>
+                </div>
+                <div class="card-body">
+                    ${renderFinancialRows(key, row)}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = sections;
+}
+
+function renderFinancialRows(sectionKey, row) {
+    if (!row) {
+        return '<div class="text-center py-4"><p class="text-muted mb-0">暂无数据</p></div>';
+    }
+
+    const fields = FINANCIAL_FIELD_META[sectionKey] || [];
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <tbody>
+                    ${fields.map(([field, label, type]) => `
+                        <tr>
+                            <th class="text-muted" style="width: 36%; white-space: nowrap;">${label}</th>
+                            <td class="text-end ${type === 'eps' ? 'text-primary' : ''}">
+                                <strong>${formatFinancialValue(row[field], type)}</strong>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function formatFinancialValue(value, type) {
+    if (value === null || value === undefined || isNaN(value)) return '--';
+
+    const num = Number(value);
+    if (type === 'eps') {
+        return `${num.toFixed(2)} 元`;
+    }
+    return `${formatNumber(num / 10000, 2)} 万`;
 }
 
 // 快速操作函数

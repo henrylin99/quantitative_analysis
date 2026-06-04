@@ -86,3 +86,21 @@ def test_get_stock_basic_list_filters_by_industry_area_and_search(tmp_path, monk
     assert frame["ts_code"].tolist() == ["600519.SH"]
     assert frame["industry"].tolist() == ["白酒"]
     assert frame["area"].tolist() == ["贵州"]
+
+
+def test_get_cash_flow_reads_quarterly_table(tmp_path):
+    data_dir = tmp_path / "data"
+    partition_dir = data_dir / "cash_flow" / "year=2026" / "month=06" / "day=04"
+    partition_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {"ts_code": "000001.SZ", "end_date": "20260331", "n_cashflow_act": 123.0},
+        ]
+    ).to_parquet(partition_dir / "data.parquet", index=False)
+
+    reader = ParquetDataReader(data_dir=str(data_dir))
+    frame = reader.get_cash_flow(["000001.SZ"])
+
+    assert not frame.empty
+    assert frame.iloc[0]["ts_code"] == "000001.SZ"
+    assert frame.iloc[0]["end_date"] == "20260331"
