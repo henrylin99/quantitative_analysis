@@ -7,8 +7,6 @@ import cvxpy as cp
 from scipy.optimize import minimize
 from sklearn.covariance import LedoitWolf
 
-from app.extensions import db
-from app.models import FactorValues
 from app.services.data_reader import ParquetDataReader
 
 

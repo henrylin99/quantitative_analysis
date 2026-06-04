@@ -7,13 +7,12 @@ from loguru import logger
 import warnings
 warnings.filterwarnings('ignore')
 
-from app.extensions import db
-from app.models import StockBasic, FactorValues, MLPredictions, BacktestRun
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
 
 
 class BacktestEngine:
@@ -25,6 +24,8 @@ class BacktestEngine:
         self.scoring_engine = None
         self.portfolio_optimizer = None
         self.data_reader = ParquetDataReader()
+        self.state_store = ParquetStateStore()
+        self.backtest_repo = BacktestRepository(self.state_store)
     
     def _get_factor_engine(self):
         """延迟初始化因子引擎"""
@@ -69,7 +70,7 @@ class BacktestEngine:
         """
         try:
             logger.info(f"开始回测: {start_date} to {end_date}")
-            backtest_run = BacktestRun.create_run(
+            backtest_run = self.backtest_repo.create_run(
                 strategy_config=strategy_config,
                 start_date=start_date,
                 end_date=end_date,
@@ -176,17 +177,16 @@ class BacktestEngine:
                 performance_metrics=performance_metrics,
                 benchmark_returns=benchmark_returns,
                 final_prices=last_prices,
-                run_id=backtest_run.id,
+                run_id=backtest_run["id"],
                 execution_assumptions=execution_assumptions,
                 trade_constraints=trade_constraints,
             )
-            backtest_run.summary_json = json.dumps({
+            self.backtest_repo.update_summary(int(backtest_run["id"]), {
                 'final_value': total_value,
                 'total_return': result.get('total_return'),
                 'annual_return': performance_metrics.get('annualized_return'),
                 'max_drawdown': performance_metrics.get('max_drawdown'),
             })
-            db.session.commit()
             return result
             
         except Exception as e:
@@ -519,13 +519,14 @@ class BacktestEngine:
         try:
             if not ts_codes:
                 return {}
-            rows = StockBasic.query.filter(StockBasic.ts_code.in_(ts_codes)).all()
+            df = self.data_reader.get_stock_basic()
+            df = df[df["ts_code"].isin(set(ts_codes))]
             return {
-                row.ts_code: {
-                    'name': row.name or row.ts_code,
-                    'industry': row.industry or '未知'
+                row["ts_code"]: {
+                    'name': row.get("name") or row["ts_code"],
+                    'industry': row.get("industry") or '未知'
                 }
-                for row in rows
+                for _, row in df.iterrows()
             }
         except Exception as e:
             logger.error(f"获取股票元数据失败: {e}")

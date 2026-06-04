@@ -3,21 +3,21 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pandas as pd
 import numpy as np
-from sqlalchemy.exc import SQLAlchemyError
-
-from app.extensions import db
+import json
+from flask import Response
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
 from app.services.model_training_job_service import ModelTrainingJobService
-from app.models.portfolio_position import PortfolioPosition
-from app.models.portfolio_rebalance_run import PortfolioRebalanceRun
-from app.models.backtest_run import BacktestRun
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_state_store import BacktestRepository, ParquetStateStore, PortfolioRepository
 
 _data_reader = ParquetDataReader()
+_state_store = ParquetStateStore()
+_portfolio_repo = PortfolioRepository(_state_store)
+_backtest_repo = BacktestRepository(_state_store)
 
 # 创建蓝图
 ml_factor_bp = Blueprint('ml_factor', __name__, url_prefix='/api/ml-factor')
@@ -91,6 +91,236 @@ def get_training_job_service():
     if training_job_service is None:
         training_job_service = ModelTrainingJobService()
     return training_job_service
+
+
+def _build_model_performance_summary():
+    manager = get_ml_manager()
+    models = manager.get_model_list()
+    performance_data = []
+    comparison_data = []
+    best_r2 = 0.0
+
+    for model in models:
+        model_id = model.get("model_id")
+        metrics = manager.evaluate_model(model_id, model.get("created_at", "1970-01-01")[:10], datetime.utcnow().strftime("%Y-%m-%d"))
+        if "error" in metrics:
+            continue
+
+        r2_score = float(metrics.get("r2") or 0.0)
+        mae_score = float(metrics.get("mae") or 0.0)
+        best_r2 = max(best_r2, r2_score)
+        performance_data.append({
+            "date": model.get("created_at", datetime.utcnow().isoformat())[:10],
+            "train_r2": float(metrics.get("r2") or 0.0),
+            "test_r2": float(metrics.get("r2") or 0.0),
+            "mae": mae_score,
+        })
+        comparison_data.append({
+            "model_type": model.get("model_type"),
+            "r2_score": r2_score,
+            "mae_score": mae_score,
+        })
+
+    return {
+        "total_models": len(models),
+        "best_r2": best_r2,
+        "performance_data": performance_data,
+        "comparison_data": comparison_data,
+    }
+
+
+def _build_factor_effectiveness_summary():
+    definitions = get_factor_engine().get_factor_list(is_active=True)
+    importance_data = []
+    factor_stats = []
+    active_factors = 0
+
+    for factor in definitions:
+        if not factor.get("is_active", True):
+            continue
+        active_factors += 1
+        factor_id = factor["factor_id"]
+        exposure = get_factor_engine().get_factor_exposure(
+            factor_id, get_factor_engine().data_reader.get_stock_business_latest_date() or datetime.utcnow().strftime("%Y-%m-%d")
+        )
+        if exposure.empty:
+            importance = 0.0
+            correlation = 0.0
+        else:
+            series = pd.to_numeric(exposure.get("z_score", exposure.get("factor_value")), errors="coerce")
+            importance = float(series.abs().mean()) if not series.empty else 0.0
+            correlation = float(series.corr(pd.Series(range(len(series))))) if len(series) > 1 else 0.0
+
+        importance_data.append({
+            "factor_name": factor.get("factor_name", factor_id),
+            "importance": importance,
+            "correlation": correlation,
+        })
+        factor_stats.append({
+            "factor_name": factor.get("factor_name", factor_id),
+            "importance": importance,
+            "correlation": correlation,
+        })
+
+    importance_data.sort(key=lambda item: item["importance"], reverse=True)
+    return {
+        "active_factors": active_factors,
+        "importance_data": importance_data,
+        "factor_stats": factor_stats,
+    }
+
+
+def _build_portfolio_performance_summary():
+    portfolio_ids = _portfolio_repo.list_portfolio_ids(active_only=True)
+    performance_data = []
+    portfolio_metrics = []
+    all_sector_distribution = {}
+    annual_returns = []
+    max_drawdowns = []
+    sharpe_ratios = []
+    win_rates = []
+
+    for portfolio_id in portfolio_ids:
+        metrics = _portfolio_repo.calculate_metrics(portfolio_id)
+        if not metrics:
+            continue
+        portfolio_metrics.append(metrics)
+        annual_return = float(metrics.get("total_pnl_percentage") or 0.0)
+        max_drawdown = float(metrics.get("max_position_weight") or 0.0)
+        sharpe_ratio = float(metrics.get("portfolio_var_1d") or 0.0)
+        win_rate = 0.0
+        annual_returns.append(annual_return)
+        max_drawdowns.append(max_drawdown)
+        sharpe_ratios.append(sharpe_ratio)
+        win_rates.append(win_rate)
+        performance_data.append({
+            "date": portfolio_id,
+            "portfolio_return": annual_return,
+            "benchmark_return": 0.0,
+        })
+        for sector, weight in (metrics.get("sector_distribution") or {}).items():
+            all_sector_distribution[sector] = all_sector_distribution.get(sector, 0.0) + float(weight or 0.0)
+
+    return {
+        "portfolio_count": len(portfolio_ids),
+        "annual_return": float(np.mean(annual_returns)) if annual_returns else 0.0,
+        "max_drawdown": float(np.mean(max_drawdowns)) if max_drawdowns else 0.0,
+        "sharpe_ratio": float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0,
+        "win_rate": float(np.mean(win_rates) * 100) if win_rates else 0.0,
+        "performance_data": performance_data,
+        "sector_distribution": all_sector_distribution,
+        "portfolio_metrics": portfolio_metrics,
+    }
+
+
+def _build_risk_analysis_summary():
+    portfolio_summary = _build_portfolio_performance_summary()
+    risk_data = [
+        {"name": name, "value": value}
+        for name, value in sorted(portfolio_summary["sector_distribution"].items(), key=lambda item: item[1], reverse=True)
+    ]
+    return {
+        "risk_data": risk_data,
+    }
+
+
+def _build_analysis_report():
+    model_summary = _build_model_performance_summary()
+    factor_summary = _build_factor_effectiveness_summary()
+    portfolio_summary = _build_portfolio_performance_summary()
+    risk_summary = _build_risk_analysis_summary()
+    return {
+        "generated_at": datetime.utcnow().isoformat(),
+        "model_performance": model_summary,
+        "factor_effectiveness": factor_summary,
+        "portfolio_performance": portfolio_summary,
+        "risk_analysis": risk_summary,
+    }
+
+
+@ml_factor_bp.route('/analysis/model-performance', methods=['GET'])
+def get_model_performance_analysis():
+    """获取模型性能分析数据"""
+    try:
+        summary = _build_model_performance_summary()
+        return jsonify({
+            'success': True,
+            **convert_numpy_types(summary),
+        })
+    except Exception as e:
+        logger.error(f"获取模型性能分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/analysis/factor-effectiveness', methods=['GET'])
+def get_factor_effectiveness_analysis():
+    """获取因子有效性分析数据"""
+    try:
+        summary = _build_factor_effectiveness_summary()
+        return jsonify({
+            'success': True,
+            **convert_numpy_types(summary),
+        })
+    except Exception as e:
+        logger.error(f"获取因子有效性分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/analysis/portfolio-performance', methods=['GET'])
+def get_portfolio_performance_analysis():
+    """获取投资组合表现分析数据"""
+    try:
+        summary = _build_portfolio_performance_summary()
+        return jsonify({
+            'success': True,
+            **convert_numpy_types(summary),
+        })
+    except Exception as e:
+        logger.error(f"获取投资组合表现分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/analysis/risk-analysis', methods=['GET'])
+def get_risk_analysis():
+    """获取风险分析数据"""
+    try:
+        summary = _build_risk_analysis_summary()
+        return jsonify({
+            'success': True,
+            **convert_numpy_types(summary),
+        })
+    except Exception as e:
+        logger.error(f"获取风险分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/analysis/generate-report', methods=['POST'])
+def generate_analysis_report():
+    """生成分析报告"""
+    try:
+        report = _build_analysis_report()
+        return jsonify({
+            'success': True,
+            'report': convert_numpy_types(report),
+        })
+    except Exception as e:
+        logger.error(f"生成分析报告失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/analysis/export-report', methods=['GET'])
+def export_analysis_report():
+    """导出分析报告"""
+    try:
+        report = _build_analysis_report()
+        payload = json.dumps(convert_numpy_types(report), ensure_ascii=False, indent=2)
+        filename = f"ml_factor_analysis_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        response = Response(payload, mimetype='application/json')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        return response
+    except Exception as e:
+        logger.error(f"导出分析报告失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @ml_factor_bp.route('/factors/calculate', methods=['POST'])
@@ -820,18 +1050,11 @@ def optimize_portfolio():
 def get_portfolio_list():
     """基于真实持仓表返回投资组合列表摘要"""
     try:
-        rows = PortfolioPosition.query.with_entities(
-            PortfolioPosition.portfolio_id
-        ).filter_by(is_active=True).distinct().all()
-
         portfolios = []
-        for row in rows:
-            portfolio_id = row[0]
-            metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
-            first_position = PortfolioPosition.query.filter_by(
-                portfolio_id=portfolio_id,
-                is_active=True
-            ).order_by(PortfolioPosition.created_at.asc()).first()
+        for portfolio_id in _portfolio_repo.list_portfolio_ids(active_only=True):
+            metrics = _portfolio_repo.calculate_metrics(portfolio_id)
+            positions = _portfolio_repo.list_positions(portfolio_id, active_only=True)
+            first_position = positions[0] if positions else None
 
             portfolios.append({
                 'portfolio_id': portfolio_id,
@@ -841,7 +1064,7 @@ def get_portfolio_list():
                 'unrealized_pnl': metrics.get('total_unrealized_pnl', 0.0),
                 'return_rate': (metrics.get('total_pnl_percentage', 0.0) or 0.0) / 100.0,
                 'max_position_weight': (metrics.get('max_position_weight', 0.0) or 0.0) / 100.0,
-                'created_at': first_position.created_at.isoformat() if first_position and first_position.created_at else None,
+                'created_at': first_position.get('created_at') if first_position else None,
             })
 
         return jsonify({
@@ -859,8 +1082,8 @@ def get_portfolio_list():
 def get_portfolio_detail(portfolio_id):
     """获取真实投资组合详情"""
     try:
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
-        metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
+        positions = _portfolio_repo.list_positions(portfolio_id)
+        metrics = _portfolio_repo.calculate_metrics(portfolio_id)
 
         if not positions or not metrics:
             return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
@@ -871,7 +1094,7 @@ def get_portfolio_detail(portfolio_id):
                 'portfolio_id': portfolio_id,
                 'name': portfolio_id,
                 'metrics': metrics,
-                'positions': [position.to_dict() for position in positions],
+                'positions': positions,
             }
         })
 
@@ -884,27 +1107,17 @@ def get_portfolio_detail(portfolio_id):
 def delete_portfolio(portfolio_id):
     """软删除整个投资组合下的所有持仓"""
     try:
-        positions = PortfolioPosition.query.filter_by(
-            portfolio_id=portfolio_id,
-            is_active=True
-        ).all()
-
-        if not positions:
+        deactivated_count = _portfolio_repo.deactivate_portfolio(portfolio_id)
+        if deactivated_count == 0:
             return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
-
-        for position in positions:
-            position.is_active = False
-
-        db.session.commit()
 
         return jsonify({
             'success': True,
             'portfolio_id': portfolio_id,
-            'deactivated_count': len(positions),
+            'deactivated_count': deactivated_count,
         })
 
     except Exception as e:
-        db.session.rollback()
         logger.error(f"删除投资组合失败: {portfolio_id}, 错误: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -925,10 +1138,7 @@ def save_optimized_portfolio():
         if not weights:
             return jsonify({'error': '缺少必需参数: weights'}), 400
 
-        existing = PortfolioPosition.query.filter_by(
-            portfolio_id=portfolio_id,
-            is_active=True
-        ).first()
+        existing = _portfolio_repo.list_positions(portfolio_id, active_only=True)
         if existing:
             return jsonify({'error': f'投资组合已存在: {portfolio_id}'}), 400
 
@@ -940,20 +1150,19 @@ def save_optimized_portfolio():
                 close_price = 1.0
             position_size = allocation / close_price if close_price > 0 else 0
 
-            position = PortfolioPosition(
-                portfolio_id=portfolio_id,
-                ts_code=ts_code,
-                position_size=position_size,
-                avg_cost=close_price,
-                current_price=close_price,
-                market_value=allocation,
-                unrealized_pnl=0.0,
-                weight=float(weight) * 100,
+            _portfolio_repo.upsert_position(
+                {
+                    'portfolio_id': portfolio_id,
+                    'ts_code': ts_code,
+                    'position_size': position_size,
+                    'avg_cost': close_price,
+                    'current_price': close_price,
+                    'market_value': allocation,
+                    'unrealized_pnl': 0.0,
+                    'weight': float(weight) * 100,
+                }
             )
-            db.session.add(position)
             created_count += 1
-
-        db.session.commit()
 
         return jsonify({
             'success': True,
@@ -962,7 +1171,6 @@ def save_optimized_portfolio():
         })
 
     except Exception as e:
-        db.session.rollback()
         logger.error(f"保存优化组合失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -1017,15 +1225,15 @@ def apply_portfolio_rebalance():
         if not target_weights:
             return jsonify({'error': '缺少必需参数: target_weights'}), 400
 
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
+        positions = _portfolio_repo.list_positions(portfolio_id)
         if not positions:
             return jsonify({'error': f'未找到投资组合: {portfolio_id}'}), 404
 
-        total_market_value = sum((position.market_value or 0) for position in positions)
+        total_market_value = sum((float(position.get('market_value') or 0)) for position in positions)
         if total_market_value <= 0:
             return jsonify({'error': '组合缺少有效市值数据，无法执行再平衡'}), 400
 
-        existing_by_code = {position.ts_code: position for position in positions}
+        existing_by_code = {position['ts_code']: position for position in positions}
         updated_count = 0
         created_count = 0
         deactivated_count = 0
@@ -1035,38 +1243,46 @@ def apply_portfolio_rebalance():
             allocation = total_market_value * target_weight
             close_price = _data_reader.get_latest_close(ts_code)
 
-            existing_position = PortfolioPosition.get_position_by_stock(portfolio_id, ts_code)
-            if close_price is None and existing_position and existing_position.current_price:
-                close_price = float(existing_position.current_price)
-            elif close_price is None and existing_position and existing_position.avg_cost:
-                close_price = float(existing_position.avg_cost)
+            existing_position = _portfolio_repo.get_position_by_stock(portfolio_id, ts_code)
+            if close_price is None and existing_position and existing_position.get('current_price'):
+                close_price = float(existing_position['current_price'])
+            elif close_price is None and existing_position and existing_position.get('avg_cost'):
+                close_price = float(existing_position['avg_cost'])
             elif close_price is None:
                 close_price = 1.0
 
             position_size = allocation / close_price if close_price > 0 else 0
 
             if existing_position:
-                existing_position.position_size = position_size
-                existing_position.current_price = close_price
-                existing_position.market_value = allocation
-                existing_position.weight = target_weight * 100
+                existing_position.update({
+                    'position_size': position_size,
+                    'current_price': close_price,
+                    'market_value': allocation,
+                    'weight': target_weight * 100,
+                    'is_active': True,
+                })
+                _portfolio_repo.upsert_position(existing_position)
                 updated_count += 1
             else:
-                db.session.add(PortfolioPosition(
-                    portfolio_id=portfolio_id,
-                    ts_code=ts_code,
-                    position_size=position_size,
-                    avg_cost=close_price,
-                    current_price=close_price,
-                    market_value=allocation,
-                    unrealized_pnl=0.0,
-                    weight=target_weight * 100,
-                ))
+                _portfolio_repo.upsert_position(
+                    {
+                        'portfolio_id': portfolio_id,
+                        'ts_code': ts_code,
+                        'position_size': position_size,
+                        'avg_cost': close_price,
+                        'current_price': close_price,
+                        'market_value': allocation,
+                        'unrealized_pnl': 0.0,
+                        'weight': target_weight * 100,
+                        'is_active': True,
+                    }
+                )
                 created_count += 1
 
         for ts_code, position in existing_by_code.items():
-            if ts_code not in target_weights and position.is_active:
-                position.is_active = False
+            if ts_code not in target_weights and position.get('is_active', True):
+                position['is_active'] = False
+                _portfolio_repo.upsert_position(position)
                 deactivated_count += 1
 
         rebalance_summary = {
@@ -1075,20 +1291,6 @@ def apply_portfolio_rebalance():
             'deactivated_count': deactivated_count,
             'target_weight_count': len(target_weights),
         }
-        rebalance_run = None
-        try:
-            rebalance_run = PortfolioRebalanceRun.create_run(
-                portfolio_id=portfolio_id,
-                target_weights=target_weights,
-                summary=rebalance_summary,
-                rebalance_note=rebalance_note,
-            )
-        except SQLAlchemyError as audit_error:
-            # 审计表迁移尚未补齐时，不阻断研究型再平衡主流程。
-            db.session.rollback()
-            logger.warning(f"再平衡审计记录写入失败，已降级跳过: {audit_error}")
-
-        db.session.commit()
 
         return jsonify({
             'success': True,
@@ -1096,12 +1298,11 @@ def apply_portfolio_rebalance():
             'updated_count': updated_count,
             'created_count': created_count,
             'deactivated_count': deactivated_count,
-            'rebalance_run_id': rebalance_run.id if rebalance_run else None,
+            'rebalance_run_id': None,
             'rebalance_note': rebalance_note,
         })
 
     except Exception as e:
-        db.session.rollback()
         logger.error(f"执行组合再平衡失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -1250,12 +1451,12 @@ def run_backtest():
 def get_backtest_run(run_id):
     """获取回测运行记录"""
     try:
-        run = BacktestRun.query.filter_by(id=run_id).first()
+        run = _backtest_repo.get_run(run_id)
         if run is None:
             return jsonify({'error': '回测记录不存在'}), 404
         return jsonify({
             'success': True,
-            'run': run.to_dict(),
+            'run': run,
         })
     except Exception as e:
         logger.error(f"获取回测记录失败: {e}")
