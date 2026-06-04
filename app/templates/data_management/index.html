@@ -60,7 +60,7 @@
         <div class="row mb-4">
             <div class="col-12">
                 <h2><i class="fas fa-database text-primary"></i> 数据管理</h2>
-                <p class="text-muted">当前页面用于日频任务、Baostock 分钟数据接入、聚合与质量检查。</p>
+                <p class="text-muted">当前页面用于 Parquet 资产检查、日频任务、Baostock 分钟数据接入、聚合与质量检查。</p>
             </div>
         </div>
 
@@ -74,9 +74,9 @@
                         <div id="statusSummaryBadge" class="status-chip {% if initialization_status.database.ok %}bg-success text-white{% else %}bg-warning text-dark{% endif %} mb-3">
                             {% if initialization_status.database.ok %}基础状态正常{% else %}需要初始化{% endif %}
                         </div>
-                        <div class="small mb-2"><strong>数据库连接：</strong><span id="statusDatabaseConnected">{% if initialization_status.database.connected %}正常{% else %}失败{% endif %}</span></div>
-                        <div class="small mb-2"><strong>缺失关键表：</strong><span id="statusMissingTables">{% if initialization_status.database.missing_tables %}{{ initialization_status.database.missing_tables|join(', ') }}{% else %}无{% endif %}</span></div>
-                        <div class="small mb-3"><strong>空表：</strong><span id="statusEmptyTables">{% if initialization_status.database.empty_tables %}{{ initialization_status.database.empty_tables|join(', ') }}{% else %}无{% endif %}</span></div>
+                        <div class="small mb-2"><strong>Parquet 目录：</strong><span id="statusDatabaseConnected">{% if initialization_status.database.connected %}正常{% else %}失败{% endif %}</span></div>
+                        <div class="small mb-2"><strong>缺失关键资产：</strong><span id="statusMissingTables">{% if initialization_status.database.missing_parquet_assets %}{{ initialization_status.database.missing_parquet_assets|join(', ') }}{% else %}无{% endif %}</span></div>
+                        <div class="small mb-3"><strong>空资产：</strong><span id="statusEmptyTables">{% if initialization_status.database.empty_parquet_assets %}{{ initialization_status.database.empty_parquet_assets|join(', ') }}{% else %}无{% endif %}</span></div>
                         <div class="small text-muted mb-2">推荐下一步</div>
                         <ul id="statusNextActions" class="small mb-0 ps-3">
                             {% for action in initialization_status.database.next_actions %}
@@ -94,7 +94,7 @@
                         <h5><i class="fas fa-list-ol"></i> 推荐初始化顺序</h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">新库或空库建议按下面顺序初始化，能减少依赖缺失导致的下载失败。</p>
+                        <p class="text-muted">新目录或空目录建议按下面顺序初始化，能减少依赖缺失导致的下载失败。</p>
                         <div class="small text-muted mb-3">
                             <div>1. 交易日历</div>
                             <div>2. 股票基础资料</div>
@@ -903,7 +903,7 @@
                     if (result.success) {
                         const stockList = result.data;
                         const listText = stockList.slice(0, 20).join(', '); // 显示前20只股票
-                        showAlert(`数据库中共有${result.count}只股票，前20只: ${listText}`, 'info');
+                        showAlert(`Parquet 中共有${result.count}只股票，前20只: ${listText}`, 'info');
                         addLog(`📋 股票列表: 共${result.count}只股票`);
                         
                         // 将前10只股票填入批量同步框

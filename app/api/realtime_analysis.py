@@ -7,8 +7,6 @@ import os
 
 from flask import Blueprint, request, jsonify
 from app.services.realtime_data_manager import RealtimeDataManager
-from app.models.stock_minute_data import StockMinuteData
-from app.extensions import db
 import logging
 
 # 配置日志
@@ -124,7 +122,7 @@ def sync_all_periods():
 
 @realtime_analysis_bp.route('/data/stock-list', methods=['GET'])
 def get_stock_list():
-    """获取数据库中的股票列表"""
+    """获取 Parquet 股票基础资料中的股票列表"""
     try:
         stock_list = data_manager.get_stock_list_from_db()
         
@@ -148,6 +146,7 @@ def get_sync_status():
     try:
         ts_code = request.args.get('ts_code')
         period_type = request.args.get('period_type', '1min')
+        hours = int(request.args.get('hours', 24))
         
         if not ts_code:
             return jsonify({
@@ -155,30 +154,14 @@ def get_sync_status():
                 'message': '股票代码不能为空'
             }), 400
         
-        # 获取最新数据时间
-        latest_data = StockMinuteData.query.filter_by(
-            ts_code=ts_code,
-            period_type=period_type
-        ).order_by(StockMinuteData.datetime.desc()).first()
-        
-        if latest_data:
-            latest_time = latest_data.datetime.isoformat()
-            data_count = StockMinuteData.query.filter_by(
-                ts_code=ts_code,
-                period_type=period_type
-            ).count()
-        else:
-            latest_time = None
-            data_count = 0
+        summary = data_manager.get_minute_summary(ts_code, period_type, hours)
         
         return jsonify({
             'success': True,
             'data': {
                 'ts_code': ts_code,
                 'period_type': period_type,
-                'latest_time': latest_time,
-                'data_count': data_count,
-                'has_data': data_count > 0
+                **summary,
             }
         })
         
@@ -266,12 +249,11 @@ def get_latest_data():
                 'message': '股票代码不能为空'
             }), 400
         
-        # 获取最新数据
-        data = StockMinuteData.get_latest_data(ts_code, period_type, limit)
+        data = data_manager.get_minute_latest_data(ts_code, period_type, limit)
         
         return jsonify({
             'success': True,
-            'data': [item.to_dict() for item in data],
+            'data': data.to_dict(orient='records'),
             'count': len(data)
         })
         
@@ -302,12 +284,11 @@ def get_data_by_range():
         start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
         
-        # 获取时间范围数据
-        data = StockMinuteData.get_data_by_time_range(ts_code, start_dt, end_dt, period_type)
+        data = data_manager.get_minute_range_data(ts_code, start_dt, end_dt, period_type)
         
         return jsonify({
             'success': True,
-            'data': [item.to_dict() for item in data],
+            'data': data.to_dict(orient='records'),
             'count': len(data)
         })
         
@@ -365,7 +346,7 @@ def get_market_overview():
 def get_supported_periods():
     """获取支持的周期类型"""
     try:
-        periods = StockMinuteData.get_period_types()
+        periods = data_manager.get_minute_periods()
         
         return jsonify({
             'success': True,
@@ -384,9 +365,7 @@ def get_supported_periods():
 def get_available_stocks():
     """获取可用的股票列表"""
     try:
-        # 获取数据库中有数据的股票代码
-        stocks = db.session.query(StockMinuteData.ts_code).distinct().all()
-        stock_codes = [stock[0] for stock in stocks]
+        stock_codes = data_manager.get_available_minute_stocks()
         
         return jsonify({
             'success': True,
@@ -458,36 +437,11 @@ def batch_sync_data():
 def get_data_stats():
     """获取数据统计信息"""
     try:
-        # 统计各周期数据量
-        stats = {}
-        periods = StockMinuteData.get_period_types()
-        
-        for period in periods:
-            count = StockMinuteData.query.filter_by(period_type=period).count()
-            stats[period] = count
-        
-        # 获取总股票数
-        total_stocks = db.session.query(StockMinuteData.ts_code).distinct().count()
-        
-        # 获取最新数据时间
-        latest_time = db.session.query(
-            db.func.max(StockMinuteData.datetime)
-        ).scalar()
-        
-        # 获取最早数据时间
-        earliest_time = db.session.query(
-            db.func.min(StockMinuteData.datetime)
-        ).scalar()
+        payload = data_manager.get_minute_stats()
         
         return jsonify({
             'success': True,
-            'data': {
-                'period_stats': stats,
-                'total_stocks': total_stocks,
-                'latest_time': latest_time.isoformat() if latest_time else None,
-                'earliest_time': earliest_time.isoformat() if earliest_time else None,
-                'total_records': sum(stats.values())
-            }
+            'data': payload
         })
         
     except Exception as e:
