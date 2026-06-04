@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from db_utils import DatabaseUtils
+from parquet_writer import save_to_parquet
 
 FIELDS = [
     "ts_code",
@@ -192,6 +193,8 @@ def main():
             df = pro.daily_basic(trade_date=trade_date, fields=FIELDS)
             saved = _save_trade_date(cursor, conn, df)
             total_saved += saved
+            # 写入 parquet
+            save_to_parquet(df, trade_date, "daily_basic/daily")
 
         print(f"[daily_basic] 完成，处理交易日={len(trade_dates)}，写入/更新记录={total_saved}")
     finally:

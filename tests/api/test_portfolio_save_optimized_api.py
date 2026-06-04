@@ -17,12 +17,9 @@ def test_save_optimized_portfolio_creates_real_positions(app):
         },
     }
 
-    with patch("app.api.ml_factor_api.PortfolioPosition") as portfolio_model, patch("app.api.ml_factor_api.StockDailyHistory") as price_model, patch("app.api.ml_factor_api.db") as db:
+    with patch("app.api.ml_factor_api.PortfolioPosition") as portfolio_model, patch("app.api.ml_factor_api._data_reader") as data_reader, patch("app.api.ml_factor_api.db") as db:
         portfolio_model.query.filter_by.return_value.first.return_value = None
-        price_model.query.filter.return_value.order_by.return_value.first.side_effect = [
-            type("Price", (), {"close": 10.0})(),
-            type("Price", (), {"close": 20.0})(),
-        ]
+        data_reader.get_latest_close.side_effect = [10.0, 20.0]
 
         response = client.post("/api/ml-factor/portfolio/save-optimized", json=payload)
 

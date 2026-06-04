@@ -1,15 +1,12 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from sqlalchemy import and_, or_, desc, asc
-from app.extensions import db
-from app.models import (
-    StockBasic, StockDailyHistory, StockDailyBasic, 
-    StockFactor, StockMaData, StockMoneyflow, StockCyqPerf
-)
 from app.utils.cache import cached
+from app.services.data_reader import ParquetDataReader
 from loguru import logger
 import pandas as pd
 import numpy as np
+
+_data_reader = ParquetDataReader()
 
 class StockService:
     """股票数据服务类"""
@@ -19,31 +16,21 @@ class StockService:
     def get_stock_list(industry=None, area=None, search=None, page=1, page_size=20):
         """获取股票列表"""
         try:
-            query = StockBasic.query
-            
-            # 添加筛选条件
-            if industry:
-                query = query.filter(StockBasic.industry == industry)
-            if area:
-                query = query.filter(StockBasic.area == area)
-            if search:
-                keyword = f"%{str(search).strip()}%"
-                if keyword != "%%":
-                    query = query.filter(
-                        or_(
-                            StockBasic.ts_code.ilike(keyword),
-                            StockBasic.symbol.ilike(keyword),
-                            StockBasic.name.ilike(keyword),
-                        )
-                    )
-            
-            # 分页
+            df = _data_reader.get_stock_basic_list(industry=industry, area=area, search=search)
+            total = len(df)
             offset = (page - 1) * page_size
-            stocks = query.offset(offset).limit(page_size).all()
-            total = query.count()
-            
+            page_df = df.iloc[offset:offset + page_size]
+
+            stocks = page_df.where(page_df.notna(), None).to_dict(orient="records")
+            # list_date 转 string
+            for s in stocks:
+                if hasattr(s.get("list_date"), "strftime"):
+                    s["list_date"] = s["list_date"].strftime("%Y-%m-%d")
+                elif s.get("list_date") is not None:
+                    s["list_date"] = str(s["list_date"])
+
             return {
-                'stocks': [stock.to_dict() for stock in stocks],
+                'stocks': stocks,
                 'total': total,
                 'page': page,
                 'page_size': page_size,
@@ -52,14 +39,22 @@ class StockService:
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
             return {'stocks': [], 'total': 0, 'page': page, 'page_size': page_size, 'total_pages': 0}
-    
+
     @staticmethod
     @cached(expire=600, key_prefix='stock_info')
     def get_stock_info(ts_code: str):
         """获取股票基本信息"""
         try:
-            stock = StockBasic.query.filter_by(ts_code=ts_code).first()
-            return stock.to_dict() if stock else None
+            df = _data_reader.get_stock_basic(ts_code=ts_code)
+            if df.empty:
+                return None
+            row = df.iloc[0].to_dict()
+            row = {k: (v if not pd.isna(v) else None) for k, v in row.items()}
+            if hasattr(row.get("list_date"), "strftime"):
+                row["list_date"] = row["list_date"].strftime("%Y-%m-%d")
+            elif row.get("list_date") is not None:
+                row["list_date"] = str(row["list_date"])
+            return row
         except Exception as e:
             logger.error(f"获取股票信息失败: {ts_code}, 错误: {e}")
             return None
@@ -69,17 +64,19 @@ class StockService:
     def get_daily_history(ts_code: str, start_date: str = None, end_date: str = None, limit: int = 60):
         """获取股票日线历史数据"""
         try:
-            query = StockDailyHistory.query.filter_by(ts_code=ts_code)
-            
-            if start_date:
-                query = query.filter(StockDailyHistory.trade_date >= start_date)
-            if end_date:
-                query = query.filter(StockDailyHistory.trade_date <= end_date)
-            
-            # 按日期倒序排列，获取最新的数据（最新的在前面）
-            history = query.order_by(desc(StockDailyHistory.trade_date)).limit(limit).all()
-            
-            return [item.to_dict() for item in history]
+            df = _data_reader.get_daily(
+                ts_codes=[ts_code], start_date=start_date, end_date=end_date
+            )
+            if df.empty:
+                return []
+
+            # 按日期倒序排列，取最新的 limit 条
+            df = df.sort_values("trade_date", ascending=False).head(limit)
+            # 转为 dict list（与原 ORM to_dict 兼容）
+            df = df.copy()
+            df["trade_date"] = df["trade_date"].dt.strftime("%Y-%m-%d")
+            # NaN → None，避免 JSON 序列化出 NaN（非法 JSON）
+            return df.where(df.notna(), None).to_dict(orient="records")
         except Exception as e:
             logger.error(f"获取日线历史数据失败: {ts_code}, 错误: {e}")
             return []
@@ -89,16 +86,21 @@ class StockService:
     def get_daily_basic(ts_code: str, trade_date: str = None):
         """获取股票日线基本数据"""
         try:
-            query = StockDailyBasic.query.filter_by(ts_code=ts_code)
-            
-            if trade_date:
-                query = query.filter_by(trade_date=trade_date)
-            else:
-                # 获取最新数据
-                query = query.order_by(desc(StockDailyBasic.trade_date))
-            
-            basic = query.first()
-            return basic.to_dict() if basic else None
+            df = _data_reader.get_daily_basic(
+                ts_codes=[ts_code], start_date=trade_date, end_date=trade_date
+            )
+            if df.empty:
+                # 如果指定日期没数据，取最新一条
+                df = _data_reader.get_daily_basic(ts_codes=[ts_code])
+                if df.empty:
+                    return None
+                df = df.sort_values("trade_date", ascending=False).head(1)
+
+            row = df.iloc[0].to_dict()
+            # trade_date 转为字符串
+            if hasattr(row.get("trade_date"), "strftime"):
+                row["trade_date"] = row["trade_date"].strftime("%Y-%m-%d")
+            return row
         except Exception as e:
             logger.error(f"获取日线基本数据失败: {ts_code}, 错误: {e}")
             return None
@@ -108,31 +110,21 @@ class StockService:
     def get_stock_factors(ts_code: str, start_date: str = None, end_date: str = None, limit: int = 60):
         """获取股票技术因子数据"""
         try:
-            # 首先尝试从stock_factor表获取数据
-            query = StockFactor.query.filter_by(ts_code=ts_code)
-            
-            if start_date:
-                query = query.filter(StockFactor.trade_date >= start_date)
-            if end_date:
-                query = query.filter(StockFactor.trade_date <= end_date)
-            
-            # 按日期倒序排列，获取最新的数据（最新的在前面）
-            factors = query.order_by(desc(StockFactor.trade_date)).limit(limit).all()
-            
-            factor_data = [item.to_dict() for item in factors]
-            
-            # 如果stock_factor表数据不足，基于历史数据计算技术指标
-            if len(factor_data) < limit:
-                logger.info(f"stock_factor表数据不足({len(factor_data)}条)，基于历史数据计算技术指标")
+            df = _data_reader.get_stk_factor(
+                ts_codes=[ts_code], start_date=start_date, end_date=end_date
+            )
+            if df.empty or len(df) < limit:
+                logger.info(f"stk_factor parquet 数据不足({len(df)}条)，基于历史数据计算技术指标")
                 history_data = StockService.get_daily_history(ts_code, start_date, end_date, limit)
                 if history_data:
-                    calculated_factors = StockService._calculate_technical_indicators(history_data)
-                    return calculated_factors
-            
-            return factor_data
+                    return StockService._calculate_technical_indicators(history_data)
+
+            df = df.sort_values("trade_date", ascending=False).head(limit)
+            df = df.copy()
+            df["trade_date"] = df["trade_date"].dt.strftime("%Y-%m-%d")
+            return df.where(df.notna(), None).to_dict(orient="records")
         except Exception as e:
             logger.error(f"获取技术因子数据失败: {ts_code}, 错误: {e}")
-            # 如果出错，尝试基于历史数据计算
             try:
                 history_data = StockService.get_daily_history(ts_code, start_date, end_date, limit)
                 if history_data:
@@ -146,8 +138,17 @@ class StockService:
     def get_ma_data(ts_code: str):
         """获取股票均线数据"""
         try:
-            ma_data = StockMaData.query.filter_by(ts_code=ts_code).first()
-            return ma_data.to_dict() if ma_data else None
+            row = _data_reader.get_ma_data(ts_code)
+            if row is None:
+                return None
+            d = row.to_dict()
+            # Convert any numpy types and NaN
+            for k, v in d.items():
+                if pd.isna(v):
+                    d[k] = None
+                elif hasattr(v, 'item'):
+                    d[k] = v.item()
+            return d
         except Exception as e:
             logger.error(f"获取均线数据失败: {ts_code}, 错误: {e}")
             return None
@@ -157,15 +158,17 @@ class StockService:
     def get_moneyflow(ts_code: str, start_date: str = None, end_date: str = None, limit: int = 30):
         """获取股票资金流向数据"""
         try:
-            query = StockMoneyflow.query.filter_by(ts_code=ts_code)
-            
-            if start_date:
-                query = query.filter(StockMoneyflow.trade_date >= start_date)
-            if end_date:
-                query = query.filter(StockMoneyflow.trade_date <= end_date)
-            
-            moneyflow = query.order_by(desc(StockMoneyflow.trade_date)).limit(limit).all()
-            return [item.to_dict() for item in reversed(moneyflow)]
+            df = _data_reader.get_moneyflow(
+                ts_codes=[ts_code], start_date=start_date, end_date=end_date
+            )
+            if df.empty:
+                return []
+
+            df = df.sort_values("trade_date", ascending=False).head(limit)
+            df = df.copy()
+            df["trade_date"] = df["trade_date"].dt.strftime("%Y-%m-%d")
+            records = df.where(df.notna(), None).to_dict(orient="records")
+            return list(reversed(records))
         except Exception as e:
             logger.error(f"获取资金流向数据失败: {ts_code}, 错误: {e}")
             return []
@@ -175,15 +178,17 @@ class StockService:
     def get_cyq_perf(ts_code: str, start_date: str = None, end_date: str = None, limit: int = 30):
         """获取股票筹码分布数据"""
         try:
-            query = StockCyqPerf.query.filter_by(ts_code=ts_code)
-            
-            if start_date:
-                query = query.filter(StockCyqPerf.trade_date >= start_date)
-            if end_date:
-                query = query.filter(StockCyqPerf.trade_date <= end_date)
-            
-            cyq_perf = query.order_by(desc(StockCyqPerf.trade_date)).limit(limit).all()
-            return [item.to_dict() for item in reversed(cyq_perf)]
+            df = _data_reader.get_cyq_perf(
+                ts_codes=[ts_code], start_date=start_date, end_date=end_date
+            )
+            if df.empty:
+                return []
+
+            df = df.sort_values("trade_date", ascending=False).head(limit)
+            df = df.copy()
+            df["trade_date"] = df["trade_date"].dt.strftime("%Y-%m-%d")
+            records = df.where(df.notna(), None).to_dict(orient="records")
+            return list(reversed(records))
         except Exception as e:
             logger.error(f"获取筹码分布数据失败: {ts_code}, 错误: {e}")
             return []
@@ -225,231 +230,148 @@ class StockService:
     def get_industry_list():
         """获取行业列表"""
         try:
-            industries = db.session.query(StockBasic.industry).distinct().filter(
-                StockBasic.industry.isnot(None)
-            ).all()
-            return [industry[0] for industry in industries if industry[0]]
+            return _data_reader.get_industry_list()
         except Exception as e:
             logger.error(f"获取行业列表失败: {e}")
             return []
-    
+
     @staticmethod
     @cached(expire=1800, key_prefix='area_list')
     def get_area_list():
         """获取地域列表"""
         try:
-            areas = db.session.query(StockBasic.area).distinct().filter(
-                StockBasic.area.isnot(None)
-            ).all()
-            return [area[0] for area in areas if area[0]]
+            return _data_reader.get_area_list()
         except Exception as e:
             logger.error(f"获取地域列表失败: {e}")
             return []
     
     @staticmethod
     def screen_stocks(criteria: Dict):
-        """基于股票业务大宽表的增强筛选"""
+        """基于 Parquet 大宽表的增强筛选（原 MySQL JOIN 已迁移）"""
         try:
-            from app.models import StockBusiness
-            from sqlalchemy import and_, or_, text
-            from datetime import datetime, timedelta
-            
-            # 构建基础查询，关联stock_basic表获取行业和地域信息
-            query = db.session.query(StockBusiness, StockBasic).join(
-                StockBasic, StockBusiness.ts_code == StockBasic.ts_code
-            )
-            
-            # 确定查询日期
-            target_date = None
-            if criteria.get('trade_date'):
-                target_date = datetime.strptime(criteria['trade_date'], '%Y-%m-%d').date()
-                query = query.filter(StockBusiness.trade_date == target_date)
-            else:
-                # 使用最新数据，先获取最新日期
-                latest_date = db.session.query(db.func.max(StockBusiness.trade_date)).scalar()
-                if latest_date:
-                    query = query.filter(StockBusiness.trade_date == latest_date)
-            
-            # 基本条件筛选
-            if criteria.get('industry'):
-                query = query.filter(StockBasic.industry == criteria['industry'])
-            
-            if criteria.get('area'):
-                query = query.filter(StockBasic.area == criteria['area'])
-            
-            if criteria.get('market'):
-                market = criteria['market']
-                if market == 'SZ':
-                    query = query.filter(StockBusiness.ts_code.like('%.SZ'))
-                elif market == 'SH':
-                    query = query.filter(StockBusiness.ts_code.like('%.SH'))
-            
-            # 估值指标筛选
-            if criteria.get('pe_min'):
-                query = query.filter(StockBusiness.pe >= float(criteria['pe_min']))
-            if criteria.get('pe_max'):
-                query = query.filter(StockBusiness.pe <= float(criteria['pe_max']))
-            
-            if criteria.get('pb_min'):
-                query = query.filter(StockBusiness.pb >= float(criteria['pb_min']))
-            if criteria.get('pb_max'):
-                query = query.filter(StockBusiness.pb <= float(criteria['pb_max']))
-            
-            if criteria.get('ps_min'):
-                query = query.filter(StockBusiness.ps >= float(criteria['ps_min']))
-            if criteria.get('ps_max'):
-                query = query.filter(StockBusiness.ps <= float(criteria['ps_max']))
-            
-            if criteria.get('dv_min'):
-                query = query.filter(StockBusiness.dv_ratio >= float(criteria['dv_min']))
-            if criteria.get('dv_max'):
-                query = query.filter(StockBusiness.dv_ratio <= float(criteria['dv_max']))
-            
-            # 市值和交易指标筛选
-            if criteria.get('mv_min'):
-                query = query.filter(StockBusiness.total_mv >= float(criteria['mv_min']))
-            if criteria.get('mv_max'):
-                query = query.filter(StockBusiness.total_mv <= float(criteria['mv_max']))
-            
-            if criteria.get('circ_mv_min'):
-                query = query.filter(StockBusiness.circ_mv >= float(criteria['circ_mv_min']))
-            if criteria.get('circ_mv_max'):
-                query = query.filter(StockBusiness.circ_mv <= float(criteria['circ_mv_max']))
-            
-            if criteria.get('turnover_min'):
-                query = query.filter(StockBusiness.turnover_rate >= float(criteria['turnover_min']))
-            if criteria.get('turnover_max'):
-                query = query.filter(StockBusiness.turnover_rate <= float(criteria['turnover_max']))
-            
-            if criteria.get('volume_ratio_min'):
-                query = query.filter(StockBusiness.volume_ratio >= float(criteria['volume_ratio_min']))
-            if criteria.get('volume_ratio_max'):
-                query = query.filter(StockBusiness.volume_ratio <= float(criteria['volume_ratio_max']))
-            
-            # 技术指标筛选
-            if criteria.get('rsi6_min'):
-                query = query.filter(StockBusiness.factor_rsi_6 >= float(criteria['rsi6_min']))
-            if criteria.get('rsi6_max'):
-                query = query.filter(StockBusiness.factor_rsi_6 <= float(criteria['rsi6_max']))
-            
-            if criteria.get('kdj_k_min'):
-                query = query.filter(StockBusiness.factor_kdj_k >= float(criteria['kdj_k_min']))
-            if criteria.get('kdj_k_max'):
-                query = query.filter(StockBusiness.factor_kdj_k <= float(criteria['kdj_k_max']))
-            
-            if criteria.get('macd_min'):
-                query = query.filter(StockBusiness.factor_macd >= float(criteria['macd_min']))
-            if criteria.get('macd_max'):
-                query = query.filter(StockBusiness.factor_macd <= float(criteria['macd_max']))
-            
-            if criteria.get('cci_min'):
-                query = query.filter(StockBusiness.factor_cci >= float(criteria['cci_min']))
-            if criteria.get('cci_max'):
-                query = query.filter(StockBusiness.factor_cci <= float(criteria['cci_max']))
-            
-            # 资金流向筛选
-            if criteria.get('net_amount_min'):
-                query = query.filter(StockBusiness.moneyflow_net_amount >= float(criteria['net_amount_min']))
-            if criteria.get('net_amount_max'):
-                query = query.filter(StockBusiness.moneyflow_net_amount <= float(criteria['net_amount_max']))
-            
-            if criteria.get('lg_buy_rate_min'):
-                query = query.filter(StockBusiness.moneyflow_buy_lg_amount_rate >= float(criteria['lg_buy_rate_min']))
-            if criteria.get('lg_buy_rate_max'):
-                query = query.filter(StockBusiness.moneyflow_buy_lg_amount_rate <= float(criteria['lg_buy_rate_max']))
-            
-            if criteria.get('net_d5_amount_min'):
-                query = query.filter(StockBusiness.moneyflow_net_d5_amount >= float(criteria['net_d5_amount_min']))
-            if criteria.get('net_d5_amount_max'):
-                query = query.filter(StockBusiness.moneyflow_net_d5_amount <= float(criteria['net_d5_amount_max']))
-            
-            # 处理动态查询条件
-            dynamic_conditions = criteria.get('dynamic_conditions', [])
-            for condition in dynamic_conditions:
-                field_a = condition.get('field_a')
-                operator = condition.get('operator')
-                field_b = condition.get('field_b')
-                value = condition.get('value')
-                
-                if not field_a or not operator:
+            # 1. 确定查询日期
+            trade_date = criteria.get('trade_date')
+            if not trade_date:
+                trade_date = _data_reader.get_stock_business_latest_date()
+            if not trade_date:
+                return {'stocks': [], 'total': 0, 'criteria': criteria, 'error': '无可用的 trade_date'}
+
+            # 2. 按日期加载 stock_business（~5000 行 / 天）
+            biz = _data_reader.get_stock_business(trade_date=trade_date)
+            if biz.empty:
+                return {'stocks': [], 'total': 0, 'criteria': criteria}
+
+            # 3. 加载 stock_basic 用于行业/地域/名称
+            basic = _data_reader.get_stock_basic()
+
+            # 在 basic 中选取需要的列
+            basic_cols = ['ts_code', 'industry', 'area', 'symbol', 'name', 'list_date']
+            basic_sub = basic[[c for c in basic_cols if c in basic.columns]].copy()
+
+            # merge
+            df = biz.merge(basic_sub, on='ts_code', how='left')
+
+            # 4. 应用筛选条件
+            # 行业 / 地域 / 市场
+            if criteria.get('industry') and 'industry' in df.columns:
+                df = df[df['industry'] == criteria['industry']]
+            if criteria.get('area') and 'area' in df.columns:
+                df = df[df['area'] == criteria['area']]
+            if criteria.get('market') and 'ts_code' in df.columns:
+                m = criteria['market']
+                if m == 'SZ':
+                    df = df[df['ts_code'].str.endswith('.SZ')]
+                elif m == 'SH':
+                    df = df[df['ts_code'].str.endswith('.SH')]
+
+            # 范围过滤辅助
+            def _range_filter(data, col, lo=None, hi=None):
+                if col not in data.columns:
+                    return data
+                if lo is not None:
+                    data = data[pd.to_numeric(data[col], errors='coerce') >= float(lo)]
+                if hi is not None:
+                    data = data[pd.to_numeric(data[col], errors='coerce') <= float(hi)]
+                return data
+
+            # 估值
+            df = _range_filter(df, 'pe', criteria.get('pe_min'), criteria.get('pe_max'))
+            df = _range_filter(df, 'pb', criteria.get('pb_min'), criteria.get('pb_max'))
+            df = _range_filter(df, 'ps', criteria.get('ps_min'), criteria.get('ps_max'))
+            df = _range_filter(df, 'dv_ratio', criteria.get('dv_min'), criteria.get('dv_max'))
+
+            # 市值 / 交易
+            df = _range_filter(df, 'total_mv', criteria.get('mv_min'), criteria.get('mv_max'))
+            df = _range_filter(df, 'circ_mv', criteria.get('circ_mv_min'), criteria.get('circ_mv_max'))
+            df = _range_filter(df, 'turnover_rate', criteria.get('turnover_min'), criteria.get('turnover_max'))
+            df = _range_filter(df, 'volume_ratio', criteria.get('volume_ratio_min'), criteria.get('volume_ratio_max'))
+
+            # 技术指标
+            df = _range_filter(df, 'factor_rsi_6', criteria.get('rsi6_min'), criteria.get('rsi6_max'))
+            df = _range_filter(df, 'factor_kdj_k', criteria.get('kdj_k_min'), criteria.get('kdj_k_max'))
+            df = _range_filter(df, 'factor_macd', criteria.get('macd_min'), criteria.get('macd_max'))
+            df = _range_filter(df, 'factor_cci', criteria.get('cci_min'), criteria.get('cci_max'))
+
+            # 资金流向
+            df = _range_filter(df, 'moneyflow_net_amount', criteria.get('net_amount_min'), criteria.get('net_amount_max'))
+            df = _range_filter(df, 'moneyflow_buy_lg_amount_rate', criteria.get('lg_buy_rate_min'), criteria.get('lg_buy_rate_max'))
+            df = _range_filter(df, 'moneyflow_net_d5_amount', criteria.get('net_d5_amount_min'), criteria.get('net_d5_amount_max'))
+
+            # 5. 动态条件
+            op_map = {'>': '__gt__', '>=': '__ge__', '<': '__lt__', '<=': '__le__',
+                      '=': '__eq__', '!=': '__ne__'}
+            for cond in criteria.get('dynamic_conditions', []):
+                field_a = cond.get('field_a')
+                operator = cond.get('operator')
+                field_b = cond.get('field_b')
+                value = cond.get('value')
+                if not field_a or not operator or field_a not in df.columns:
                     continue
-                
-                # 构建动态条件
-                if field_b:
-                    # 字段间比较
-                    field_a_attr = getattr(StockBusiness, field_a, None)
-                    field_b_attr = getattr(StockBusiness, field_b, None)
-                    
-                    if field_a_attr is not None and field_b_attr is not None:
-                        if operator == '>':
-                            query = query.filter(field_a_attr > field_b_attr)
-                        elif operator == '>=':
-                            query = query.filter(field_a_attr >= field_b_attr)
-                        elif operator == '<':
-                            query = query.filter(field_a_attr < field_b_attr)
-                        elif operator == '<=':
-                            query = query.filter(field_a_attr <= field_b_attr)
-                        elif operator == '=':
-                            query = query.filter(field_a_attr == field_b_attr)
-                        elif operator == '!=':
-                            query = query.filter(field_a_attr != field_b_attr)
+                col_a = pd.to_numeric(df[field_a], errors='coerce')
+                if field_b and field_b in df.columns:
+                    col_b = pd.to_numeric(df[field_b], errors='coerce')
+                    method = op_map.get(operator)
+                    if method:
+                        df = df[getattr(col_a, method)(col_b)]
                 elif value is not None:
-                    # 字段与固定值比较
-                    field_a_attr = getattr(StockBusiness, field_a, None)
-                    
-                    if field_a_attr is not None:
-                        try:
-                            value_float = float(value)
-                            if operator == '>':
-                                query = query.filter(field_a_attr > value_float)
-                            elif operator == '>=':
-                                query = query.filter(field_a_attr >= value_float)
-                            elif operator == '<':
-                                query = query.filter(field_a_attr < value_float)
-                            elif operator == '<=':
-                                query = query.filter(field_a_attr <= value_float)
-                            elif operator == '=':
-                                query = query.filter(field_a_attr == value_float)
-                            elif operator == '!=':
-                                query = query.filter(field_a_attr != value_float)
-                        except ValueError:
-                            logger.warning(f"动态条件值转换失败: {value}")
-                            continue
-            
-            # 执行查询
-            results = query.all()
-            
-            # 转换为字典列表，合并StockBusiness和StockBasic的数据
-            stocks = []
-            for stock_business, stock_basic in results:
-                stock_dict = stock_business.to_dict()
-                # 添加基本信息
-                stock_dict.update({
-                    'industry': stock_basic.industry,
-                    'area': stock_basic.area,
-                    'symbol': stock_basic.symbol,
-                    'name': stock_basic.name,
-                    'list_date': stock_basic.list_date.strftime('%Y-%m-%d') if stock_basic.list_date else None
-                })
-                stocks.append(stock_dict)
-            
-            # 限制返回数量，避免数据过多
+                    try:
+                        val = float(value)
+                        method = op_map.get(operator)
+                        if method:
+                            df = df[getattr(col_a, method)(val)]
+                    except ValueError:
+                        logger.warning(f"动态条件值转换失败: {value}")
+
+            # 6. 转换为字典列表
+            # 确保 list_date 为字符串
+            if 'list_date' in df.columns:
+                df['list_date'] = df['list_date'].apply(
+                    lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else (str(x) if pd.notna(x) else None)
+                )
+            # trade_date 统一为字符串
+            if 'trade_date' in df.columns:
+                df['trade_date'] = df['trade_date'].apply(
+                    lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else (str(x) if pd.notna(x) else None)
+                )
+
+            stocks = df.where(df.notna(), None).to_dict(orient='records')
+
+            # 限制返回数量
             max_results = 200
             total_count = len(stocks)
             has_more = total_count > max_results
-            
             if has_more:
                 stocks = stocks[:max_results]
-            
+
             logger.info(f"股票筛选完成，共找到 {total_count} 只股票，返回 {len(stocks)} 只")
-            
+
             return {
                 'stocks': stocks,
                 'total': total_count,
                 'criteria': criteria,
                 'has_more': has_more
             }
-            
+
         except Exception as e:
             logger.error(f"股票筛选失败: {e}")
             import traceback

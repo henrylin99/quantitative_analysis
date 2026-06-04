@@ -672,7 +672,7 @@ function renderMoneyflowData(data) {
                             </tr>
                         </thead>
                         <tbody>
-                            ${data.slice(0, 10).map(item => `
+                            ${data.slice().reverse().map(item => `
                                 <tr>
                                     <td>${item.trade_date || '--'}</td>
                                     <td class="${(item.net_mf_amount || 0) >= 0 ? 'text-danger' : 'text-success'}">
@@ -996,7 +996,7 @@ function renderCyqData(data) {
                             </tr>
                         </thead>
                         <tbody>
-                            ${data.slice(0, 10).map(item => `
+                            ${data.slice().reverse().map(item => `
                                 <tr>
                                     <td>${item.trade_date || '--'}</td>
                                     <td class="text-success">${formatNumber(item.his_low, 2)}</td>

@@ -43,6 +43,10 @@ class Config:
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FILE = os.getenv('LOG_FILE', 'logs/stock_analysis.log')
     
+    # 数据源配置
+    DATA_DIR = os.getenv('DATA_DIR', os.path.join(os.path.dirname(__file__), 'data'))
+    DATA_SOURCE = os.getenv('DATA_SOURCE', 'parquet')  # 'parquet' | 'mysql'
+
     # 数据更新配置
     DATA_UPDATE_HOUR = int(os.getenv('DATA_UPDATE_HOUR', 18))  # 每日18点更新数据
     DATA_UPDATE_MINUTE = int(os.getenv('DATA_UPDATE_MINUTE', 0))
