@@ -1,42 +1,70 @@
-/* 专业金融主题样式 */
+/* Obsidian Dark Theme — financial-theme.css */
 
-/* ===== CSS变量定义 ===== */
+/* ===== Step 1: Obsidian Design Tokens ===== */
 :root {
-    /* 主色调 */
-    --primary-color: #1e40af;
-    --primary-light: #3b82f6;
-    --primary-dark: #1e3a8a;
-    
-    /* 辅助色 */
-    --success-color: #059669;
-    --warning-color: #d97706;
-    --danger-color: #dc2626;
-    --info-color: #0891b2;
-    
-    /* 中性色 */
-    --gray-50: #f9fafb;
-    --gray-100: #f3f4f6;
-    --gray-200: #e5e7eb;
-    --gray-300: #d1d5db;
-    --gray-400: #9ca3af;
-    --gray-500: #6b7280;
-    --gray-600: #4b5563;
-    --gray-700: #374151;
-    --gray-800: #1f2937;
-    --gray-900: #111827;
-    
-    /* 字体 */
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* Surfaces */
+    --obs-bg: #0f172a;
+    --obs-surface: #1e293b;
+    --obs-surface-alt: #162033;
+    --obs-border: #334155;
+    --obs-border-light: rgba(99,102,241,0.15);
+    --obs-border-hover: rgba(99,102,241,0.3);
+
+    /* Text */
+    --obs-text: #e2e8f0;
+    --obs-text-secondary: #94a3b8;
+    --obs-text-muted: #64748b;
+
+    /* Brand */
+    --obs-primary: #6366f1;
+    --obs-primary-light: #818cf8;
+    --obs-primary-bg: rgba(99,102,241,0.10);
+    --obs-primary-glow: rgba(99,102,241,0.25);
+
+    /* Semantic */
+    --obs-success: #22c55e;
+    --obs-success-light: #4ade80;
+    --obs-success-bg: rgba(34,197,94,0.10);
+    --obs-warning: #f59e0b;
+    --obs-warning-light: #fbbf24;
+    --obs-warning-bg: rgba(245,158,11,0.10);
+    --obs-danger: #ef4444;
+    --obs-danger-light: #f87171;
+    --obs-danger-bg: rgba(239,68,68,0.10);
+    --obs-info: #06b6d4;
+    --obs-info-light: #22d3ee;
+    --obs-info-bg: rgba(6,182,212,0.10);
+
+    /* Legacy aliases (for existing var() references) */
+    --primary-color: #6366f1;
+    --primary-light: #818cf8;
+    --primary-dark: #4f46e5;
+    --success-color: #22c55e;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --info-color: #06b6d4;
+    --gray-50: #0f172a;
+    --gray-100: #162033;
+    --gray-200: #1e293b;
+    --gray-300: #334155;
+    --gray-400: #475569;
+    --gray-500: #64748b;
+    --gray-600: #94a3b8;
+    --gray-700: #cbd5e1;
+    --gray-800: #e2e8f0;
+    --gray-900: #f1f5f9;
+
+    /* Typography */
+    --font-family: 'DM Sans', "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     --font-size-xs: 0.75rem;
-    --font-size-sm: 0.875rem;
-    --font-size-base: 1rem;
-    --font-size-lg: 1.125rem;
-    --font-size-xl: 1.25rem;
+    --font-size-sm: 0.8125rem;
+    --font-size-base: 0.875rem;
+    --font-size-lg: 1rem;
+    --font-size-xl: 1.125rem;
     --font-size-2xl: 1.5rem;
     --font-size-3xl: 1.875rem;
-    --font-size-4xl: 2.25rem;
-    
-    /* 间距 */
+
+    /* Spacing */
     --spacing-1: 0.25rem;
     --spacing-2: 0.5rem;
     --spacing-3: 0.75rem;
@@ -44,400 +72,600 @@
     --spacing-5: 1.25rem;
     --spacing-6: 1.5rem;
     --spacing-8: 2rem;
-    --spacing-10: 2.5rem;
-    --spacing-12: 3rem;
-    
-    /* 圆角 */
+
+    /* Radius */
     --border-radius-sm: 0.375rem;
     --border-radius: 0.5rem;
     --border-radius-lg: 0.75rem;
     --border-radius-xl: 1rem;
-    
-    /* 阴影 */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    
-    /* 过渡动画 */
-    --transition-fast: 150ms ease-in-out;
-    --transition-normal: 300ms ease-in-out;
-    --transition-slow: 500ms ease-in-out;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ===== 基础样式重置 ===== */
-* {
-    box-sizing: border-box;
-}
+/* ===== Step 2: Body and Base Styles ===== */
+* { box-sizing: border-box; }
 
 body {
     font-family: var(--font-family);
-    line-height: 1.6;
-    color: var(--gray-700);
-    background-color: var(--gray-50);
+    font-size: var(--font-size-base);
+    line-height: 1.55;
+    color: var(--obs-text);
+    background-color: var(--obs-bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== 导航栏样式 ===== */
+h1, .h1 { font-size: clamp(1.5rem, 2vw, 1.75rem); font-weight: 600; }
+h5, .h5 { font-size: 0.98rem; font-weight: 600; }
+
+.text-muted { color: var(--obs-text-muted) !important; }
+
+/* ===== Step 3: Navbar Styles ===== */
 .navbar-financial {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-    box-shadow: var(--shadow-md);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--obs-border-light);
 }
 
 .navbar-financial .navbar-brand {
-    font-weight: 700;
-    font-size: var(--font-size-xl);
+    font-weight: 600;
+    font-size: var(--font-size-lg);
     color: white !important;
     transition: var(--transition-fast);
 }
 
 .navbar-financial .navbar-brand:hover {
-    transform: scale(1.05);
+    color: white !important;
 }
 
 .navbar-financial .nav-link {
-    color: rgba(255, 255, 255, 0.9) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
     font-weight: 500;
-    padding: var(--spacing-3) var(--spacing-4);
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-2) var(--spacing-3);
     border-radius: var(--border-radius);
     transition: var(--transition-fast);
-    position: relative;
 }
 
 .navbar-financial .nav-link:hover,
 .navbar-financial .nav-link.active {
-    color: white !important;
-    background-color: rgba(255, 255, 255, 0.1);
-    transform: translateY(-1px);
+    color: var(--obs-primary-light) !important;
+    background-color: rgba(99, 102, 241, 0.12);
 }
 
 .navbar-financial .dropdown-menu {
-    background-color: white;
-    border: none;
-    box-shadow: var(--shadow-lg);
+    background-color: var(--obs-surface);
+    border: 1px solid var(--obs-border);
+    box-shadow: var(--shadow-md);
     border-radius: var(--border-radius-lg);
-    padding: var(--spacing-2);
+    padding: var(--spacing-1);
     margin-top: var(--spacing-2);
 }
 
 .navbar-financial .dropdown-item {
-    color: var(--gray-700);
-    padding: var(--spacing-3) var(--spacing-4);
-    border-radius: var(--border-radius);
+    color: var(--obs-text);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--border-radius-sm);
     transition: var(--transition-fast);
     font-weight: 500;
+    font-size: var(--font-size-sm);
 }
 
 .navbar-financial .dropdown-item:hover {
-    background-color: var(--gray-100);
-    color: var(--primary-color);
-    transform: translateX(4px);
+    background-color: var(--obs-primary-bg);
+    color: var(--obs-primary-light);
 }
 
-/* 实时状态指示器 */
+/* ===== Step 4: Real-time Indicator ===== */
 .real-time-indicator {
-    background: linear-gradient(45deg, #10b981, #059669);
-    color: white;
-    padding: var(--spacing-1) var(--spacing-3);
-    border-radius: var(--border-radius-xl);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    position: relative;
-    overflow: hidden;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--obs-success-light);
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .real-time-indicator::before {
     content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-    animation: shimmer 2s infinite;
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--obs-success-light);
+    border-radius: 50%;
+    margin-right: 4px;
 }
 
-@keyframes shimmer {
-    0% { left: -100%; }
-    100% { left: 100%; }
-}
+/* Remove the old shimmer animation */
+.real-time-indicator::after { display: none; }
 
-/* ===== 卡片系统 ===== */
+/* ===== Step 5: Card System ===== */
+.card,
 .card-financial {
-    background: white;
-    border: 1px solid var(--gray-200);
+    background: var(--obs-surface);
+    border: 1px solid var(--obs-border);
     border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
+    color: var(--obs-text);
     transition: var(--transition-normal);
-    overflow: hidden;
 }
 
+.card:hover,
 .card-financial:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+    border-color: var(--obs-border-hover);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.06);
 }
 
-/* 欢迎横幅 */
-.stock-info-banner {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    box-shadow: var(--shadow-lg);
+.card-header {
+    background: var(--obs-surface-alt);
+    border-bottom: 1px solid var(--obs-border);
+    color: var(--obs-text);
+    padding: 0.65rem 0.9rem;
 }
 
-.stock-info-banner .card-body {
-    padding: var(--spacing-12) var(--spacing-6);
+.card-body {
+    padding: 0.9rem;
+    color: var(--obs-text);
 }
 
-.stock-info-banner .display-4 {
-    font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.stock-info-banner .lead {
-    font-size: var(--font-size-lg);
-    opacity: 0.95;
-}
-
-/* 指标卡片增强版 */
+/* Metric card enhanced */
 .metric-card-enhanced {
-    background: white;
-    border: 1px solid var(--gray-200);
+    background: var(--obs-surface);
+    border: 1px solid var(--obs-border);
     border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-sm);
     transition: var(--transition-normal);
     overflow: hidden;
     position: relative;
 }
 
 .metric-card-enhanced::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
-    transform: scaleX(0);
-    transition: var(--transition-normal);
-}
-
-.metric-card-enhanced:hover::before {
-    transform: scaleX(1);
+    display: none; /* Remove old gradient top bar */
 }
 
 .metric-card-enhanced:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-4px);
-    border-color: var(--primary-light);
+    border-color: var(--obs-border-hover);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.06);
 }
 
 .metric-icon {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto var(--spacing-4);
+    width: 36px;
+    height: 36px;
+    margin: 0 auto var(--spacing-3);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
-    border-radius: var(--border-radius-xl);
-    transition: var(--transition-normal);
+    background: var(--obs-primary-bg);
+    border-radius: var(--border-radius);
+    transition: var(--transition-fast);
 }
 
 .metric-icon i {
-    font-size: 2rem;
-    transition: var(--transition-normal);
+    font-size: 1rem;
+    transition: var(--transition-fast);
 }
 
 .metric-card-enhanced:hover .metric-icon {
-    transform: scale(1.1) rotate(5deg);
-    background: linear-gradient(135deg, var(--primary-light), var(--primary-color));
+    transform: none;
+    background: var(--obs-primary-bg);
 }
 
 .metric-card-enhanced:hover .metric-icon i {
-    color: white !important;
+    color: var(--obs-primary-light) !important;
 }
 
-/* 悬浮提升效果 */
-.hover-lift {
-    transition: var(--transition-normal);
+/* ===== Step 6: Hero Banner ===== */
+.stock-info-banner {
+    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.05));
+    color: var(--obs-text);
+    border: 1px solid var(--obs-border-light);
+    box-shadow: none;
+    position: relative;
+    overflow: hidden;
 }
 
-.hover-lift:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
+.stock-info-banner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99,102,241,0.4), transparent);
 }
 
-/* ===== 按钮系统 ===== */
+.stock-info-banner .card-body {
+    padding: var(--spacing-8) var(--spacing-6);
+}
+
+.stock-info-banner .display-4 {
+    font-weight: 700;
+    color: var(--obs-text);
+}
+
+.stock-info-banner .lead {
+    color: var(--obs-primary-light);
+}
+
+/* ===== Step 7: Button System ===== */
 .btn-financial {
-    font-weight: 600;
-    padding: var(--spacing-3) var(--spacing-6);
-    border-radius: var(--border-radius-lg);
+    font-weight: 500;
+    font-size: var(--font-size-sm);
+    padding: 6px 16px;
+    border-radius: var(--border-radius);
     transition: var(--transition-fast);
     position: relative;
     overflow: hidden;
 }
 
 .btn-financial::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-    transition: var(--transition-fast);
-}
-
-.btn-financial:hover::before {
-    left: 100%;
+    display: none; /* Remove old shimmer sweep */
 }
 
 .btn-primary-financial {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    background: var(--obs-primary);
     border: none;
     color: white;
 }
 
 .btn-primary-financial:hover {
-    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background: var(--obs-primary-light);
+    box-shadow: 0 0 16px var(--obs-primary-glow);
+    color: white;
 }
 
 .btn-success-financial {
-    background: linear-gradient(135deg, var(--success-color), #10b981);
+    background: var(--obs-success);
     border: none;
     color: white;
 }
 
 .btn-success-financial:hover {
-    background: linear-gradient(135deg, #047857, var(--success-color));
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background: var(--obs-success-light);
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.2);
+    color: white;
 }
 
 .btn-warning-financial {
-    background: linear-gradient(135deg, var(--warning-color), #f59e0b);
+    background: var(--obs-warning);
     border: none;
     color: white;
 }
 
 .btn-warning-financial:hover {
-    background: linear-gradient(135deg, #b45309, var(--warning-color));
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background: var(--obs-warning-light);
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+    color: white;
 }
 
 .btn-danger-financial {
-    background: linear-gradient(135deg, var(--danger-color), #ef4444);
+    background: var(--obs-danger);
     border: none;
     color: white;
 }
 
 .btn-danger-financial:hover {
-    background: linear-gradient(135deg, #b91c1c, var(--danger-color));
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background: var(--obs-danger-light);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+    color: white;
 }
 
-/* ===== 数据表格 ===== */
+/* Ghost/outline buttons */
+.btn-outline-light {
+    border-color: rgba(99, 102, 241, 0.3);
+    color: var(--obs-primary-light);
+}
+
+.btn-outline-light:hover {
+    background: var(--obs-primary-bg);
+    border-color: var(--obs-primary);
+    color: var(--obs-primary-light);
+}
+
+/* Hover-lift override - no lift */
+.hover-lift { transition: var(--transition-normal); }
+.hover-lift:hover {
+    transform: none;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.06);
+}
+
+/* Metric card hover - no lift */
+.metric-card { transition: var(--transition-fast); }
+.metric-card:hover { transform: none; }
+
+/* ===== Step 8: Table Styles ===== */
+.table,
 .table-financial {
-    background: white;
-    border-radius: var(--border-radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
+    color: var(--obs-text);
+    background: transparent;
+    font-size: var(--font-size-sm);
+    margin-bottom: 0;
 }
 
+.table > :not(caption) > * > * {
+    background-color: transparent;
+    border-bottom-color: rgba(51, 65, 85, 0.5);
+    padding: 0.5rem 0.6rem;
+}
+
+.table thead th,
 .table-financial thead th {
-    background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
-    border: none;
+    background: var(--obs-surface-alt);
+    color: var(--obs-text-muted);
+    font-size: 12px;
     font-weight: 600;
-    color: var(--gray-700);
-    padding: var(--spacing-4);
+    padding: 0.5rem 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none;
 }
 
 .table-financial tbody tr {
     transition: var(--transition-fast);
+    transform: none !important;
 }
 
-.table-financial tbody tr:hover {
-    background-color: var(--gray-50);
-    transform: scale(1.01);
+.table-financial tbody tr:hover,
+.table-hover > tbody > tr:hover > * {
+    background-color: rgba(99, 102, 241, 0.06);
+    color: var(--obs-text);
 }
 
-.table-financial tbody td {
-    padding: var(--spacing-4);
-    border-color: var(--gray-200);
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 255, 255, 0.02);
 }
 
-/* ===== 图表容器 ===== */
-.chart-container-financial {
-    background: white;
+/* ===== Step 9: Form Styles ===== */
+.form-control,
+.form-select {
+    background-color: var(--obs-surface-alt);
+    border-color: var(--obs-border);
+    color: var(--obs-text);
+    font-size: var(--font-size-sm);
+    min-height: 2.1rem;
+    padding: 0.35rem 0.6rem;
+    transition: var(--transition-fast);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--obs-surface-alt);
+    border-color: rgba(99, 102, 241, 0.5);
+    color: var(--obs-text);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.form-control::placeholder {
+    color: var(--obs-text-muted);
+}
+
+.form-label {
+    color: var(--obs-text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 0.35rem;
+}
+
+.form-text {
+    color: var(--obs-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+/* ===== Step 10: Dropdown, Modal, Alert, Badge, Nav, Pagination, List Group ===== */
+
+/* Dropdowns */
+.dropdown-menu {
+    background-color: var(--obs-surface);
+    border: 1px solid var(--obs-border);
     border-radius: var(--border-radius-lg);
-    padding: var(--spacing-6);
-    box-shadow: var(--shadow-sm);
-    margin: var(--spacing-6) 0;
+    box-shadow: var(--shadow-md);
+}
+
+.dropdown-item {
+    color: var(--obs-text);
+    font-size: var(--font-size-sm);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: var(--obs-primary-bg);
+    color: var(--obs-primary-light);
+}
+
+/* Modals */
+.modal-content {
+    background-color: var(--obs-surface);
+    border: 1px solid var(--obs-border);
+    color: var(--obs-text);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--obs-border);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--obs-border);
+}
+
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Alerts */
+.alert { border: none; border-radius: var(--border-radius); padding: 0.75rem 1rem; }
+
+.alert-danger-financial,
+.alert-danger {
+    background: var(--obs-danger-bg);
+    border-left: 3px solid var(--obs-danger);
+    color: var(--obs-danger-light);
+}
+
+.alert-success-financial,
+.alert-success {
+    background: var(--obs-success-bg);
+    border-left: 3px solid var(--obs-success);
+    color: var(--obs-success-light);
+}
+
+.alert-warning-financial,
+.alert-warning {
+    background: var(--obs-warning-bg);
+    border-left: 3px solid var(--obs-warning);
+    color: var(--obs-warning-light);
+}
+
+.alert-info-financial,
+.alert-info {
+    background: var(--obs-info-bg);
+    border-left: 3px solid var(--obs-info);
+    color: var(--obs-info-light);
+}
+
+/* Badges */
+.badge {
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+}
+
+/* Nav tabs / pills */
+.nav-tabs { border-bottom-color: var(--obs-border); }
+.nav-tabs .nav-link {
+    color: var(--obs-text-secondary);
+    border-color: transparent;
+}
+.nav-tabs .nav-link.active {
+    color: var(--obs-primary-light);
+    background-color: var(--obs-surface);
+    border-color: var(--obs-border) var(--obs-border) var(--obs-surface);
+}
+.nav-tabs .nav-link:hover {
+    color: var(--obs-text);
+    border-color: transparent;
+}
+
+.nav-pills .nav-link {
+    color: var(--obs-text-secondary);
+    border-radius: var(--border-radius);
+}
+.nav-pills .nav-link.active {
+    background-color: var(--obs-primary-bg);
+    color: var(--obs-primary-light);
+}
+
+/* Pagination */
+.page-link {
+    background-color: var(--obs-surface);
+    border-color: var(--obs-border);
+    color: var(--obs-text-secondary);
+}
+.page-link:hover {
+    background-color: var(--obs-primary-bg);
+    border-color: var(--obs-border);
+    color: var(--obs-primary-light);
+}
+.page-item.active .page-link {
+    background-color: var(--obs-primary);
+    border-color: var(--obs-primary);
+    color: white;
+}
+
+/* List group */
+.list-group-item {
+    background-color: var(--obs-surface);
+    border-color: var(--obs-border);
+    color: var(--obs-text);
+}
+.list-group-item-action:hover {
+    background-color: var(--obs-primary-bg);
+    color: var(--obs-primary-light);
+}
+
+/* ===== Step 11: Bootstrap Utility Class Overrides for Dark Theme ===== */
+.bg-primary { background-color: var(--obs-primary) !important; }
+.bg-success { background-color: var(--obs-success) !important; }
+.bg-danger { background-color: var(--obs-danger) !important; }
+.bg-warning { background-color: var(--obs-warning) !important; }
+.bg-secondary { background-color: var(--obs-surface-alt) !important; color: var(--obs-text-secondary); }
+.bg-info { background-color: var(--obs-info) !important; }
+.bg-light { background-color: var(--obs-surface) !important; }
+.bg-white { background-color: var(--obs-surface) !important; }
+.bg-dark { background-color: var(--obs-bg) !important; }
+
+.text-primary { color: var(--obs-primary-light) !important; }
+.text-success { color: var(--obs-success-light) !important; }
+.text-danger { color: var(--obs-danger-light) !important; }
+.text-warning { color: var(--obs-warning-light) !important; }
+.text-info { color: var(--obs-info-light) !important; }
+.text-secondary { color: var(--obs-text-secondary) !important; }
+.text-muted { color: var(--obs-text-muted) !important; }
+.text-dark { color: var(--obs-text) !important; }
+.text-white { color: #fff !important; }
+
+.table-dark {
+    --bs-table-bg: var(--obs-surface-alt);
+    --bs-table-color: var(--obs-text);
+    --bs-table-border-color: var(--obs-border);
+}
+
+/* ===== Step 12: Chart Container, Number Display, Loading ===== */
+
+/* Chart container */
+.chart-container-financial {
+    background: var(--obs-surface);
+    border: 1px solid var(--obs-border);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-4);
+    margin: var(--spacing-4) 0;
     position: relative;
     overflow: hidden;
 }
 
-.chart-container-financial::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--primary-color), var(--success-color), var(--warning-color));
-}
+.chart-container-financial::before { display: none; }
 
-/* ===== 数字显示 ===== */
+/* Number display */
 .number-display {
     font-weight: 700;
-    font-size: var(--font-size-3xl);
-    background: linear-gradient(135deg, currentColor, currentColor);
-    -webkit-background-clip: text;
-    background-clip: text;
-    position: relative;
+    font-size: var(--font-size-2xl);
 }
 
-.number-display::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 30px;
-    height: 3px;
-    background: linear-gradient(90deg, currentColor, transparent);
-    border-radius: var(--border-radius);
-}
+.number-display::after { display: none; }
 
-/* ===== 加载动画 ===== */
+/* Loading */
 .loading-content {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--spacing-12);
+    padding: var(--spacing-8);
 }
 
 .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid var(--gray-200);
-    border-top: 4px solid var(--primary-color);
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--obs-border);
+    border-top: 3px solid var(--obs-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-bottom: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
 }
 
 .loading-text {
-    color: var(--gray-500);
+    color: var(--obs-text-muted);
     font-weight: 500;
+    font-size: var(--font-size-sm);
 }
 
 @keyframes spin {
@@ -445,135 +673,94 @@ body {
     100% { transform: rotate(360deg); }
 }
 
-/* ===== 警告框 ===== */
-.alert-financial {
-    border: none;
-    border-radius: var(--border-radius-lg);
-    padding: var(--spacing-4) var(--spacing-6);
-    font-weight: 500;
+/* ===== Step 13: Scrollbar, Animation, Section Title, Accessibility ===== */
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--obs-bg); }
+::-webkit-scrollbar-thumb { background: var(--obs-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
+
+/* Staggered fade-in animation */
+@keyframes obsFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.alert-danger-financial {
-    background: linear-gradient(135deg, #fef2f2, #fee2e2);
-    color: var(--danger-color);
-    border-left: 4px solid var(--danger-color);
+.obs-animate > * {
+    opacity: 0;
+    animation: obsFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.obs-animate > *:nth-child(1) { animation-delay: 0ms; }
+.obs-animate > *:nth-child(2) { animation-delay: 50ms; }
+.obs-animate > *:nth-child(3) { animation-delay: 100ms; }
+.obs-animate > *:nth-child(4) { animation-delay: 150ms; }
+.obs-animate > *:nth-child(5) { animation-delay: 200ms; }
+.obs-animate > *:nth-child(6) { animation-delay: 250ms; }
+
+/* Section title with Indigo bar */
+.section-title {
+    color: var(--obs-text);
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1rem;
 }
 
-.alert-success-financial {
-    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
-    color: var(--success-color);
-    border-left: 4px solid var(--success-color);
+.section-title::before {
+    content: '';
+    width: 3px;
+    height: 16px;
+    background: var(--obs-primary);
+    border-radius: 2px;
+    flex-shrink: 0;
 }
 
-.alert-warning-financial {
-    background: linear-gradient(135deg, #fffbeb, #fef3c7);
-    color: var(--warning-color);
-    border-left: 4px solid var(--warning-color);
-}
+/* ===== Step 14: Responsive, Reduced Motion, High Contrast, Focus ===== */
 
-.alert-info-financial {
-    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-    color: var(--info-color);
-    border-left: 4px solid var(--info-color);
-}
-
-/* ===== 微交互动画 ===== */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes fadeInLeft {
-    from {
-        opacity: 0;
-        transform: translateX(-30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.05);
-    }
-}
-
-.animate-fade-in-up {
-    animation: fadeInUp 0.6s ease-out;
-}
-
-.animate-fade-in-left {
-    animation: fadeInLeft 0.6s ease-out;
-}
-
-.animate-pulse {
-    animation: pulse 2s infinite;
-}
-
-/* ===== 响应式设计 ===== */
 @media (max-width: 768px) {
     :root {
-        --font-size-4xl: 1.875rem;
         --font-size-3xl: 1.5rem;
         --font-size-2xl: 1.25rem;
-        --spacing-12: 2rem;
-        --spacing-10: 2rem;
-        --spacing-8: 1.5rem;
     }
-    
+
     .metric-icon {
-        width: 48px;
-        height: 48px;
+        width: 28px;
+        height: 28px;
     }
-    
+
     .metric-icon i {
-        font-size: 1.5rem;
+        font-size: 0.875rem;
     }
-    
+
     .stock-info-banner .card-body {
-        padding: var(--spacing-8) var(--spacing-4);
+        padding: var(--spacing-6) var(--spacing-4);
     }
-    
+
     .btn-financial {
-        padding: var(--spacing-3) var(--spacing-4);
-        font-size: var(--font-size-sm);
+        padding: 5px 12px;
+        font-size: var(--font-size-xs);
     }
 }
 
-/* ===== 可访问性优化 ===== */
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-    * {
+    *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
 }
 
-/* 焦点指示器 */
-.btn-financial:focus,
-.nav-link:focus {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
+/* High contrast */
+@media (prefers-contrast: high) {
+    .card, .card-financial { border-width: 2px; }
 }
 
-/* 高对比度模式支持 */
-@media (prefers-contrast: high) {
-    .card-financial {
-        border-width: 2px;
-    }
-    
-    .btn-financial {
-        border: 2px solid currentColor;
-    }
-} 
+/* Focus indicators */
+.btn:focus, .nav-link:focus {
+    outline: 2px solid var(--obs-primary);
+    outline-offset: 2px;
+}

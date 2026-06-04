@@ -130,4 +130,6 @@ bak/
 .github/
 migrations/
 
-data/
+data/.superpowers/
+
+.superpowers/
