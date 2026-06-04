@@ -8,11 +8,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from app.extensions import db
-from app.models import StockBasic, StockDailyHistory, FactorValues, MLPredictions, BacktestRun
+from app.models import StockBasic, FactorValues, MLPredictions, BacktestRun
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
+from app.services.data_reader import ParquetDataReader
 
 
 class BacktestEngine:
@@ -23,6 +24,7 @@ class BacktestEngine:
         self.ml_manager = None
         self.scoring_engine = None
         self.portfolio_optimizer = None
+        self.data_reader = ParquetDataReader()
     
     def _get_factor_engine(self):
         """延迟初始化因子引擎"""
@@ -191,17 +193,12 @@ class BacktestEngine:
             logger.error(f"回测失败: {e}")
             return {'error': str(e)}
     
-    def _generate_trade_dates(self, start_date: str, end_date: str, 
+    def _generate_trade_dates(self, start_date: str, end_date: str,
                             frequency: str) -> List[str]:
         """生成交易日期"""
         try:
             # 获取所有交易日
-            query = db.session.query(StockDailyHistory.trade_date).distinct()
-            query = query.filter(
-                StockDailyHistory.trade_date >= start_date,
-                StockDailyHistory.trade_date <= end_date
-            )
-            all_dates = [row[0] for row in query.order_by(StockDailyHistory.trade_date)]
+            all_dates = self.data_reader.get_trade_dates(start_date, end_date)
             
             if frequency == 'daily':
                 return all_dates
@@ -311,16 +308,14 @@ class BacktestEngine:
         try:
             if not ts_codes:
                 return {}
-            
-            query = db.session.query(
-                StockDailyHistory.ts_code,
-                StockDailyHistory.close
-            ).filter(
-                StockDailyHistory.trade_date == trade_date,
-                StockDailyHistory.ts_code.in_(ts_codes)
+
+            df = self.data_reader.get_daily(
+                ts_codes=ts_codes, start_date=trade_date, end_date=trade_date
             )
-            
-            return {row[0]: float(row[1]) for row in query}
+            if df.empty:
+                return {}
+
+            return {row["ts_code"]: float(row["close"]) for _, row in df.iterrows()}
             
         except Exception as e:
             logger.error(f"获取当前价格失败: {e}")
@@ -464,31 +459,27 @@ class BacktestEngine:
         """获取基准收益率"""
         try:
             benchmark_codes = [benchmark_code, "000300.SH", "399300.SZ"]
-            benchmark_rows: List[Tuple[Any, Any]] = []
 
-            for benchmark_code in benchmark_codes:
-                query = db.session.query(
-                    StockDailyHistory.trade_date,
-                    StockDailyHistory.close
-                ).filter(
-                    StockDailyHistory.ts_code == benchmark_code,
-                    StockDailyHistory.trade_date >= start_date,
-                    StockDailyHistory.trade_date <= end_date
-                ).order_by(StockDailyHistory.trade_date)
-
-                benchmark_rows = query.all()
-                if benchmark_rows:
+            for code in benchmark_codes:
+                df = self.data_reader.get_daily(
+                    ts_codes=[code], start_date=start_date, end_date=end_date
+                )
+                if not df.empty:
                     break
-
-            if not benchmark_rows:
+            else:
                 return []
 
+            if df.empty:
+                return []
+
+            df = df.sort_values("trade_date")
             returns = []
             prev_close = None
             base_close = None
 
-            for trade_date, close in benchmark_rows:
-                if close is None:
+            for _, row in df.iterrows():
+                close = row.get("close")
+                if close is None or pd.isna(close):
                     continue
 
                 close_price = float(close)
@@ -504,7 +495,8 @@ class BacktestEngine:
                     daily_return = (close_price - prev_close) / prev_close
 
                 cumulative_return = (close_price / base_close - 1.0) if base_close else 0.0
-                date_text = trade_date.isoformat() if hasattr(trade_date, "isoformat") else str(trade_date)
+                trade_date_val = row["trade_date"]
+                date_text = trade_date_val.isoformat() if hasattr(trade_date_val, "isoformat") else str(trade_date_val)
 
                 returns.append({
                     "date": date_text,

@@ -8,7 +8,8 @@ from scipy.optimize import minimize
 from sklearn.covariance import LedoitWolf
 
 from app.extensions import db
-from app.models import StockDailyHistory, FactorValues
+from app.models import FactorValues
+from app.services.data_reader import ParquetDataReader
 
 
 class PortfolioOptimizer:
@@ -382,21 +383,20 @@ class PortfolioOptimizer:
             logger.error(f"构建因子暴露矩阵失败: {e}")
             return None
     
-    def _estimate_risk_model(self, ts_codes: List[str], 
+    def _estimate_risk_model(self, ts_codes: List[str],
                             lookback_days: int = 252) -> pd.DataFrame:
         """估计风险模型（协方差矩阵）"""
         try:
             # 获取历史价格数据
             end_date = datetime.now().date()
             start_date = end_date - pd.Timedelta(days=lookback_days + 50)
-            
-            price_query = StockDailyHistory.query.filter(
-                StockDailyHistory.ts_code.in_(ts_codes),
-                StockDailyHistory.trade_date >= start_date,
-                StockDailyHistory.trade_date <= end_date
-            ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
-            
-            price_data = pd.read_sql(price_query.statement, db.engine)
+
+            reader = ParquetDataReader()
+            price_data = reader.get_daily(
+                ts_codes=ts_codes,
+                start_date=start_date.strftime("%Y-%m-%d"),
+                end_date=end_date.strftime("%Y-%m-%d"),
+            )
             
             if price_data.empty:
                 # 如果没有数据，使用单位矩阵

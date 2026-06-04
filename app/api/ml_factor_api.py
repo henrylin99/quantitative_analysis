@@ -15,7 +15,9 @@ from app.services.model_training_job_service import ModelTrainingJobService
 from app.models.portfolio_position import PortfolioPosition
 from app.models.portfolio_rebalance_run import PortfolioRebalanceRun
 from app.models.backtest_run import BacktestRun
-from app.models.stock_daily_history import StockDailyHistory
+from app.services.data_reader import ParquetDataReader
+
+_data_reader = ParquetDataReader()
 
 # 创建蓝图
 ml_factor_bp = Blueprint('ml_factor', __name__, url_prefix='/api/ml-factor')
@@ -107,9 +109,8 @@ def calculate_factors():
         
         # 如果没有指定股票代码，获取所有股票
         if not ts_codes:
-            from app.models import StockBasic
-            stocks = StockBasic.query.all()
-            ts_codes = [stock.ts_code for stock in stocks]
+            basic_df = _data_reader.get_stock_basic()
+            ts_codes = basic_df["ts_code"].tolist()
         
         # 计算因子
         if factor_ids:
@@ -934,11 +935,9 @@ def save_optimized_portfolio():
         created_count = 0
         for ts_code, weight in weights.items():
             allocation = total_capital * float(weight)
-            latest_price = StockDailyHistory.query.filter(
-                StockDailyHistory.ts_code == ts_code
-            ).order_by(StockDailyHistory.trade_date.desc()).first()
-
-            close_price = float(latest_price.close) if latest_price and latest_price.close else 1.0
+            close_price = _data_reader.get_latest_close(ts_code)
+            if close_price is None:
+                close_price = 1.0
             position_size = allocation / close_price if close_price > 0 else 0
 
             position = PortfolioPosition(
@@ -1034,19 +1033,14 @@ def apply_portfolio_rebalance():
         for ts_code, weight in target_weights.items():
             target_weight = float(weight)
             allocation = total_market_value * target_weight
-            latest_price = StockDailyHistory.query.filter(
-                StockDailyHistory.ts_code == ts_code
-            ).order_by(StockDailyHistory.trade_date.desc()).first()
+            close_price = _data_reader.get_latest_close(ts_code)
 
             existing_position = PortfolioPosition.get_position_by_stock(portfolio_id, ts_code)
-            close_price = None
-            if latest_price and latest_price.close:
-                close_price = float(latest_price.close)
-            elif existing_position and existing_position.current_price:
+            if close_price is None and existing_position and existing_position.current_price:
                 close_price = float(existing_position.current_price)
-            elif existing_position and existing_position.avg_cost:
+            elif close_price is None and existing_position and existing_position.avg_cost:
                 close_price = float(existing_position.avg_cost)
-            else:
+            elif close_price is None:
                 close_price = 1.0
 
             position_size = allocation / close_price if close_price > 0 else 0

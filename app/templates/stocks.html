@@ -129,7 +129,7 @@ async function loadStocks(page = 1) {
     try {
         const params = new URLSearchParams({
             page: page,
-            page_size: 20,
+            page_size: 100,
             ...currentFilters
         });
         
