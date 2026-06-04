@@ -8,20 +8,27 @@ from loguru import logger
 
 from app.extensions import db
 from app.models import (
-    FactorDefinition, FactorValues, StockDailyHistory, StockDailyBasic,
-    StockFactor, StockMoneyflow, StockCyqPerf, StockIncomeStatement,
-    StockBalanceSheet
+    FactorDefinition, FactorValues,
 )
 from app.services.factor_expression_engine import FactorExpressionEngine
+from app.services.data_reader import ParquetDataReader
+
+
+def _get_data_reader() -> ParquetDataReader:
+    """延迟创建 ParquetDataReader 单例。"""
+    if not hasattr(_get_data_reader, '_instance'):
+        _get_data_reader._instance = ParquetDataReader()
+    return _get_data_reader._instance
 
 
 class FactorEngine:
     """因子计算引擎"""
-    
+
     def __init__(self):
         self.factor_definitions = {}
         self.builtin_factors = {}
         self.expression_engine = FactorExpressionEngine()
+        self.data_reader = _get_data_reader()
         self._init_builtin_factors()
         self.load_factor_definitions()
     
@@ -231,108 +238,52 @@ class FactorEngine:
         """获取计算因子所需的数据"""
         data = {}
 
-        def _exec_df(conn, stmt):
-            """Execute ORM statement and return DataFrame with Decimal columns cast to float.
-
-            pandas 3.0 no longer accepts SQLAlchemy ORM query.statement in read_sql(),
-            and MySQL DECIMAL columns come back as decimal.Decimal objects instead of float.
-            This helper normalises both issues.
-            """
-            import decimal as _decimal
-            r = conn.execute(stmt)
-            df = pd.DataFrame(r.fetchall(), columns=list(r.keys()))
-            for col in df.columns:
-                if df[col].dtype == object:
-                    try:
-                        df[col] = df[col].apply(
-                            lambda x: float(x) if isinstance(x, _decimal.Decimal) else x
-                        )
-                    except Exception as _e:
-                        logger.debug(f"_exec_df: could not convert column '{col}' to float: {_e}")
-            return df
-
         # 扩展日期范围以获取足够的历史数据
         extended_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=252)).strftime('%Y-%m-%d')
 
         try:
             # 基础行情数据
             if any(x in factor_id for x in ['momentum', 'volatility', 'volume', 'price']):
-                history_query = StockDailyHistory.query.filter(
-                    StockDailyHistory.ts_code.in_(ts_codes),
-                    StockDailyHistory.trade_date >= extended_start,
-                    StockDailyHistory.trade_date <= end_date
-                ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
-                
-                with db.engine.connect() as conn:
-                    history_data = _exec_df(conn, history_query.statement)
+                history_data = self.data_reader.get_daily(
+                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
+                )
                 data['history'] = history_data
                 logger.info(f"获取历史数据: {len(history_data)} 条记录")
 
             # 基本面数据
             if any(x in factor_id for x in ['pe', 'pb', 'ps']):
-                basic_query = StockDailyBasic.query.filter(
-                    StockDailyBasic.ts_code.in_(ts_codes),
-                    StockDailyBasic.trade_date >= start_date,
-                    StockDailyBasic.trade_date <= end_date
-                ).order_by(StockDailyBasic.ts_code, StockDailyBasic.trade_date)
-
-                with db.engine.connect() as conn:
-                    basic_data = _exec_df(conn, basic_query.statement)
+                basic_data = self.data_reader.get_daily_basic(
+                    ts_codes=ts_codes, start_date=start_date, end_date=end_date
+                )
                 data['basic'] = basic_data
 
             # 技术因子数据
             if 'ma' in factor_id:
-                factor_query = StockFactor.query.filter(
-                    StockFactor.ts_code.in_(ts_codes),
-                    StockFactor.trade_date >= start_date,
-                    StockFactor.trade_date <= end_date
-                ).order_by(StockFactor.ts_code, StockFactor.trade_date)
-
-                with db.engine.connect() as conn:
-                    factor_data = _exec_df(conn, factor_query.statement)
+                factor_data = self.data_reader.get_stk_factor(
+                    ts_codes=ts_codes, start_date=start_date, end_date=end_date
+                )
                 data['factor'] = factor_data
 
             # 资金流向数据
             if 'money' in factor_id:
-                money_query = StockMoneyflow.query.filter(
-                    StockMoneyflow.ts_code.in_(ts_codes),
-                    StockMoneyflow.trade_date >= extended_start,
-                    StockMoneyflow.trade_date <= end_date
-                ).order_by(StockMoneyflow.ts_code, StockMoneyflow.trade_date)
-
-                with db.engine.connect() as conn:
-                    money_data = _exec_df(conn, money_query.statement)
+                money_data = self.data_reader.get_moneyflow(
+                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
+                )
                 data['moneyflow'] = money_data
 
             # 筹码数据
             if 'chip' in factor_id or 'winner' in factor_id:
-                cyq_query = StockCyqPerf.query.filter(
-                    StockCyqPerf.ts_code.in_(ts_codes),
-                    StockCyqPerf.trade_date >= extended_start,
-                    StockCyqPerf.trade_date <= end_date
-                ).order_by(StockCyqPerf.ts_code, StockCyqPerf.trade_date)
-
-                with db.engine.connect() as conn:
-                    cyq_data = _exec_df(conn, cyq_query.statement)
+                cyq_data = self.data_reader.get_cyq_perf(
+                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
+                )
                 data['cyq'] = cyq_data
 
             # 财务数据
             if any(x in factor_id for x in ['roe', 'roa', 'revenue', 'profit']):
-                # 获取最近4个季度的财务数据
-                income_query = StockIncomeStatement.query.filter(
-                    StockIncomeStatement.ts_code.in_(ts_codes)
-                ).order_by(StockIncomeStatement.ts_code, StockIncomeStatement.end_date.desc())
-
-                with db.engine.connect() as conn:
-                    income_data = _exec_df(conn, income_query.statement)
+                income_data = self.data_reader.get_income_statement(ts_codes)
                 data['income'] = income_data
 
-                balance_query = StockBalanceSheet.query.filter(
-                    StockBalanceSheet.ts_code.in_(ts_codes)
-                ).order_by(StockBalanceSheet.ts_code, StockBalanceSheet.end_date.desc())
-
-                with db.engine.connect() as conn:
-                    balance_data = _exec_df(conn, balance_query.statement)
+                balance_data = self.data_reader.get_balance_sheet(ts_codes)
                 data['balance'] = balance_data
             
         except Exception as e:
@@ -821,9 +772,8 @@ class FactorEngine:
         try:
             if ts_codes is None:
                 # 获取所有活跃股票
-                from app.models import StockBasic
-                stocks = StockBasic.query.all()
-                ts_codes = [stock.ts_code for stock in stocks]
+                basic_df = self.data_reader.get_stock_basic()
+                ts_codes = basic_df["ts_code"].tolist()
             
             all_results = []
             
@@ -967,15 +917,9 @@ class FactorEngine:
                 datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=252)
             ).strftime("%Y-%m-%d")
 
-            query = StockDailyHistory.query.filter(
-                StockDailyHistory.ts_code.in_(ts_codes),
-                StockDailyHistory.trade_date >= extended_start,
-                StockDailyHistory.trade_date <= end_date
-            ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
-
-            with db.engine.connect() as conn:
-                _r = conn.execute(query.statement)
-                history_df = pd.DataFrame(_r.fetchall(), columns=list(_r.keys()))
+            history_df = self.data_reader.get_daily(
+                ts_codes=ts_codes, start_date=extended_start, end_date=end_date
+            )
             if history_df.empty:
                 return pd.DataFrame()
 

@@ -2,6 +2,7 @@ import pandas as pd
 
 from db_utils import DatabaseUtils
 from job_env import fetch_open_trade_dates, resolve_date_window, delete_trade_date_range
+from parquet_writer import save_to_parquet
 
 
 def ensure_table(cursor):
@@ -92,6 +93,8 @@ def main():
             saved = upsert_trade_date(cursor, df)
             conn.commit()
             total_saved += saved
+            # 写入 parquet
+            save_to_parquet(df, trade_date, "daily_history/daily")
             print(f"[daily_history_by_date] trade_date={trade_date}, upsert={saved}")
 
         print(

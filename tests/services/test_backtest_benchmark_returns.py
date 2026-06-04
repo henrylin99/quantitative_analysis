@@ -1,7 +1,7 @@
-from datetime import date
 import sys
 import types
 
+import pandas as pd
 import pytest
 
 if "xgboost" not in sys.modules:
@@ -24,31 +24,18 @@ from app.services.backtest_engine import BacktestEngine
 pytestmark = pytest.mark.module_backtest
 
 
-class _FakeQuery:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def filter(self, *args, **kwargs):
-        return self
-
-    def order_by(self, *args, **kwargs):
-        return self
-
-    def all(self):
-        return self._rows
-
-
 def test_get_benchmark_returns_non_empty(monkeypatch):
-    rows = [
-        (date(2025, 1, 2), 100.0),
-        (date(2025, 1, 3), 101.0),
-        (date(2025, 1, 6), 99.0),
-    ]
+    # 构造模拟 parquet 返回的 DataFrame
+    price_df = pd.DataFrame({
+        "ts_code": ["000300.SH", "000300.SH", "000300.SH"],
+        "trade_date": pd.to_datetime(["2025-01-02", "2025-01-03", "2025-01-06"]),
+        "close": [100.0, 101.0, 99.0],
+    })
 
-    def _fake_query(*args, **kwargs):
-        return _FakeQuery(rows)
-
-    monkeypatch.setattr("app.services.backtest_engine.db.session.query", _fake_query)
+    fake_reader = types.SimpleNamespace(
+        get_daily=lambda **kwargs: price_df,
+    )
+    monkeypatch.setattr("app.services.backtest_engine.ParquetDataReader", lambda: fake_reader)
 
     engine = BacktestEngine()
     benchmark_returns = engine._get_benchmark_returns("2025-01-02", "2025-01-06")

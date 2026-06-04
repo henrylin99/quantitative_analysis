@@ -18,8 +18,9 @@ import lightgbm as lgb
 
 from app.extensions import db
 from app.models import (
-    MLModelDefinition, MLPredictions, FactorValues, StockDailyHistory
+    MLModelDefinition, MLPredictions, FactorValues
 )
+from app.services.data_reader import ParquetDataReader
 
 
 class MLModelManager:
@@ -213,11 +214,8 @@ class MLModelManager:
                 stock_features = stock_features.sort_values('trade_date')
                 
                 # 获取该股票的价格数据
-                price_query = StockDailyHistory.query.filter(
-                    StockDailyHistory.ts_code == ts_code
-                ).order_by(StockDailyHistory.trade_date)
-                
-                price_data = pd.read_sql(price_query.statement, db.engine)
+                reader = ParquetDataReader()
+                price_data = reader.get_daily(ts_codes=[ts_code])
                 
                 if price_data.empty:
                     continue
@@ -669,14 +667,11 @@ class MLModelManager:
             start_date = pred_data['trade_date'].min()
             end_date = pd.to_datetime(pred_data['trade_date'].max()) + timedelta(days=period + 10)
             
-            price_query = StockDailyHistory.query.filter(
-                StockDailyHistory.ts_code.in_(ts_codes),
-                StockDailyHistory.trade_date >= start_date,
-                StockDailyHistory.trade_date <= end_date
-            ).order_by(StockDailyHistory.ts_code, StockDailyHistory.trade_date)
-            
-            price_data = pd.read_sql(price_query.statement, db.engine)
-            price_data['trade_date'] = pd.to_datetime(price_data['trade_date'])
+            price_data = ParquetDataReader().get_daily(
+                ts_codes=list(ts_codes),
+                start_date=str(start_date)[:10] if not isinstance(start_date, str) else start_date,
+                end_date=end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)[:10],
+            )
             
             result_list = []
             for ts_code in ts_codes:
