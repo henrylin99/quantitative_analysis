@@ -12,6 +12,7 @@ from typing import List, Dict, Optional
 from app.extensions import db
 from app.models.stock_minute_data import StockMinuteData
 from app.utils.db_utils import DatabaseUtils
+from app.services.minute_parquet_store import MinuteParquetStore
 from sqlalchemy import text
 import time
 
@@ -31,6 +32,7 @@ class MinuteDataSyncService:
     
     def __init__(self):
         self.bs_logged_in = False
+        self.parquet_store = MinuteParquetStore()
         
     def __enter__(self):
         """上下文管理器入口"""
@@ -282,6 +284,8 @@ class MinuteDataSyncService:
             
             # 转换为字典列表
             data_list = df.to_dict('records')
+
+            parquet_count = self.parquet_store.write_frame(df, period_type)
             
             # 批量插入数据库
             success_count = 0
@@ -322,6 +326,7 @@ class MinuteDataSyncService:
                 'success': True,
                 'message': f'同步完成',
                 'data_count': success_count,
+                'parquet_count': parquet_count,
                 'error_count': error_count,
                 'period_type': period_type,
                 'date_range': f'{start_date} 到 {end_date}'
@@ -398,6 +403,7 @@ class MinuteDataSyncService:
                 'success_stocks': success_stocks,
                 'failed_stocks': failed_stocks,
                 'total_data_count': total_data_count,
+                'parquet_data_count': total_data_count,
                 'period_type': period_type
             }
             

@@ -4,15 +4,15 @@
 集成Baostock数据源支持
 """
 
-import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
-from app.models.stock_minute_data import StockMinuteData
+import pandas as pd
 from app.extensions import db
 from app.services.minute_data_sync_service import MinuteDataSyncService
 from app.services.data_reader import ParquetDataReader
 from app.services.minute_parquet_reader import MinuteParquetReader
+from app.services.minute_parquet_store import MinuteParquetStore
 
 # 可选导入tushare
 try:
@@ -54,6 +54,8 @@ class RealtimeDataManager:
         # 初始化分钟数据同步服务
         self.minute_sync_service = MinuteDataSyncService()
         self.data_reader = ParquetDataReader()
+        self.minute_reader = self.data_reader.get_minute_reader()
+        self.minute_store = MinuteParquetStore()
     
     def sync_minute_data(self, ts_code: str, start_date: str = None, end_date: str = None, 
                         period_type: str = '1min', use_baostock: bool = True) -> Dict:
@@ -264,36 +266,37 @@ class RealtimeDataManager:
             if not end_date:
                 end_date = datetime.now()
             else:
-                end_date = datetime.strptime(end_date, '%Y%m%d')
+                end_date = self._parse_aggregate_bound(end_date, is_end=True)
             
             if not start_date:
                 start_date = end_date - timedelta(days=7)
             else:
-                start_date = datetime.strptime(start_date, '%Y%m%d')
+                start_date = self._parse_aggregate_bound(start_date, is_end=False)
             
-            # 获取源数据
-            source_data = StockMinuteData.get_data_by_time_range(
-                ts_code, start_date, end_date, source_period
+            source_data = self.get_minute_reader().get_data(
+                ts_code=ts_code,
+                period_type=source_period,
+                start_time=start_date,
+                end_time=end_date,
             )
-            
-            if not source_data:
+
+            if source_data.empty:
                 return {
                     'success': False,
                     'message': f'没有找到 {ts_code} 的 {source_period} 数据',
                     'data_count': 0
                 }
-            
-            # 转换为DataFrame
-            df = pd.DataFrame([data.to_dict() for data in source_data])
+
+            df = source_data.copy()
             df['datetime'] = pd.to_datetime(df['datetime'])
             df.set_index('datetime', inplace=True)
             
             # 确定聚合频率
             freq_map = {
-                '5min': '5T',
-                '15min': '15T',
-                '30min': '30T',
-                '60min': '60T'
+                '5min': '5min',
+                '15min': '15min',
+                '30min': '30min',
+                '60min': '60min'
             }
             
             if target_period not in freq_map:
@@ -339,16 +342,18 @@ class RealtimeDataManager:
                         'pct_chg': row['pct_chg'] if pd.notna(row['pct_chg']) else 0
                     })
             
-            # 批量插入聚合数据
+            parquet_written = 0
             if aggregated_list:
-                StockMinuteData.bulk_insert(aggregated_list)
-            
+                aggregated_frame = pd.DataFrame(aggregated_list)
+                parquet_written = self.minute_store.write_frame(aggregated_frame, target_period)
+
             logger.info(f"成功聚合 {len(aggregated_list)} 条 {target_period} 数据")
             
             return {
                 'success': True,
                 'message': f'成功聚合 {len(aggregated_list)} 条 {target_period} 数据',
                 'data_count': len(aggregated_list),
+                'parquet_count': parquet_written,
                 'source_period': source_period,
                 'target_period': target_period
             }
@@ -360,6 +365,22 @@ class RealtimeDataManager:
                 'message': f'聚合失败: {str(e)}',
                 'data_count': 0
             }
+
+    def _parse_aggregate_bound(self, value: str, is_end: bool) -> datetime:
+        """解析聚合日期边界，日期字符串按整日范围处理。"""
+        text = str(value)
+        if len(text) == 8 and text.isdigit():
+            dt = datetime.strptime(text, "%Y%m%d")
+            if is_end:
+                return dt + timedelta(days=1) - timedelta(microseconds=1)
+            return dt
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            dt = datetime.strptime(text, "%Y-%m-%d")
+            if is_end:
+                return dt + timedelta(days=1) - timedelta(microseconds=1)
+            return dt
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
     
     def _generate_aggregated_data(self, ts_code: str, start_date: str, end_date: str):
         """生成所有周期的聚合数据"""
