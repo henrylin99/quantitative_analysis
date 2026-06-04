@@ -776,16 +776,20 @@ function renderMoneyflowCharts(data) {
     
     // 分单买卖对比（最新一天）
     const moneyflowOption = {
+        backgroundColor: 'transparent',
         title: {
             text: '分单资金买卖对比',
             subtext: `${latestData.trade_date}`,
-            left: 'center'
+            left: 'center',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 },
+            subtextStyle: { color: '#64748b', fontSize: 11 }
         },
         tooltip: {
             trigger: 'axis',
-            axisPointer: {
-                type: 'shadow'
-            },
+            axisPointer: { type: 'shadow' },
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 let result = params[0].name + '<br/>';
                 params.forEach(param => {
@@ -797,7 +801,8 @@ function renderMoneyflowCharts(data) {
         },
         legend: {
             data: ['买入', '卖出'],
-            top: 30
+            top: 30,
+            textStyle: { color: '#94a3b8', fontSize: 11 }
         },
         grid: {
             left: '3%',
@@ -807,15 +812,21 @@ function renderMoneyflowCharts(data) {
         },
         xAxis: {
             type: 'category',
-            data: ['特大单', '大单', '中单', '小单']
+            data: ['特大单', '大单', '中单', '小单'],
+            axisLabel: { color: '#94a3b8', fontSize: 11 },
+            axisLine: { lineStyle: { color: '#334155' } }
         },
         yAxis: {
             type: 'value',
             axisLabel: {
+                color: '#64748b',
+                fontSize: 10,
                 formatter: function(value) {
                     return formatNumber(Math.abs(value), 0) + '万';
                 }
-            }
+            },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [
             {
@@ -828,7 +839,8 @@ function renderMoneyflowCharts(data) {
                     latestData.buy_sm_amount || 0
                 ],
                 itemStyle: {
-                    color: '#ff4d4f'
+                    color: '#f87171',
+                    borderRadius: [3, 3, 0, 0]
                 }
             },
             {
@@ -841,7 +853,8 @@ function renderMoneyflowCharts(data) {
                     -(latestData.sell_sm_amount || 0)
                 ],
                 itemStyle: {
-                    color: '#52c41a'
+                    color: '#4ade80',
+                    borderRadius: [0, 0, 3, 3]
                 }
             }
         ]
@@ -853,12 +866,17 @@ function renderMoneyflowCharts(data) {
     const netflowChart = echarts.init(document.getElementById('netflow-chart'));
     
     const netflowOption = {
+        backgroundColor: 'transparent',
         title: {
             text: '净流入趋势',
-            left: 'center'
+            left: 'center',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 const data = params[0];
                 return `${data.name}<br/>净流入: ${formatNumber(data.value, 0)}万`;
@@ -873,25 +891,30 @@ function renderMoneyflowCharts(data) {
         xAxis: {
             type: 'category',
             data: dates,
-            axisLabel: {
-                rotate: 45
-            }
+            axisLabel: { rotate: 45, color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisTick: { lineStyle: { color: '#334155' } },
+            splitLine: { show: false }
         },
         yAxis: {
             type: 'value',
             axisLabel: {
+                color: '#64748b',
+                fontSize: 10,
                 formatter: function(value) {
                     return formatNumber(value, 0) + '万';
                 }
-            }
+            },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [{
             name: '净流入',
             type: 'line',
             data: orderedData.map(item => item.net_mf_amount || 0),
-            itemStyle: {
-                color: '#1890ff'
-            },
+            itemStyle: { color: '#818cf8' },
+            lineStyle: { width: 2, color: '#818cf8' },
+            showSymbol: false,
             areaStyle: {
                 color: {
                     type: 'linear',
@@ -900,9 +923,9 @@ function renderMoneyflowCharts(data) {
                     x2: 0,
                     y2: 1,
                     colorStops: [{
-                        offset: 0, color: 'rgba(24, 144, 255, 0.3)'
+                        offset: 0, color: 'rgba(129, 140, 248, 0.25)'
                     }, {
-                        offset: 1, color: 'rgba(24, 144, 255, 0.1)'
+                        offset: 1, color: 'rgba(129, 140, 248, 0.02)'
                     }]
                 }
             }
@@ -937,25 +960,25 @@ function renderMoneyIndicators(data) {
     
     const html = `
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);">
                 <h5 class="text-primary">${formatNumber(data.net_mf_amount || 0, 0)}</h5>
                 <small class="text-muted">净流入额(万)</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.15);">
                 <h5 class="text-success">${formatNumber(lgBuyRate, 1)}%</h5>
                 <small class="text-muted">大单买入占比</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.15);">
                 <h5 class="text-warning">${formatNumber(elgBuyRate, 1)}%</h5>
                 <small class="text-muted">特大单买入占比</small>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="text-center p-3 bg-light rounded">
+            <div class="text-center p-3 rounded" style="background:rgba(${mainNetFlow >= 0 ? '248,113,113' : '74,222,128'},0.08);border:1px solid rgba(${mainNetFlow >= 0 ? '248,113,113' : '74,222,128'},0.15);">
                 <h5 class="${mainNetFlow >= 0 ? 'text-danger' : 'text-success'}">${formatNumber(mainNetFlow, 0)}</h5>
                 <small class="text-muted">主力净流入(万)</small>
             </div>
