@@ -5,25 +5,31 @@
     .navbar-financial .navbar-toggler {
         border: none;
         padding: 0.25rem 0.5rem;
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(99, 102, 241, 0.2);
         border-radius: var(--border-radius);
     }
-    
+
     .navbar-financial .navbar-toggler:focus {
-        box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.25);
+        box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
     }
     
     .navbar-financial .navbar-collapse {
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(15, 23, 42, 0.98);
         backdrop-filter: blur(10px);
         margin-top: 1rem;
         border-radius: var(--border-radius-lg);
         padding: 1rem;
         box-shadow: var(--shadow-lg);
+        border: 1px solid var(--obs-border);
     }
-    
+
+    .navbar-financial .navbar-collapse .nav-link {
+        color: var(--obs-text-secondary) !important;
+        border-bottom: 1px solid var(--obs-border);
+    }
+
     .navbar-financial .nav-link {
-        color: var(--gray-700) !important;
+        color: var(--obs-text-secondary) !important;
         padding: 0.75rem 1rem;
         border-radius: var(--border-radius);
         margin-bottom: 0.25rem;
@@ -32,7 +38,7 @@
     
     .navbar-financial .nav-link:hover,
     .navbar-financial .nav-link.active {
-        background-color: var(--primary-color);
+        background-color: var(--obs-primary);
         color: white !important;
         transform: translateX(8px);
     }
@@ -47,15 +53,15 @@
     }
     
     .navbar-financial .dropdown-item {
-        color: var(--gray-600);
+        color: var(--obs-text-muted);
         padding: 0.5rem 1.5rem;
         margin-left: 1rem;
-        border-left: 2px solid var(--gray-200);
+        border-left: 2px solid var(--obs-border);
     }
-    
+
     .navbar-financial .dropdown-item:hover {
-        background-color: var(--gray-100);
-        border-left-color: var(--primary-color);
+        background-color: var(--obs-primary-bg);
+        border-left-color: var(--obs-primary);
         transform: translateX(4px);
     }
 }
@@ -68,7 +74,7 @@
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
-        scrollbar-color: var(--gray-300) transparent;
+        scrollbar-color: var(--obs-border) transparent;
     }
     
     .table-responsive::-webkit-scrollbar {
@@ -76,17 +82,17 @@
     }
     
     .table-responsive::-webkit-scrollbar-track {
-        background: var(--gray-100);
+        background: var(--obs-surface);
         border-radius: var(--border-radius);
     }
-    
+
     .table-responsive::-webkit-scrollbar-thumb {
-        background: var(--gray-300);
+        background: var(--obs-border);
         border-radius: var(--border-radius);
     }
-    
+
     .table-responsive::-webkit-scrollbar-thumb:hover {
-        background: var(--gray-400);
+        background: var(--obs-text-muted);
     }
     
     /* 表格滚动提示 */
@@ -97,7 +103,7 @@
         left: 50%;
         transform: translateX(-50%);
         font-size: var(--font-size-xs);
-        color: var(--gray-400);
+        color: var(--obs-text-muted);
         white-space: nowrap;
         pointer-events: none;
         opacity: 0.7;
@@ -119,7 +125,7 @@
         position: sticky;
         top: 0;
         z-index: 10;
-        background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
+        background: var(--obs-surface);
     }
 }
 
@@ -173,28 +179,28 @@
         font-size: 16px; /* 防止iOS Safari缩放 */
         padding: 0.75rem;
         border-radius: var(--border-radius-lg);
-        border: 2px solid var(--gray-200);
+        border: 2px solid var(--obs-border);
         transition: var(--transition-fast);
         min-height: 44px;
     }
-    
+
     .form-control:focus,
     .form-select:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+        border-color: var(--obs-primary);
+        box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
         outline: none;
     }
     
     .form-label {
         font-weight: 600;
-        color: var(--gray-700);
+        color: var(--obs-text);
         margin-bottom: 0.5rem;
         font-size: var(--font-size-sm);
     }
     
     .form-text {
         font-size: var(--font-size-xs);
-        color: var(--gray-500);
+        color: var(--obs-text-muted);
         margin-top: 0.25rem;
     }
     
@@ -204,9 +210,9 @@
     }
     
     .input-group-text {
-        background-color: var(--gray-100);
-        border: 2px solid var(--gray-200);
-        color: var(--gray-600);
+        background-color: var(--obs-surface);
+        border: 2px solid var(--obs-border);
+        color: var(--obs-text-secondary);
         font-weight: 500;
     }
     
@@ -215,17 +221,17 @@
         width: 1.25rem;
         height: 1.25rem;
         margin-top: 0.125rem;
-        border: 2px solid var(--gray-300);
+        border: 2px solid var(--obs-border);
     }
-    
+
     .form-check-input:checked {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
+        background-color: var(--obs-primary);
+        border-color: var(--obs-primary);
     }
     
     .form-check-label {
         font-size: var(--font-size-sm);
-        color: var(--gray-700);
+        color: var(--obs-text);
         margin-left: 0.5rem;
     }
 }
@@ -247,14 +253,14 @@
     
     .modal-header {
         padding: 1rem 1.5rem;
-        border-bottom: 1px solid var(--gray-200);
-        background: linear-gradient(135deg, var(--gray-50), white);
+        border-bottom: 1px solid var(--obs-border);
+        background: var(--obs-surface);
     }
     
     .modal-title {
         font-size: var(--font-size-lg);
         font-weight: 600;
-        color: var(--gray-800);
+        color: var(--obs-text);
     }
     
     .modal-body {
@@ -266,8 +272,8 @@
     
     .modal-footer {
         padding: 1rem 1.5rem;
-        border-top: 1px solid var(--gray-200);
-        background: var(--gray-50);
+        border-top: 1px solid var(--obs-border);
+        background: var(--obs-surface);
     }
     
     .modal-footer .btn {
@@ -305,7 +311,7 @@
         gap: 0.5rem;
         margin-bottom: 1rem;
         padding: 0.5rem;
-        background: var(--gray-50);
+        background: var(--obs-surface);
         border-radius: var(--border-radius);
     }
     
@@ -335,12 +341,12 @@
         font-size: var(--font-size-base);
         font-weight: 600;
         margin-bottom: 0.5rem;
-        color: var(--gray-800);
+        color: var(--obs-text);
     }
     
     .metric-card-enhanced .card-text {
         font-size: var(--font-size-sm);
-        color: var(--gray-600);
+        color: var(--obs-text-secondary);
         margin-bottom: 1rem;
         line-height: 1.5;
     }
@@ -364,7 +370,7 @@
     
     .card-financial .card-text {
         font-size: var(--font-size-sm);
-        color: var(--gray-600);
+        color: var(--obs-text-secondary);
         margin: 0;
     }
 }
@@ -381,32 +387,32 @@
         padding: 0.5rem 0.75rem;
         font-size: var(--font-size-sm);
         border-radius: var(--border-radius);
-        border: 1px solid var(--gray-300);
-        color: var(--gray-700);
-        background: white;
+        border: 1px solid var(--obs-border);
+        color: var(--obs-text);
+        background: var(--obs-surface);
         transition: var(--transition-fast);
         min-width: 40px;
         text-align: center;
     }
     
     .page-link:hover {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
+        background-color: var(--obs-primary);
+        border-color: var(--obs-primary);
         color: white;
         transform: translateY(-1px);
     }
     
     .page-item.active .page-link {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
+        background-color: var(--obs-primary);
+        border-color: var(--obs-primary);
         color: white;
         font-weight: 600;
     }
     
     .page-item.disabled .page-link {
-        color: var(--gray-400);
-        background-color: var(--gray-100);
-        border-color: var(--gray-200);
+        color: var(--obs-text-muted);
+        background-color: var(--obs-surface);
+        border-color: var(--obs-border);
     }
 }
 
@@ -436,7 +442,7 @@
 @media (max-width: 768px) {
     .progress {
         height: 1rem;
-        background-color: var(--gray-200);
+        background-color: var(--obs-border);
         border-radius: var(--border-radius-xl);
         overflow: hidden;
         margin-bottom: 1rem;
@@ -444,7 +450,7 @@
     }
     
     .progress-bar {
-        background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+        background: linear-gradient(90deg, var(--obs-primary), var(--obs-primary-light));
         border-radius: var(--border-radius-xl);
         transition: width 0.6s ease;
         position: relative;
@@ -481,7 +487,7 @@
 /* ===== 移动端标签页优化 ===== */
 @media (max-width: 768px) {
     .nav-tabs {
-        border-bottom: 2px solid var(--gray-200);
+        border-bottom: 2px solid var(--obs-border);
         margin-bottom: 1.5rem;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -497,7 +503,7 @@
         padding: 0.75rem 1rem;
         font-size: var(--font-size-sm);
         font-weight: 500;
-        color: var(--gray-600);
+        color: var(--obs-text-secondary);
         border: none;
         border-radius: var(--border-radius) var(--border-radius) 0 0;
         background: transparent;
@@ -507,14 +513,14 @@
     }
     
     .nav-tabs .nav-link:hover {
-        color: var(--primary-color);
-        background-color: var(--gray-50);
+        color: var(--obs-primary);
+        background-color: var(--obs-primary-bg);
     }
-    
+
     .nav-tabs .nav-link.active {
-        color: var(--primary-color);
-        background-color: white;
-        border-bottom: 2px solid var(--primary-color);
+        color: var(--obs-primary);
+        background-color: var(--obs-surface);
+        border-bottom: 2px solid var(--obs-primary);
         font-weight: 600;
     }
     
@@ -525,7 +531,7 @@
         left: 0;
         right: 0;
         height: 2px;
-        background: var(--primary-color);
+        background: var(--obs-primary);
     }
     
     .tab-content {
@@ -554,13 +560,13 @@
     }
     
     .breadcrumb-item + .breadcrumb-item::before {
-        content: "›";
-        color: var(--gray-400);
+        content: ">";
+        color: var(--obs-text-muted);
         margin: 0 0.5rem;
     }
-    
+
     .breadcrumb-item a {
-        color: var(--primary-color);
+        color: var(--obs-primary-light);
         text-decoration: none;
         font-weight: 500;
     }
@@ -570,7 +576,7 @@
     }
     
     .breadcrumb-item.active {
-        color: var(--gray-600);
+        color: var(--obs-text-secondary);
         font-weight: 600;
     }
 }
@@ -657,14 +663,14 @@
 @media (max-width: 768px) {
     /* 确保足够的对比度 */
     .text-muted {
-        color: var(--gray-600) !important;
+        color: var(--obs-text-muted) !important;
     }
     
     /* 增强焦点指示器 */
     .btn-financial:focus,
     .form-control:focus,
     .form-select:focus {
-        outline: 3px solid var(--primary-color);
+        outline: 3px solid var(--obs-primary);
         outline-offset: 2px;
     }
     
