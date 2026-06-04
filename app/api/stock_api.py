@@ -174,6 +174,25 @@ def get_stock_cyq(ts_code):
             'data': None
         }), 500
 
+@api_bp.route('/stocks/<ts_code>/financials', methods=['GET'])
+def get_stock_financials(ts_code):
+    """获取股票财务三表数据"""
+    try:
+        result = StockService.get_financials(ts_code)
+
+        return jsonify({
+            'code': 200,
+            'message': '成功',
+            'data': result
+        })
+    except Exception as e:
+        logger.error(f"获取股票财务数据API错误: {ts_code}, {e}")
+        return jsonify({
+            'code': 500,
+            'message': f'服务器错误: {str(e)}',
+            'data': None
+        }), 500
+
 @api_bp.route('/industries', methods=['GET'])
 def get_industries():
     """获取行业列表"""

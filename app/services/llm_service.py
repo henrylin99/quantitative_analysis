@@ -200,7 +200,7 @@ class LLMService:
 {self._format_tables_info(tables_info)}
 
 要求:
-1. 生成标准的MySQL SQL语句
+1. 生成标准的SQL语句，默认兼容 MySQL 语法，便于遗留路径使用
 2. 只返回SQL语句，不要其他解释
 3. 确保SQL语法正确
 4. 使用适当的WHERE条件和ORDER BY子句
