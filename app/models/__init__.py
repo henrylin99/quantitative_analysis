@@ -15,8 +15,6 @@ from .stock_balance_sheet import StockBalanceSheet
 from .text2sql_metadata import TableMetadata, FieldMetadata, QueryTemplate, QueryHistory, BusinessDictionary
 from .data_job_run import DataJobRun
 from .data_job_cursor import DataJobCursor
-from .portfolio_rebalance_run import PortfolioRebalanceRun
-from .backtest_run import BacktestRun
 
 __all__ = [
     'StockBasic',
@@ -35,8 +33,6 @@ __all__ = [
     'StockBalanceSheet',
     'DataJobRun',
     'DataJobCursor',
-    'PortfolioRebalanceRun',
-    'BacktestRun',
     'TableMetadata',
     'FieldMetadata', 
     'QueryTemplate',

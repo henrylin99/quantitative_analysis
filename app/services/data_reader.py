@@ -13,6 +13,8 @@ from typing import List, Optional
 import pandas as pd
 from loguru import logger
 
+from app.services.minute_parquet_reader import MinuteParquetReader
+
 
 class ParquetDataReader:
     """从本地 Parquet 分区文件读取日行情 / 日基本面数据。"""
@@ -64,6 +66,7 @@ class ParquetDataReader:
                 os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
             )
         self.data_dir = data_dir
+        self._minute_reader: MinuteParquetReader | None = None
 
     # ------------------------------------------------------------------
     # 公共接口
@@ -208,6 +211,12 @@ class ParquetDataReader:
     def get_trade_calendar(self) -> pd.DataFrame:
         """读取交易日历。"""
         return self._read_single("stock_trade_calendar.parquet")
+
+    def get_minute_reader(self) -> MinuteParquetReader:
+        """获取分钟级 parquet 读取器。"""
+        if self._minute_reader is None or self._minute_reader.data_dir != self.data_dir:
+            self._minute_reader = MinuteParquetReader(data_dir=self.data_dir)
+        return self._minute_reader
 
     def get_stock_company(self, ts_codes: Optional[List[str]] = None) -> pd.DataFrame:
         """读取公司信息表。"""

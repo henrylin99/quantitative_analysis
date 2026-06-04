@@ -12,8 +12,8 @@ from loguru import logger
 import json
 import math
 
-from app.models.stock_minute_data import StockMinuteData
 from app.models.realtime_indicator import RealtimeIndicator
+from app.services.data_reader import ParquetDataReader
 
 logger = logger.bind(name=__name__)
 
@@ -23,6 +23,8 @@ class RealtimeIndicatorEngine:
     
     def __init__(self):
         """初始化指标引擎"""
+        self.data_reader = ParquetDataReader()
+        self.minute_reader = self.data_reader.get_minute_reader()
         self.supported_indicators = {
             'MA': self._calculate_ma,
             'EMA': self._calculate_ema,
@@ -232,19 +234,18 @@ class RealtimeIndicatorEngine:
             # 获取历史数据
             end_time = datetime.now()
             start_time = end_time - timedelta(days=lookback_days)
-            
-            data = StockMinuteData.get_data_range(
+
+            df = self.minute_reader.get_data(
                 ts_code=ts_code,
                 period_type=period_type,
                 start_time=start_time,
                 end_time=end_time
             )
-            
-            if not data:
+
+            if df.empty:
                 return {'success': False, 'message': f'没有找到 {ts_code} 的数据'}
-            
-            # 转换为DataFrame
-            df = pd.DataFrame([d.to_dict() for d in data])
+
+            df = df.copy()
             df['datetime'] = pd.to_datetime(df['datetime'])
             df = df.sort_values('datetime').reset_index(drop=True)
             

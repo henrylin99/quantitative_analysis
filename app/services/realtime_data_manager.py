@@ -11,6 +11,8 @@ import logging
 from app.models.stock_minute_data import StockMinuteData
 from app.extensions import db
 from app.services.minute_data_sync_service import MinuteDataSyncService
+from app.services.data_reader import ParquetDataReader
+from app.services.minute_parquet_reader import MinuteParquetReader
 
 # 可选导入tushare
 try:
@@ -51,6 +53,7 @@ class RealtimeDataManager:
         
         # 初始化分钟数据同步服务
         self.minute_sync_service = MinuteDataSyncService()
+        self.data_reader = ParquetDataReader()
     
     def sync_minute_data(self, ts_code: str, start_date: str = None, end_date: str = None, 
                         period_type: str = '1min', use_baostock: bool = True) -> Dict:
@@ -179,9 +182,16 @@ class RealtimeDataManager:
     
     def get_stock_list_from_db(self) -> List[str]:
         """
-        从数据库获取股票列表
+        从 Parquet 股票基础资料获取股票列表
         """
-        return self.minute_sync_service.get_stock_list_from_db()
+        try:
+            df = self.data_reader.get_stock_basic()
+            if df.empty or "ts_code" not in df.columns:
+                return []
+            return df["ts_code"].dropna().astype(str).tolist()
+        except Exception as e:
+            logger.error(f"获取股票列表异常: {e}")
+            return []
     
     def _sync_minute_data_legacy(self, ts_code: str, start_date: str, end_date: str, period_type: str) -> Dict:
         """
@@ -378,7 +388,7 @@ class RealtimeDataManager:
             质量检查结果
         """
         try:
-            return StockMinuteData.check_data_quality(ts_code, period_type, hours)
+            return self.get_minute_summary(ts_code, period_type, hours)
         except Exception as e:
             logger.error(f"数据质量检查失败: {str(e)}")
             return {
@@ -400,32 +410,31 @@ class RealtimeDataManager:
             实时价格信息
         """
         try:
-            latest_data = StockMinuteData.query.filter_by(
-                ts_code=ts_code,
-                period_type='1min'
-            ).order_by(StockMinuteData.datetime.desc()).first()
+            latest_data = self.get_minute_latest_data(ts_code, '1min', 1)
             
-            if not latest_data:
+            if latest_data.empty:
                 return {
                     'success': False,
                     'message': f'未找到 {ts_code} 的实时数据',
                     'data': None
                 }
+
+            latest_row = latest_data.iloc[0]
             
             return {
                 'success': True,
                 'message': '获取成功',
                 'data': {
-                    'ts_code': latest_data.ts_code,
-                    'current_price': latest_data.close,
-                    'change': latest_data.change,
-                    'pct_chg': latest_data.pct_chg,
-                    'volume': latest_data.volume,
-                    'amount': latest_data.amount,
-                    'update_time': latest_data.datetime.isoformat(),
-                    'open': latest_data.open,
-                    'high': latest_data.high,
-                    'low': latest_data.low
+                    'ts_code': latest_row.ts_code,
+                    'current_price': latest_row.close,
+                    'change': latest_row.change,
+                    'pct_chg': latest_row.pct_chg,
+                    'volume': latest_row.volume,
+                    'amount': latest_row.amount,
+                    'update_time': latest_row.datetime.isoformat(),
+                    'open': latest_row.open,
+                    'high': latest_row.high,
+                    'low': latest_row.low
                 }
             }
             
@@ -445,42 +454,34 @@ class RealtimeDataManager:
             市场概览数据
         """
         try:
-            # 获取所有股票的最新数据
-            latest_time = db.session.query(
-                db.func.max(StockMinuteData.datetime)
-            ).filter_by(period_type='1min').scalar()
-            
-            if not latest_time:
+            latest_data = self.get_minute_reader().get_data(period_type='1min')
+            if latest_data.empty:
                 return {
                     'success': False,
                     'message': '没有找到市场数据',
                     'data': None
                 }
-            
-            # 获取最新时间的所有股票数据
-            latest_data = StockMinuteData.query.filter_by(
-                period_type='1min'
-            ).filter(
-                StockMinuteData.datetime >= latest_time - timedelta(minutes=5)
-            ).all()
-            
-            if not latest_data:
+
+            latest_time = pd.to_datetime(latest_data["datetime"]).max()
+            window_start = latest_time - timedelta(minutes=5)
+            window_data = latest_data[latest_data["datetime"] >= window_start]
+
+            if window_data.empty:
                 return {
                     'success': False,
                     'message': '没有找到最新市场数据',
                     'data': None
                 }
-            
+
             # 统计市场数据
-            total_stocks = len(latest_data)
-            rising_stocks = len([d for d in latest_data if d.pct_chg > 0])
-            falling_stocks = len([d for d in latest_data if d.pct_chg < 0])
+            total_stocks = len(window_data)
+            rising_stocks = len(window_data[window_data["pct_chg"] > 0])
+            falling_stocks = len(window_data[window_data["pct_chg"] < 0])
             flat_stocks = total_stocks - rising_stocks - falling_stocks
-            
-            total_volume = sum([d.volume for d in latest_data])
-            total_amount = sum([d.amount for d in latest_data])
-            
-            avg_pct_chg = np.mean([d.pct_chg for d in latest_data if d.pct_chg is not None])
+
+            total_volume = window_data["volume"].fillna(0).sum()
+            total_amount = window_data["amount"].fillna(0).sum()
+            avg_pct_chg = window_data["pct_chg"].dropna().mean()
             
             return {
                 'success': True,
@@ -494,7 +495,7 @@ class RealtimeDataManager:
                     'rising_ratio': round(rising_stocks / total_stocks * 100, 2) if total_stocks > 0 else 0,
                     'total_volume': total_volume,
                     'total_amount': round(total_amount, 2),
-                    'avg_pct_chg': round(avg_pct_chg, 2) if not np.isnan(avg_pct_chg) else 0
+                    'avg_pct_chg': round(avg_pct_chg, 2) if pd.notna(avg_pct_chg) else 0
                 }
             }
             
@@ -505,3 +506,61 @@ class RealtimeDataManager:
                 'message': f'获取失败: {str(e)}',
                 'data': None
             } 
+
+    def get_minute_reader(self) -> MinuteParquetReader:
+        return self.data_reader.get_minute_reader()
+
+    def get_minute_latest_data(self, ts_code: str, period_type: str = '1min', limit: int = 100) -> pd.DataFrame:
+        return self.get_minute_reader().get_latest_data(ts_code, period_type, limit)
+
+    def get_minute_range_data(
+        self,
+        ts_code: str,
+        start_time,
+        end_time,
+        period_type: str = '1min'
+    ) -> pd.DataFrame:
+        return self.get_minute_reader().get_data(ts_code=ts_code, period_type=period_type, start_time=start_time, end_time=end_time)
+
+    def get_minute_summary(self, ts_code: str, period_type: str = '1min', hours: int = 24) -> Dict:
+        return self.get_minute_reader().get_summary(ts_code, period_type, hours)
+
+    def get_minute_periods(self) -> List[str]:
+        return ['1min', '5min', '15min', '30min', '60min']
+
+    def get_available_minute_stocks(self) -> List[str]:
+        df = self.get_minute_reader().get_data(period_type=None)
+        if df.empty or "ts_code" not in df.columns:
+            return []
+        return sorted(df["ts_code"].dropna().astype(str).unique().tolist())
+
+    def get_minute_stats(self) -> Dict:
+        periods = self.get_minute_periods()
+        stats: Dict[str, int] = {}
+        all_frames: list[pd.DataFrame] = []
+        for period in periods:
+            df = self.get_minute_reader().get_data(period_type=period)
+            stats[period] = int(len(df))
+            if not df.empty:
+                all_frames.append(df)
+
+        if not all_frames:
+            return {
+                'period_stats': stats,
+                'total_stocks': 0,
+                'latest_time': None,
+                'earliest_time': None,
+                'total_records': 0,
+            }
+
+        combined = pd.concat(all_frames, ignore_index=True)
+        latest_time = pd.to_datetime(combined["datetime"]).max()
+        earliest_time = pd.to_datetime(combined["datetime"]).min()
+        total_stocks = int(combined["ts_code"].dropna().astype(str).nunique()) if "ts_code" in combined.columns else 0
+        return {
+            'period_stats': stats,
+            'total_stocks': total_stocks,
+            'latest_time': latest_time.isoformat() if pd.notna(latest_time) else None,
+            'earliest_time': earliest_time.isoformat() if pd.notna(earliest_time) else None,
+            'total_records': int(len(combined)),
+        }

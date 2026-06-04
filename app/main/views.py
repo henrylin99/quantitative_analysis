@@ -1,10 +1,7 @@
 from flask import current_app, render_template, request
-from sqlalchemy import inspect
-
-from app.extensions import db
 from app.main import main_bp
 from app.services.stock_service import StockService
-from startup_runtime import build_health_report
+from startup_runtime import build_health_report, inspect_parquet_data_assets
 
 @main_bp.route('/')
 def index():
@@ -38,20 +35,7 @@ def backtest():
 
 
 def inspect_data_management_status():
-    existing_tables = set()
-    non_empty_tables = set()
-    connected = False
-
-    try:
-        inspector = inspect(db.engine)
-        existing_tables = set(inspector.get_table_names())
-        connected = True
-        for table in existing_tables & {"stock_basic", "stock_trade_calendar", "data_job_run"}:
-            count = db.session.execute(db.text(f"SELECT COUNT(*) FROM {table}")).scalar()
-            if count and int(count) > 0:
-                non_empty_tables.add(table)
-    except Exception:
-        connected = False
+    connected, existing_tables, non_empty_tables = inspect_parquet_data_assets()
 
     return build_health_report(
         current_app.config,
