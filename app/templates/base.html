@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{% block title %}股票分析系统{% endblock %}</title>
     
+    <!-- DM Sans Font -->
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
@@ -19,212 +21,172 @@
     <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
     
     <style>
-        /* 基础样式 */
-        .navbar-brand {
-            font-weight: bold;
-        }
-        .card {
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            border: 1px solid rgba(0, 0, 0, 0.125);
-        }
-        .chart-container {
-            height: 400px;
-            margin: 20px 0;
-        }
-        .loading {
-            text-align: center;
-            padding: 50px;
-        }
-        .stock-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .metric-card {
-            transition: transform 0.2s;
-        }
-        .metric-card:hover {
-            transform: translateY(-2px);
-        }
-        .text-purple {
-            color: #6f42c1 !important;
-        }
-        .btn-purple {
-            background-color: #6f42c1;
-            border-color: #6f42c1;
-            color: white;
-        }
-        .btn-purple:hover {
-            background-color: #5a359a;
-            border-color: #5a359a;
-            color: white;
-        }
-
         /* 移动端适配样式 */
         @media (max-width: 768px) {
             /* 导航栏适配 */
             .navbar-brand {
                 font-size: 1.1rem;
             }
-            
+
             .navbar-nav .nav-link {
                 padding: 0.75rem 1rem;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
+                border-bottom: 1px solid var(--obs-border, #334155);
             }
-            
+
             .dropdown-menu {
                 border: none;
                 box-shadow: none;
-                background-color: rgba(0,0,0,0.05);
+                background-color: var(--obs-surface, #1e293b);
             }
-            
+
             /* 容器适配 */
             .container-fluid {
                 padding-left: 10px;
                 padding-right: 10px;
             }
-            
+
             /* 卡片适配 */
             .card {
                 margin-bottom: 1rem;
                 border-radius: 8px;
             }
-            
+
             .card-body {
                 padding: 1rem;
             }
-            
+
             /* 表格适配 */
             .table-responsive {
                 border: none;
             }
-            
+
             .table {
                 font-size: 0.875rem;
             }
-            
+
             .table th,
             .table td {
                 padding: 0.5rem 0.25rem;
                 white-space: nowrap;
             }
-            
+
             /* 按钮适配 */
             .btn {
                 padding: 0.5rem 1rem;
                 font-size: 0.875rem;
             }
-            
+
             .btn-group .btn {
                 padding: 0.375rem 0.75rem;
                 font-size: 0.8rem;
             }
-            
+
             /* 表单适配 */
             .form-control,
             .form-select {
                 font-size: 16px; /* 防止iOS缩放 */
                 padding: 0.75rem;
             }
-            
+
             .form-label {
                 font-size: 0.9rem;
                 font-weight: 600;
             }
-            
+
             /* 图表适配 */
             .chart-container {
                 height: 300px;
                 margin: 15px 0;
             }
-            
+
             /* 指标卡片适配 */
             .metric-card {
                 margin-bottom: 1rem;
             }
-            
+
             .metric-card .card-body {
                 padding: 0.75rem;
                 text-align: center;
             }
-            
+
             .metric-card h5 {
                 font-size: 1rem;
                 margin-bottom: 0.5rem;
             }
-            
+
             .metric-card .display-6 {
                 font-size: 1.5rem;
             }
-            
+
             /* 模态框适配 */
             .modal-dialog {
                 margin: 0.5rem;
                 max-width: calc(100% - 1rem);
             }
-            
+
             .modal-body {
                 padding: 1rem;
             }
-            
+
             /* 分页适配 */
             .pagination {
                 justify-content: center;
             }
-            
+
             .page-link {
                 padding: 0.5rem 0.75rem;
                 font-size: 0.875rem;
             }
-            
+
             /* 警告框适配 */
             .alert {
                 padding: 0.75rem;
                 font-size: 0.875rem;
                 margin-bottom: 1rem;
             }
-            
+
             /* 进度条适配 */
             .progress {
                 height: 1.5rem;
                 margin-bottom: 1rem;
             }
-            
+
             /* 标签页适配 */
             .nav-tabs .nav-link {
                 padding: 0.5rem 0.75rem;
                 font-size: 0.875rem;
             }
-            
+
             /* 面包屑适配 */
             .breadcrumb {
                 padding: 0.5rem 0;
                 margin-bottom: 1rem;
                 font-size: 0.875rem;
             }
-            
+
             /* 列表组适配 */
             .list-group-item {
                 padding: 0.75rem;
                 font-size: 0.875rem;
             }
-            
+
             /* 徽章适配 */
             .badge {
                 font-size: 0.75rem;
                 padding: 0.35em 0.65em;
             }
-            
+
             /* 工具提示适配 */
             .tooltip {
                 font-size: 0.8rem;
             }
-            
+
             /* 页脚适配 */
             footer {
                 margin-top: 2rem;
                 padding: 1rem 0;
             }
-            
+
             footer p {
                 font-size: 0.8rem;
                 margin-bottom: 0;
@@ -236,39 +198,39 @@
             .navbar-brand {
                 font-size: 1rem;
             }
-            
+
             .container-fluid {
                 padding-left: 5px;
                 padding-right: 5px;
             }
-            
+
             .card-body {
                 padding: 0.75rem;
             }
-            
+
             .btn {
                 padding: 0.375rem 0.75rem;
                 font-size: 0.8rem;
             }
-            
+
             .chart-container {
                 height: 250px;
                 margin: 10px 0;
             }
-            
+
             .table {
                 font-size: 0.8rem;
             }
-            
+
             .table th,
             .table td {
                 padding: 0.375rem 0.2rem;
             }
-            
+
             .metric-card .display-6 {
                 font-size: 1.25rem;
             }
-            
+
             .modal-dialog {
                 margin: 0.25rem;
                 max-width: calc(100% - 0.5rem);
@@ -280,24 +242,24 @@
             .chart-container {
                 height: 200px;
             }
-            
+
             .navbar-nav .nav-link {
                 padding: 0.5rem 1rem;
             }
         }
 
-        /* 触摸优化 */
+        /* 触摸优化 (iOS最小触摸目标) */
         @media (hover: none) and (pointer: coarse) {
             .btn,
             .nav-link,
             .dropdown-item,
             .page-link,
             .list-group-item-action {
-                min-height: 44px; /* iOS推荐的最小触摸目标 */
+                min-height: 44px;
                 display: flex;
                 align-items: center;
             }
-            
+
             .table-responsive {
                 -webkit-overflow-scrolling: touch;
             }
@@ -308,26 +270,9 @@
             .card {
                 border-width: 0.5px;
             }
-            
+
             .table {
                 border-width: 0.5px;
-            }
-        }
-
-        /* 深色模式支持 */
-        @media (prefers-color-scheme: dark) {
-            .card {
-                background-color: #2d3748;
-                border-color: #4a5568;
-                color: #e2e8f0;
-            }
-            
-            .table {
-                color: #e2e8f0;
-            }
-            
-            .table-striped > tbody > tr:nth-of-type(odd) > td {
-                background-color: rgba(255, 255, 255, 0.05);
             }
         }
 
@@ -336,32 +281,11 @@
             .metric-card {
                 transition: none;
             }
-            
+
             * {
                 animation-duration: 0.01ms !important;
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.01ms !important;
-            }
-        }
-
-        /* 自定义滚动条 (移动端) */
-        @media (max-width: 768px) {
-            .table-responsive::-webkit-scrollbar {
-                height: 4px;
-            }
-            
-            .table-responsive::-webkit-scrollbar-track {
-                background: #f1f1f1;
-                border-radius: 2px;
-            }
-            
-            .table-responsive::-webkit-scrollbar-thumb {
-                background: #c1c1c1;
-                border-radius: 2px;
-            }
-            
-            .table-responsive::-webkit-scrollbar-thumb:hover {
-                background: #a8a8a8;
             }
         }
     </style>
@@ -373,8 +297,10 @@
     <nav class="navbar navbar-expand-lg navbar-financial fixed-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <i class="fas fa-chart-line me-2"></i>
-                <span>股票分析系统</span>
+                <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;margin-right:8px;">
+                    <span style="color:#fff;font-size:12px;font-weight:700;">Q</span>
+                </div>
+                <span>QuantAnalysis</span>
             </a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -440,10 +366,10 @@
                 <!-- 实时状态指示器 -->
                 <div class="navbar-nav">
                     <div class="nav-item d-flex align-items-center me-3">
-                        <span class="real-time-indicator">实时数据</span>
+                        <span class="real-time-indicator">Live</span>
                     </div>
                     <div class="nav-item">
-                        <button class="btn btn-outline-light btn-sm" onclick="location.reload()">
+                        <button class="btn btn-outline-light btn-sm" onclick="location.reload()" style="border-color:rgba(100,116,139,0.3);color:#64748b;">
                             <i class="fas fa-sync-alt me-1"></i>刷新
                         </button>
                     </div>
@@ -453,7 +379,7 @@
     </nav>
 
     <!-- 主要内容区域 -->
-    <main class="main-content" style="margin-top: 76px; min-height: calc(100vh - 76px);">
+    <main class="main-content" style="margin-top: 56px; min-height: calc(100vh - 56px);">
         {% block content %}{% endblock %}
     </main>
 
@@ -518,63 +444,63 @@
 
         // ECharts主题配置
         const financialTheme = {
-            color: ['#3b82f6', '#059669', '#dc2626', '#d97706', '#0891b2', '#7c3aed'],
+            color: ['#6366f1', '#818cf8', '#4ade80', '#fbbf24', '#22d3ee', '#f87171', '#a78bfa', '#34d399'],
             backgroundColor: 'transparent',
             textStyle: {
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif',
-                color: '#374151'
+                fontFamily: "'DM Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+                color: '#94a3b8'
             },
             title: {
                 textStyle: {
-                    color: '#1f2937',
+                    color: '#e2e8f0',
                     fontWeight: 600
                 }
             },
             legend: {
                 textStyle: {
-                    color: '#6b7280'
+                    color: '#94a3b8'
                 }
             },
             grid: {
-                borderColor: '#e5e7eb'
+                borderColor: '#334155'
             },
             categoryAxis: {
                 axisLine: {
                     lineStyle: {
-                        color: '#d1d5db'
+                        color: '#334155'
                     }
                 },
                 axisTick: {
                     lineStyle: {
-                        color: '#d1d5db'
+                        color: '#334155'
                     }
                 },
                 axisLabel: {
-                    color: '#6b7280'
+                    color: '#64748b'
                 },
                 splitLine: {
                     lineStyle: {
-                        color: '#f3f4f6'
+                        color: 'rgba(51,65,85,0.5)'
                     }
                 }
             },
             valueAxis: {
                 axisLine: {
                     lineStyle: {
-                        color: '#d1d5db'
+                        color: '#334155'
                     }
                 },
                 axisTick: {
                     lineStyle: {
-                        color: '#d1d5db'
+                        color: '#334155'
                     }
                 },
                 axisLabel: {
-                    color: '#6b7280'
+                    color: '#64748b'
                 },
                 splitLine: {
                     lineStyle: {
-                        color: '#f3f4f6'
+                        color: 'rgba(51,65,85,0.5)'
                     }
                 }
             }
