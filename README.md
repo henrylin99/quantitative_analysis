@@ -51,7 +51,7 @@
 -- 数据更新到2026年02月13日，包含历史行情、基本面、技术面、资金流入、筹码分布。
 -- 通过网盘分享的文件：stock_data_20260213.zip
 链接: https://pan.baidu.com/s/1XYMvl_OAnFycV8bOBkyQ0g?pwd=ctfq 提取码: ctfq
--- 如果有tushare接口，可以直接通过 quantitative_analysis/app/utils 目录下的文件直接下载，例如：
+- 如果有 tushare 接口，可以直接通过 `app/utils` 目录下的脚本生成或更新 parquet 数据，例如：
 ```
 # 下载历史行情数据：
 # 首先进入下载工具的目录
@@ -70,13 +70,7 @@ python stock_basic.py
 # 然后运行，下载天数越多，下载时间越长
 python daily_history_by_date.py
 
-# baostock 数据下载
-
-# 日线
-python baostock_daily.py
-
-# 分钟线 min5.py min15.py min30.py min60.py
-python min5.py
+# 如果还保留旧的 baostock 兼容脚本，可按需执行对应文件
 ```
 
 ![系统主界面](./images/1-2.png)
@@ -98,14 +92,15 @@ python min5.py
 - **数据处理**: Pandas / NumPy / Scikit-learn
 - **机器学习**: XGBoost / LightGBM / CVXPY
 - **前端**: Bootstrap 5 / JavaScript
-- **市场数据源**: Parquet 文件（默认）
-- **应用状态层**: MySQL-compatible 数据库
+- **市场数据源**: Parquet 文件为主，市场数据统一落在 `data/`
+- **ML 因子状态层**: Parquet 文件，状态数据统一落在 `data/ml_factor_state/`
+- **应用状态层**: 部分遗留模块仍使用 MySQL-compatible 数据库
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
-- MySQL 5.7 或 8.x（用于应用状态层和 ORM 兼容）
+- 如需使用遗留模块或 ORM 状态层，仍需 MySQL 5.7 或 8.x；纯 parquet 主链路可不依赖 MySQL
 
 ### 2. 安装依赖
 ```bash
@@ -123,7 +118,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-默认会同时启动 Web、MySQL 和 Redis。
+默认会同时启动 Web、MySQL 和 Redis；其中市场数据和 ml-factor 状态仍以本地 parquet 文件为准。
 
 ### 3. 启动系统
 ```bash
@@ -401,7 +396,7 @@ stock_analysis/
 # SQLite（不建议使用，数据太大，速度较慢）
 SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
 
-# Parquet 是默认市场数据源；应用状态层仍使用 MySQL-compatible 数据库
+# Parquet 是默认市场数据源；ml-factor 相关状态也已迁移到 parquet，部分遗留模块仍可使用 MySQL-compatible 数据库
 DATA_SOURCE = 'parquet'
 MYSQL_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
 ```

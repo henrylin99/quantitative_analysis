@@ -21,7 +21,7 @@ def test_portfolio_template_hides_fake_create_and_save_paths():
     assert "function saveOptimizedPortfolio()" in html
     assert "保存为投资组合" in html
     assert "/api/ml-factor/portfolio/save-optimized" in html
-    assert "/api/realtime-analysis/risk/portfolio" in html
+    assert "/api/ml-factor/portfolio" in html
 
 
 def test_portfolio_template_uses_real_list_and_detail_endpoints():
@@ -29,7 +29,7 @@ def test_portfolio_template_uses_real_list_and_detail_endpoints():
 
     assert "/api/ml-factor/portfolio/list" in html
     assert "/api/ml-factor/portfolio/" in html
-    assert "/api/realtime-analysis/risk/portfolio/" in html
+    assert "/api/ml-factor/portfolio/${portfolioId}/positions/${editingPositionId}" in html
     assert "portfolios.find(" not in html
     assert "portfolio.portfolio_id" in html
 
@@ -42,7 +42,8 @@ def test_portfolio_template_supports_real_position_create_and_update_actions():
     assert "function openPositionModal(" in html
     assert "function submitPortfolioPosition(" in html
     assert "method = editingPositionId ? 'put' : 'post'" in html
-    assert "/api/realtime-analysis/risk/portfolio/${portfolioId}/positions/${editingPositionId}" in html
+    assert "/api/ml-factor/portfolio/${portfolioId}/positions/${editingPositionId}" in html
+    assert "await loadPortfolios();" in html
 
 
 def test_portfolio_template_empty_state_matches_real_crud_availability():

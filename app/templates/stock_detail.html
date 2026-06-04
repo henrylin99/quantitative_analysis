@@ -331,7 +331,7 @@ function renderHistoryData(data, days) {
                             <td class="text-success">${formatNumber(item.low, 2)}</td>
                             <td class="text-primary"><strong>${formatNumber(item.close, 2)}</strong></td>
                             <td>${formatNumber((item.vol || 0) / 10000, 1)}</td>
-                            <td>${formatNumber((item.amount || 0) / 10000, 0)}</td>
+                            <td>${formatNumber((item.amount || 0) / 10, 0)}</td>
                             <td class="${(item.pct_chg || 0) >= 0 ? 'text-danger' : 'text-success'}">
                                 <strong>${formatPercent(item.pct_chg || 0)}</strong>
                             </td>
