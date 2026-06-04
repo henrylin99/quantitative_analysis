@@ -15,15 +15,15 @@
             display: inline-block;
             margin-right: 8px;
         }
-        .status-connected { background-color: #28a745; }
-        .status-disconnected { background-color: #dc3545; }
-        .status-connecting { background-color: #ffc107; }
+        .status-connected { background-color: var(--obs-success); }
+        .status-disconnected { background-color: var(--obs-danger); }
+        .status-connecting { background-color: var(--obs-warning); }
         
         .message-log {
             height: 300px;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: var(--obs-surface);
+            border: 1px solid var(--obs-border);
             border-radius: 0.375rem;
             padding: 10px;
             font-family: 'Courier New', monospace;
@@ -36,10 +36,10 @@
             border-radius: 3px;
         }
         
-        .message-info { background-color: #d1ecf1; }
-        .message-success { background-color: #d4edda; }
-        .message-warning { background-color: #fff3cd; }
-        .message-error { background-color: #f8d7da; }
+        .message-info { background-color: var(--obs-info-bg); }
+        .message-success { background-color: var(--obs-success-bg); }
+        .message-warning { background-color: var(--obs-warning-bg); }
+        .message-error { background-color: var(--obs-danger-bg); }
         
         .config-card {
             transition: all 0.3s ease;
@@ -53,8 +53,8 @@
         .real-time-data {
             height: 200px;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: var(--obs-surface);
+            border: 1px solid var(--obs-border);
             border-radius: 0.375rem;
             padding: 10px;
         }

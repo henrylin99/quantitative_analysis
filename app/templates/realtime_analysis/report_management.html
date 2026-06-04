@@ -7,11 +7,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         .report-card, .template-card, .subscription-card {
-            border-left: 4px solid #0d6efd;
+            border-left: 4px solid var(--obs-primary);
             transition: transform 0.2s;
         }
-        .template-card { border-left-color: #198754; }
-        .subscription-card { border-left-color: #ffc107; }
+        .template-card { border-left-color: var(--obs-success); }
+        .subscription-card { border-left-color: var(--obs-warning); }
         .report-card:hover, .template-card:hover, .subscription-card:hover {
             transform: translateY(-2px);
         }
@@ -21,7 +21,7 @@
         .json-block {
             white-space: pre-wrap;
             font-size: 12px;
-            background: #f8f9fa;
+            background: var(--obs-surface);
             border-radius: 6px;
             padding: 12px;
         }
