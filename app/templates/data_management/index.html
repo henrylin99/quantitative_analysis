@@ -7,11 +7,11 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--obs-surface); border: 1px solid var(--obs-border-light);
             color: white;
         }
         .nav-pills .nav-link.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--obs-surface); border: 1px solid var(--obs-border-light);
         }
         .status-indicator {
             width: 10px;
@@ -20,9 +20,9 @@
             display: inline-block;
             margin-right: 5px;
         }
-        .status-ok { background-color: #28a745; }
-        .status-warning { background-color: #ffc107; }
-        .status-error { background-color: #dc3545; }
+        .status-ok { background-color: var(--obs-success); }
+        .status-warning { background-color: var(--obs-warning); }
+        .status-error { background-color: var(--obs-danger); }
         .metric-card {
             transition: transform 0.2s;
         }
@@ -35,7 +35,7 @@
         .log-container {
             max-height: 300px;
             overflow-y: auto;
-            background-color: #f8f9fa;
+            background-color: var(--obs-surface);
             border: 1px solid #dee2e6;
             border-radius: 0.375rem;
             padding: 10px;
