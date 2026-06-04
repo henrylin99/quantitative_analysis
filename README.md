@@ -44,34 +44,13 @@
 - 完善投资组合真实管理闭环
 - 实时行情分析仅保留设计稿与接口预留，暂不进入开发实施
 
-### 快速选股器，演示地址：https://stockscreener-production-dd0b.up.railway.app/
-### 新版本开发中，演示地址：http://223.4.156.201:5173/
 
 ### 数据库下载地址：
--- 数据更新到2026年02月13日，包含历史行情、基本面、技术面、资金流入、筹码分布。
--- 通过网盘分享的文件：stock_data_20260213.zip
-链接: https://pan.baidu.com/s/1XYMvl_OAnFycV8bOBkyQ0g?pwd=ctfq 提取码: ctfq
+- 为方便大家学习使用，已经将数据改成parquet模式，下载后安装环境即可使用，不需要再安装mysql
+- 数据更新到2026年06月03日，后面会不定期更新，包含历史行情、基本面、技术面、资金流入、筹码分布。
+链接: 通过网盘分享的文件：quantitative_analysis
+链接: https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
 - 如果有 tushare 接口，可以直接通过 `app/utils` 目录下的脚本生成或更新 parquet 数据，例如：
-```
-# 下载历史行情数据：
-# 首先进入下载工具的目录
-cd app/utils
-
-# tushare数据下载
-# 先下载交易日期数据，所有下载数据接口都依赖这个文件
-python trade_calendar.py
-
-# 下载所有股票列表，所有按股票代码下载的数据接口都依赖这个文件
-python stock_basic.py
-
-# 运行历史数据，根据自己的需要，修改下载日期，代码在第33-34行，例如：
-   and cal_date >= '2025-01-01' 
-    and cal_date <= '2025-12-31'
-# 然后运行，下载天数越多，下载时间越长
-python daily_history_by_date.py
-
-# 如果还保留旧的 baostock 兼容脚本，可按需执行对应文件
-```
 
 ![系统主界面](./images/1-2.png)
 
@@ -390,16 +369,7 @@ stock_analysis/
 ## 🔧 配置说明
 
 ### 数据库配置
-在 `config.py` 中修改数据库连接：
-
-```python
-# SQLite（不建议使用，数据太大，速度较慢）
-SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
-
-# Parquet 是默认市场数据源；ml-factor 相关状态也已迁移到 parquet，部分遗留模块仍可使用 MySQL-compatible 数据库
-DATA_SOURCE = 'parquet'
-MYSQL_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
-```
+已经改成parquet模式，不需要数据库
 
 ### 日志配置
 ```python
