@@ -9,7 +9,6 @@ services:
     env_file:
       - .env
     depends_on:
-      - mysql
       - redis
 
   worker:
@@ -18,24 +17,9 @@ services:
     env_file:
       - .env
     depends_on:
-      - mysql
       - redis
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  mysql:
-    image: mysql:8
-    command: --default-authentication-plugin=mysql_native_password
-    environment:
-      MYSQL_DATABASE: stock_cursor
-      MYSQL_ROOT_PASSWORD: root
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  mysql_data:
