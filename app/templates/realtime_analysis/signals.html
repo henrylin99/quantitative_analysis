@@ -19,9 +19,9 @@
             position: relative;
             overflow: hidden;
         }
-        .signal-buy { background: linear-gradient(90deg, #28a745, #20c997); }
-        .signal-sell { background: linear-gradient(90deg, #dc3545, #fd7e14); }
-        .signal-hold { background: linear-gradient(90deg, #6c757d, #adb5bd); }
+        .signal-buy { background: var(--obs-success); }
+        .signal-sell { background: var(--obs-danger); }
+        .signal-hold { background: var(--obs-border); }
         .strategy-badge {
             font-size: 0.75rem;
             padding: 0.25rem 0.5rem;
@@ -29,8 +29,8 @@
         .log-container {
             height: 200px;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: var(--obs-surface);
+            border: 1px solid var(--obs-border);
             border-radius: 0.375rem;
             padding: 0.75rem;
             font-family: 'Courier New', monospace;

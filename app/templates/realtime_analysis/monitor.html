@@ -23,20 +23,20 @@
         .metric-change {
             font-size: 0.9rem;
         }
-        .positive { color: #dc3545; }
-        .negative { color: #198754; }
-        .neutral { color: #6c757d; }
+        .positive { color: var(--obs-danger-light); }
+        .negative { color: var(--obs-success-light); }
+        .neutral { color: var(--obs-text-muted); }
         .chart-container {
             height: 300px;
             margin: 10px 0;
         }
         .stock-item {
             padding: 8px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--obs-border);
             transition: background-color 0.2s;
         }
         .stock-item:hover {
-            background-color: #f8f9fa;
+            background-color: var(--obs-surface);
         }
         .auto-refresh {
             position: fixed;
@@ -50,7 +50,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(255,255,255,0.8);
+            background: var(--obs-surface);
             display: flex;
             align-items: center;
             justify-content: center;

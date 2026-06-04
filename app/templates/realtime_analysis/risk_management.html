@@ -8,16 +8,16 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
     <style>
         .risk-card {
-            border-left: 4px solid #007bff;
+            border-left: 4px solid var(--obs-primary);
             transition: all 0.3s ease;
         }
         .risk-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .risk-high { border-left-color: #dc3545; }
-        .risk-medium { border-left-color: #ffc107; }
-        .risk-low { border-left-color: #28a745; }
+        .risk-high { border-left-color: var(--obs-danger); }
+        .risk-medium { border-left-color: var(--obs-warning); }
+        .risk-low { border-left-color: var(--obs-success); }
         
         .metric-value {
             font-size: 1.5rem;
@@ -35,16 +35,16 @@
             padding: 10px;
             border-radius: 4px;
         }
-        .alert-high { border-left-color: #dc3545; background-color: #f8d7da; }
-        .alert-medium { border-left-color: #ffc107; background-color: #fff3cd; }
-        .alert-low { border-left-color: #28a745; background-color: #d1eddd; }
+        .alert-high { border-left-color: var(--obs-danger); background-color: var(--obs-danger-bg); }
+        .alert-medium { border-left-color: var(--obs-warning); background-color: var(--obs-warning-bg); }
+        .alert-low { border-left-color: var(--obs-success); background-color: var(--obs-success-bg); }
         
         .position-row:hover {
-            background-color: #f8f9fa;
+            background-color: var(--obs-surface);
         }
         
         .nav-tabs .nav-link.active {
-            background-color: #007bff;
+            background-color: var(--obs-primary);
             color: white;
         }
         
@@ -60,9 +60,9 @@
             display: inline-block;
             margin-right: 5px;
         }
-        .status-online { background-color: #28a745; }
-        .status-warning { background-color: #ffc107; }
-        .status-offline { background-color: #dc3545; }
+        .status-online { background-color: var(--obs-success); }
+        .status-warning { background-color: var(--obs-warning); }
+        .status-offline { background-color: var(--obs-danger); }
     </style>
 {% endblock %}
 
