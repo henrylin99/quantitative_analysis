@@ -5,8 +5,9 @@ from datetime import datetime
 from loguru import logger
 
 from app.extensions import db
-from app.models import FactorValues, MLPredictions
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_state_store import FactorRepository, ParquetStateStore
+from app.services.parquet_state_store import ModelRepository
 
 _scoring_reader = ParquetDataReader()
 
@@ -14,7 +15,10 @@ _scoring_reader = ParquetDataReader()
 class StockScoringEngine:
     """股票打分引擎"""
     
-    def __init__(self):
+    def __init__(self, state_store: ParquetStateStore = None):
+        self.state_store = state_store or ParquetStateStore()
+        self.factor_repo = FactorRepository(self.state_store)
+        self.model_repo = ModelRepository(self.state_store)
         self.scoring_methods = {
             'equal_weight': self._equal_weight_scoring,
             'factor_weight': self._factor_weight_scoring,
@@ -26,17 +30,11 @@ class StockScoringEngine:
                                ts_codes: List[str] = None) -> pd.DataFrame:
         """计算因子分数"""
         try:
-            # 构建查询
-            query = FactorValues.query.filter(FactorValues.trade_date == trade_date)
-            
-            if factor_list:
-                query = query.filter(FactorValues.factor_id.in_(factor_list))
-            
-            if ts_codes:
-                query = query.filter(FactorValues.ts_code.in_(ts_codes))
-            
-            # 获取因子数据
-            factor_data = pd.read_sql(query.statement, db.engine)
+            factor_data = self.factor_repo.get_values(
+                trade_date=trade_date,
+                factor_ids=factor_list,
+                ts_codes=ts_codes,
+            )
             
             if factor_data.empty:
                 logger.warning(f"未找到因子数据: {trade_date}")
@@ -307,12 +305,10 @@ class StockScoringEngine:
             all_predictions = []
             
             for model_id in model_ids:
-                pred_query = MLPredictions.query.filter(
-                    MLPredictions.model_id == model_id,
-                    MLPredictions.trade_date == trade_date
-                ).order_by(MLPredictions.rank_score)
-                
-                pred_data = pd.read_sql(pred_query.statement, db.engine)
+                pred_data = self.model_repo.get_predictions(
+                    model_id=model_id,
+                    trade_date=trade_date,
+                )
                 
                 if not pred_data.empty:
                     pred_data['model_id'] = model_id
@@ -451,28 +447,20 @@ class StockScoringEngine:
         """因子贡献度分析"""
         try:
             # 获取股票的因子值
-            query = FactorValues.query.filter(
-                FactorValues.ts_code == ts_code,
-                FactorValues.trade_date == trade_date
+            factor_data = self.factor_repo.get_values(
+                ts_codes=[ts_code],
+                trade_date=trade_date,
+                factor_ids=factor_list,
             )
-            
-            if factor_list:
-                query = query.filter(FactorValues.factor_id.in_(factor_list))
-            
-            factor_data = pd.read_sql(query.statement, db.engine)
             
             if factor_data.empty:
                 return {'error': '未找到因子数据'}
             
             # 获取全市场因子分布
-            market_query = FactorValues.query.filter(
-                FactorValues.trade_date == trade_date
+            market_data = self.factor_repo.get_values(
+                trade_date=trade_date,
+                factor_ids=factor_list,
             )
-            
-            if factor_list:
-                market_query = market_query.filter(FactorValues.factor_id.in_(factor_list))
-            
-            market_data = pd.read_sql(market_query.statement, db.engine)
             
             # 计算因子贡献度
             contributions = {}

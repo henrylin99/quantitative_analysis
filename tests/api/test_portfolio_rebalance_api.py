@@ -2,6 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
+from app.services.parquet_state_store import ParquetStateStore, PortfolioRepository
+
 pytestmark = pytest.mark.module_portfolio
 
 
@@ -52,20 +54,12 @@ def test_rebalance_portfolio_endpoint_rejects_missing_weights(app):
     assert "缺少必需参数" in data["error"]
 
 
-def test_apply_rebalance_endpoint_updates_existing_positions_and_creates_new_ones(app):
+def test_apply_rebalance_endpoint_updates_existing_positions_and_creates_new_ones(app, tmp_path):
     client = app.test_client()
-
-    payload = {
-        "portfolio_id": "growth_a",
-        "target_weights": {
-            "000001.SZ": 0.5,
-            "000003.SZ": 0.5,
-        },
-    }
-    existing_a = type(
-        "Position",
-        (),
+    repo = PortfolioRepository(ParquetStateStore(base_dir=str(tmp_path / "state")))
+    repo.upsert_position(
         {
+            "portfolio_id": "growth_a",
             "ts_code": "000001.SZ",
             "position_size": 600.0,
             "avg_cost": 10.0,
@@ -74,12 +68,11 @@ def test_apply_rebalance_endpoint_updates_existing_positions_and_creates_new_one
             "weight": 60.0,
             "is_active": True,
             "sector": "银行",
-        },
-    )()
-    existing_b = type(
-        "Position",
-        (),
+        }
+    )
+    repo.upsert_position(
         {
+            "portfolio_id": "growth_a",
             "ts_code": "000002.SZ",
             "position_size": 200.0,
             "avg_cost": 20.0,
@@ -88,15 +81,18 @@ def test_apply_rebalance_endpoint_updates_existing_positions_and_creates_new_one
             "weight": 40.0,
             "is_active": True,
             "sector": "地产",
+        }
+    )
+
+    payload = {
+        "portfolio_id": "growth_a",
+        "target_weights": {
+            "000001.SZ": 0.5,
+            "000003.SZ": 0.5,
         },
-    )()
+    }
 
-    with patch("app.api.ml_factor_api.PortfolioPosition") as portfolio_model, patch("app.api.ml_factor_api._data_reader") as data_reader, patch("app.api.ml_factor_api.db") as db:
-        portfolio_model.get_portfolio_positions.return_value = [existing_a, existing_b]
-        portfolio_model.get_position_by_stock.side_effect = [existing_a, None]
-        data_reader.get_latest_close.side_effect = [11.0, 25.0]
-        portfolio_model.return_value = type("Created", (), {})()
-
+    with patch("app.api.ml_factor_api._portfolio_repo", repo), patch("app.api.ml_factor_api._data_reader.get_latest_close", side_effect=[11.0, 25.0]):
         response = client.post("/api/ml-factor/portfolio/rebalance/apply", json=payload)
 
     assert response.status_code == 200
@@ -105,10 +101,7 @@ def test_apply_rebalance_endpoint_updates_existing_positions_and_creates_new_one
     assert data["updated_count"] == 1
     assert data["created_count"] == 1
     assert data["deactivated_count"] == 1
-    assert existing_a.position_size == 10000 / 11.0 * 0.5
-    assert existing_b.is_active is False
-    db.session.add.assert_called_once()
-    db.session.commit.assert_called_once()
+    assert repo.get_position_by_stock("growth_a", "000002.SZ") is None
 
 
 def test_apply_rebalance_endpoint_rejects_missing_portfolio(app):

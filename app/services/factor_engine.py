@@ -6,12 +6,9 @@ import re
 from scipy import stats
 from loguru import logger
 
-from app.extensions import db
-from app.models import (
-    FactorDefinition, FactorValues,
-)
 from app.services.factor_expression_engine import FactorExpressionEngine
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_state_store import FactorRepository, ParquetStateStore
 
 
 def _get_data_reader() -> ParquetDataReader:
@@ -24,11 +21,13 @@ def _get_data_reader() -> ParquetDataReader:
 class FactorEngine:
     """因子计算引擎"""
 
-    def __init__(self):
+    def __init__(self, state_store: ParquetStateStore = None):
         self.factor_definitions = {}
         self.builtin_factors = {}
         self.expression_engine = FactorExpressionEngine()
         self.data_reader = _get_data_reader()
+        self.state_store = state_store or ParquetStateStore()
+        self.factor_repo = FactorRepository(self.state_store)
         self._init_builtin_factors()
         self.load_factor_definitions()
     
@@ -65,9 +64,11 @@ class FactorEngine:
     def load_factor_definitions(self):
         """加载因子定义"""
         try:
-            definitions = FactorDefinition.query.filter_by(is_active=True).all()
-            for definition in definitions:
-                self.factor_definitions[definition.factor_id] = definition
+            definitions = self.factor_repo.list_definitions(include_inactive=False)
+            self.factor_definitions = {
+                definition["factor_id"]: definition
+                for definition in definitions
+            }
             logger.info(f"加载了 {len(self.factor_definitions)} 个自定义因子定义")
         except Exception as e:
             logger.error(f"加载因子定义失败: {e}")
@@ -76,34 +77,21 @@ class FactorEngine:
                        factor_type: str, description: str = None, params: dict = None):
         """注册自定义因子"""
         try:
-            # 检查因子是否已存在
-            existing = FactorDefinition.query.filter_by(factor_id=factor_id).first()
-            if existing:
-                # 更新现有因子
-                existing.factor_name = factor_name
-                existing.factor_formula = formula
-                existing.factor_type = factor_type
-                existing.description = description
-                existing.params = params
-                existing.updated_at = datetime.utcnow()
-            else:
-                # 创建新因子
-                new_factor = FactorDefinition(
-                    factor_id=factor_id,
-                    factor_name=factor_name,
-                    factor_formula=formula,
-                    factor_type=factor_type,
-                    description=description,
-                    params=params
-                )
-                db.session.add(new_factor)
-            
-            db.session.commit()
-            self.load_factor_definitions()  # 重新加载
+            self.factor_repo.upsert_definition(
+                {
+                    "factor_id": factor_id,
+                    "factor_name": factor_name,
+                    "factor_formula": formula,
+                    "factor_type": factor_type,
+                    "description": description,
+                    "params": params or {},
+                    "is_active": True,
+                }
+            )
+            self.load_factor_definitions()
             logger.info(f"成功注册因子: {factor_id}")
             return True
         except Exception as e:
-            db.session.rollback()
             logger.error(f"注册因子失败: {factor_id}, 错误: {e}")
             return False
 
@@ -845,53 +833,20 @@ class FactorEngine:
         try:
             if df.empty:
                 return True
-            
-            # 删除已存在的数据
-            trade_dates = df['trade_date'].unique()
-            factor_ids = df['factor_id'].unique()
-            
-            for trade_date in trade_dates:
-                for factor_id in factor_ids:
-                    FactorValues.query.filter_by(
-                        trade_date=trade_date,
-                        factor_id=factor_id
-                    ).delete()
-            
-            # 批量插入新数据
-            records = []
-            for _, row in df.iterrows():
-                record = FactorValues(
-                    ts_code=row['ts_code'],
-                    trade_date=row['trade_date'],
-                    factor_id=row['factor_id'],
-                    factor_value=row['factor_value'],
-                    percentile_rank=row.get('percentile_rank'),
-                    z_score=row.get('z_score')
-                )
-                records.append(record)
-            
-            db.session.bulk_save_objects(records)
-            db.session.commit()
-            
-            logger.info(f"成功保存 {len(records)} 条因子值记录")
+            written = self.factor_repo.save_values(df)
+            logger.info(f"成功保存 {written} 条因子值记录")
             return True
             
         except Exception as e:
-            db.session.rollback()
             logger.error(f"保存因子值失败: {e}")
             return False
     
     def get_factor_exposure(self, factor_id: str, trade_date: str) -> pd.DataFrame:
         """获取因子暴露度"""
         try:
-            query = FactorValues.query.filter_by(
-                factor_id=factor_id,
-                trade_date=trade_date
-            ).order_by(FactorValues.z_score.desc())
-            
-            with db.engine.connect() as conn:
-                _r = conn.execute(query.statement)
-                result = pd.DataFrame(_r.fetchall(), columns=list(_r.keys()))
+            result = self.factor_repo.get_values(factor_ids=[factor_id], trade_date=trade_date)
+            if not result.empty and "z_score" in result.columns:
+                result = result.sort_values("z_score", ascending=False).reset_index(drop=True)
             return result
 
         except Exception as e:
@@ -908,7 +863,7 @@ class FactorEngine:
                 return pd.DataFrame()
 
             definition = self.factor_definitions[factor_id]
-            formula = (definition.factor_formula or "").strip()
+            formula = (definition.get("factor_formula") or "").strip()
             if not formula:
                 logger.warning(f"自定义因子未配置公式: {factor_id}")
                 return pd.DataFrame()
@@ -982,20 +937,21 @@ class FactorEngine:
                     })
             
             # 添加自定义因子
-            for factor_id, definition in self.factor_definitions.items():
-                if factor_type is None or definition.factor_type == factor_type:
-                    if not is_active or definition.is_active:
+            definitions = self.factor_repo.list_definitions(include_inactive=not is_active)
+            for definition in definitions:
+                if factor_type is None or definition["factor_type"] == factor_type:
+                    if not is_active or definition.get("is_active", True):
                         factor_list.append({
-                            'factor_id': definition.factor_id,
-                            'factor_name': definition.factor_name,
-                            'factor_type': definition.factor_type,
+                            'factor_id': definition["factor_id"],
+                            'factor_name': definition["factor_name"],
+                            'factor_type': definition["factor_type"],
                             'is_builtin': False,
-                            'is_active': definition.is_active,
-                            'description': definition.description,
-                            'formula': definition.factor_formula,
-                            'params': definition.params,
-                            'created_at': definition.created_at.isoformat() if definition.created_at else None,
-                            'updated_at': definition.updated_at.isoformat() if definition.updated_at else None
+                            'is_active': definition.get("is_active", True),
+                            'description': definition.get("description"),
+                            'formula': definition.get("factor_formula"),
+                            'params': definition.get("params"),
+                            'created_at': definition.get("created_at"),
+                            'updated_at': definition.get("updated_at"),
                         })
             
             return factor_list

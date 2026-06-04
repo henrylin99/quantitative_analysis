@@ -249,6 +249,41 @@ class StockService:
     def screen_stocks(criteria: Dict):
         """基于 Parquet 大宽表的增强筛选（原 MySQL JOIN 已迁移）"""
         try:
+            def _normalize(value):
+                if value is None:
+                    return None
+                if isinstance(value, str):
+                    value = value.strip()
+                    return value if value != '' else None
+                return value
+
+            cleaned_criteria = {}
+            for key, value in (criteria or {}).items():
+                if key == 'dynamic_conditions':
+                    continue
+                normalized = _normalize(value)
+                if normalized is not None:
+                    cleaned_criteria[key] = normalized
+
+            dynamic_conditions = []
+            for cond in (criteria or {}).get('dynamic_conditions', []):
+                if not isinstance(cond, dict):
+                    continue
+                field_a = _normalize(cond.get('field_a'))
+                operator = _normalize(cond.get('operator'))
+                field_b = _normalize(cond.get('field_b'))
+                value = _normalize(cond.get('value'))
+                if field_a and operator and (field_b or value is not None):
+                    dynamic_conditions.append({
+                        'field_a': field_a,
+                        'operator': operator,
+                        'field_b': field_b,
+                        'value': value
+                    })
+
+            criteria = cleaned_criteria
+            criteria['dynamic_conditions'] = dynamic_conditions
+
             # 1. 确定查询日期
             trade_date = criteria.get('trade_date')
             if not trade_date:
@@ -354,7 +389,21 @@ class StockService:
                     lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else (str(x) if pd.notna(x) else None)
                 )
 
-            stocks = df.where(df.notna(), None).to_dict(orient='records')
+            def _clean_value(value):
+                if value is None:
+                    return None
+                if isinstance(value, float) and np.isnan(value):
+                    return None
+                if isinstance(value, (np.generic,)):
+                    value = value.item()
+                if pd.isna(value):
+                    return None
+                return value
+
+            stocks = [
+                {key: _clean_value(value) for key, value in record.items()}
+                for record in df.to_dict(orient='records')
+            ]
 
             # 限制返回数量
             max_results = 200

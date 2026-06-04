@@ -705,9 +705,12 @@ function renderMoneyflowData(data) {
 function renderMoneyflowCharts(data) {
     // 分单资金买卖对比图
     const moneyflowChart = echarts.init(document.getElementById('moneyflow-chart'));
-    
-    const dates = data.map(item => item.trade_date).reverse();
-    const latestData = data[0]; // 最新一天的数据
+
+    const orderedData = [...data].sort((a, b) => {
+        return String(a.trade_date || '').localeCompare(String(b.trade_date || ''));
+    });
+    const dates = orderedData.map(item => item.trade_date);
+    const latestData = orderedData[orderedData.length - 1]; // 最新一天的数据
     
     // 分单买卖对比（最新一天）
     const moneyflowOption = {
@@ -823,7 +826,7 @@ function renderMoneyflowCharts(data) {
         series: [{
             name: '净流入',
             type: 'line',
-            data: data.map(item => item.net_mf_amount || 0).reverse(),
+            data: orderedData.map(item => item.net_mf_amount || 0),
             itemStyle: {
                 color: '#1890ff'
             },
@@ -1029,8 +1032,11 @@ function renderCyqData(data) {
 function renderCyqCharts(data) {
     // 成本分位曲线图
     const costChart = echarts.init(document.getElementById('cost-distribution-chart'));
-    
-    const dates = data.map(item => item.trade_date).reverse();
+
+    const orderedData = [...data].sort((a, b) => {
+        return String(a.trade_date || '').localeCompare(String(b.trade_date || ''));
+    });
+    const dates = orderedData.map(item => item.trade_date);
     
     const costOption = {
         title: {
@@ -1076,38 +1082,38 @@ function renderCyqCharts(data) {
             {
                 name: '5%成本',
                 type: 'line',
-                data: data.map(item => item.cost_5pct || 0).reverse(),
+                data: orderedData.map(item => item.cost_5pct || 0),
                 itemStyle: { color: '#ff7875' }
             },
             {
                 name: '15%成本',
                 type: 'line',
-                data: data.map(item => item.cost_15pct || 0).reverse(),
+                data: orderedData.map(item => item.cost_15pct || 0),
                 itemStyle: { color: '#ffa940' }
             },
             {
                 name: '50%成本',
                 type: 'line',
-                data: data.map(item => item.cost_50pct || 0).reverse(),
+                data: orderedData.map(item => item.cost_50pct || 0),
                 itemStyle: { color: '#1890ff' },
                 lineStyle: { width: 3 }
             },
             {
                 name: '85%成本',
                 type: 'line',
-                data: data.map(item => item.cost_85pct || 0).reverse(),
+                data: orderedData.map(item => item.cost_85pct || 0),
                 itemStyle: { color: '#73d13d' }
             },
             {
                 name: '95%成本',
                 type: 'line',
-                data: data.map(item => item.cost_95pct || 0).reverse(),
+                data: orderedData.map(item => item.cost_95pct || 0),
                 itemStyle: { color: '#b37feb' }
             },
             {
                 name: '加权平均',
                 type: 'line',
-                data: data.map(item => item.weight_avg || 0).reverse(),
+                data: orderedData.map(item => item.weight_avg || 0),
                 itemStyle: { color: '#f759ab' },
                 lineStyle: { width: 2, type: 'dashed' }
             }
@@ -1190,7 +1196,7 @@ function renderCyqCharts(data) {
     winnerChart.setOption(winnerOption);
     
     // 渲染筹码分析指标
-    renderCyqIndicators(data[0]); // 最新数据
+    renderCyqIndicators(orderedData[orderedData.length - 1]); // 最新数据
     
     // 响应式调整
     window.addEventListener('resize', function() {

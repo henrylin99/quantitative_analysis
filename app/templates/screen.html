@@ -234,30 +234,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label">大单买入占比(%)</label>
-                                <div class="row g-2">
-                                    <div class="col">
-                                        <input type="number" class="form-control" id="lg-buy-rate-min" placeholder="最小值" step="0.1">
-                                    </div>
-                                    <div class="col-auto">-</div>
-                                    <div class="col">
-                                        <input type="number" class="form-control" id="lg-buy-rate-max" placeholder="最大值" step="0.1">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">5日净流入额(万元)</label>
-                                <div class="row g-2">
-                                    <div class="col">
-                                        <input type="number" class="form-control" id="net-d5-amount-min" placeholder="最小值">
-                                    </div>
-                                    <div class="col-auto">-</div>
-                                    <div class="col">
-                                        <input type="number" class="form-control" id="net-d5-amount-max" placeholder="最大值">
-                                    </div>
-                                </div>
-                            </div>
                         </div>
 
                         <!-- 动态查询条件 -->
@@ -381,9 +357,7 @@ const AVAILABLE_FIELDS = {
     },
     '资金流向': {
         'moneyflow_net_amount': '净流入额',
-        'moneyflow_net_d5_amount': '5日净流入额',
         'moneyflow_buy_lg_amount': '大单买入额',
-        'moneyflow_buy_lg_amount_rate': '大单买入占比(%)',
         'moneyflow_buy_md_amount': '中单买入额',
         'moneyflow_buy_md_amount_rate': '中单买入占比(%)',
         'moneyflow_buy_sm_amount': '小单买入额',
@@ -533,78 +507,7 @@ function removeDynamicCondition(id) {
 // 处理筛选
 function handleScreen(event) {
     event.preventDefault();
-    
-    // 收集基础筛选条件
-    const criteria = {
-        // 基本条件
-        industry: document.getElementById('industry-filter').value,
-        area: document.getElementById('area-filter').value,
-        market: document.getElementById('market-filter').value,
-        trade_date: document.getElementById('date-filter').value,
-        
-        // 估值指标
-        pe_min: document.getElementById('pe-min').value,
-        pe_max: document.getElementById('pe-max').value,
-        pb_min: document.getElementById('pb-min').value,
-        pb_max: document.getElementById('pb-max').value,
-        ps_min: document.getElementById('ps-min').value,
-        ps_max: document.getElementById('ps-max').value,
-        dv_min: document.getElementById('dv-min').value,
-        dv_max: document.getElementById('dv-max').value,
-        
-        // 市值和交易
-        mv_min: document.getElementById('mv-min').value,
-        mv_max: document.getElementById('mv-max').value,
-        circ_mv_min: document.getElementById('circ-mv-min').value,
-        circ_mv_max: document.getElementById('circ-mv-max').value,
-        turnover_min: document.getElementById('turnover-min').value,
-        turnover_max: document.getElementById('turnover-max').value,
-        volume_ratio_min: document.getElementById('volume-ratio-min').value,
-        volume_ratio_max: document.getElementById('volume-ratio-max').value,
-        
-        // 技术指标
-        rsi6_min: document.getElementById('rsi6-min').value,
-        rsi6_max: document.getElementById('rsi6-max').value,
-        kdj_k_min: document.getElementById('kdj-k-min').value,
-        kdj_k_max: document.getElementById('kdj-k-max').value,
-        macd_min: document.getElementById('macd-min').value,
-        macd_max: document.getElementById('macd-max').value,
-        cci_min: document.getElementById('cci-min').value,
-        cci_max: document.getElementById('cci-max').value,
-        
-        // 资金流向
-        net_amount_min: document.getElementById('net-amount-min').value,
-        net_amount_max: document.getElementById('net-amount-max').value,
-        lg_buy_rate_min: document.getElementById('lg-buy-rate-min').value,
-        lg_buy_rate_max: document.getElementById('lg-buy-rate-max').value,
-        net_d5_amount_min: document.getElementById('net-d5-amount-min').value,
-        net_d5_amount_max: document.getElementById('net-d5-amount-max').value
-    };
-    
-    // 收集动态查询条件
-    const dynamicConditions = [];
-    for (let i = 1; i <= dynamicConditionCount; i++) {
-        const fieldA = document.getElementById(`field-a-${i}`);
-        const operator = document.getElementById(`operator-${i}`);
-        const fieldB = document.getElementById(`field-b-${i}`);
-        const value = document.getElementById(`value-${i}`);
-        
-        if (fieldA && fieldA.value && operator && operator.value && fieldB && fieldB.value) {
-            const condition = {
-                field_a: fieldA.value,
-                operator: operator.value,
-                field_b: fieldB.value === '__value__' ? null : fieldB.value,
-                value: fieldB.value === '__value__' ? value.value : null
-            };
-            
-            // 验证条件完整性
-            if (condition.field_b || condition.value) {
-                dynamicConditions.push(condition);
-            }
-        }
-    }
-    
-    criteria.dynamic_conditions = dynamicConditions;
+    const criteria = getCurrentCriteria();
     
     performScreen(criteria);
 }
@@ -627,34 +530,52 @@ async function performScreen(criteria) {
         
         console.log('筛选响应:', response);
         
-        if (response.code === 200) {
-            currentResults = response.data.stocks;
-            renderScreenResults(response.data.stocks, criteria);
-            document.getElementById('result-count').textContent = response.data.total;
+        const normalized = normalizeScreenResponse(response);
+        if (normalized.ok) {
+            currentResults = normalized.stocks;
+            renderScreenResults(normalized.stocks, criteria);
+            document.getElementById('result-count').textContent = normalized.total;
             
             // 显示导出按钮
-            if (response.data.stocks.length > 0) {
+            if (normalized.stocks.length > 0) {
                 document.getElementById('export-results').style.display = 'inline-block';
             }
             
             // 显示是否有更多结果
-            if (response.data.has_more) {
+            if (normalized.has_more) {
                 showMoreResultsHint();
             }
         } else {
-            showError('screen-results', response.message || '筛选失败');
+            showError('screen-results', normalized.message || '筛选失败');
         }
     } catch (error) {
-        showError('screen-results', '筛选失败，请检查网络连接');
+        showError('screen-results', error?.message || '筛选失败，请检查网络连接');
         console.error('筛选失败:', error);
     }
+}
+
+function normalizeScreenResponse(response) {
+    const code = Number(response?.code ?? response?.status ?? response?.data?.code);
+    const payload = response?.data?.stocks ? response.data : (response?.data?.data || response?.data || {});
+    const stocks = Array.isArray(payload.stocks) ? payload.stocks : [];
+    const total = Number.isFinite(Number(payload.total)) ? Number(payload.total) : stocks.length;
+    const hasMore = Boolean(payload.has_more);
+    const message = response?.message || payload.message || response?.data?.message || '';
+
+    return {
+        ok: code === 200,
+        stocks,
+        total,
+        has_more: hasMore,
+        message
+    };
 }
 
 // 渲染筛选结果
 function renderScreenResults(stocks, criteria) {
     const container = document.getElementById('screen-results');
     
-    if (stocks.length === 0) {
+    if (!Array.isArray(stocks) || stocks.length === 0) {
         container.innerHTML = '<div class="text-center py-4"><p class="text-muted">未找到符合条件的股票</p></div>';
         return;
     }
@@ -882,11 +803,6 @@ function applyTemplate(conditions) {
     // 应用资金流向
     if (conditions.net_amount_min) document.getElementById('net-amount-min').value = conditions.net_amount_min;
     if (conditions.net_amount_max) document.getElementById('net-amount-max').value = conditions.net_amount_max;
-    if (conditions.lg_buy_rate_min) document.getElementById('lg-buy-rate-min').value = conditions.lg_buy_rate_min;
-    if (conditions.lg_buy_rate_max) document.getElementById('lg-buy-rate-max').value = conditions.lg_buy_rate_max;
-    if (conditions.net_d5_amount_min) document.getElementById('net-d5-amount-min').value = conditions.net_d5_amount_min;
-    if (conditions.net_d5_amount_max) document.getElementById('net-d5-amount-max').value = conditions.net_d5_amount_max;
-    
     // 应用动态条件
     if (conditions.dynamic_conditions && conditions.dynamic_conditions.length > 0) {
         conditions.dynamic_conditions.forEach(condition => {
@@ -944,52 +860,57 @@ function exportResults() {
 
 // 获取当前筛选条件
 function getCurrentCriteria() {
-    const criteria = {
-        // 基本条件
-        industry: document.getElementById('industry-filter').value,
-        area: document.getElementById('area-filter').value,
-        market: document.getElementById('market-filter').value,
-        trade_date: document.getElementById('date-filter').value,
-        
-        // 估值指标
-        pe_min: document.getElementById('pe-min').value,
-        pe_max: document.getElementById('pe-max').value,
-        pb_min: document.getElementById('pb-min').value,
-        pb_max: document.getElementById('pb-max').value,
-        ps_min: document.getElementById('ps-min').value,
-        ps_max: document.getElementById('ps-max').value,
-        dv_min: document.getElementById('dv-min').value,
-        dv_max: document.getElementById('dv-max').value,
-        
-        // 市值和交易
-        mv_min: document.getElementById('mv-min').value,
-        mv_max: document.getElementById('mv-max').value,
-        circ_mv_min: document.getElementById('circ-mv-min').value,
-        circ_mv_max: document.getElementById('circ-mv-max').value,
-        turnover_min: document.getElementById('turnover-min').value,
-        turnover_max: document.getElementById('turnover-max').value,
-        volume_ratio_min: document.getElementById('volume-ratio-min').value,
-        volume_ratio_max: document.getElementById('volume-ratio-max').value,
-        
-        // 技术指标
-        rsi6_min: document.getElementById('rsi6-min').value,
-        rsi6_max: document.getElementById('rsi6-max').value,
-        kdj_k_min: document.getElementById('kdj-k-min').value,
-        kdj_k_max: document.getElementById('kdj-k-max').value,
-        macd_min: document.getElementById('macd-min').value,
-        macd_max: document.getElementById('macd-max').value,
-        cci_min: document.getElementById('cci-min').value,
-        cci_max: document.getElementById('cci-max').value,
-        
-        // 资金流向
-        net_amount_min: document.getElementById('net-amount-min').value,
-        net_amount_max: document.getElementById('net-amount-max').value,
-        lg_buy_rate_min: document.getElementById('lg-buy-rate-min').value,
-        lg_buy_rate_max: document.getElementById('lg-buy-rate-max').value,
-        net_d5_amount_min: document.getElementById('net-d5-amount-min').value,
-        net_d5_amount_max: document.getElementById('net-d5-amount-max').value
+    const criteria = {};
+    const setIfPresent = (key, value) => {
+        if (value === null || value === undefined) return;
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed === '') return;
+            criteria[key] = trimmed;
+            return;
+        }
+        criteria[key] = value;
     };
-    
+
+    // 基本条件
+    setIfPresent('industry', document.getElementById('industry-filter').value);
+    setIfPresent('area', document.getElementById('area-filter').value);
+    setIfPresent('market', document.getElementById('market-filter').value);
+    setIfPresent('trade_date', document.getElementById('date-filter').value);
+
+    // 估值指标
+    setIfPresent('pe_min', document.getElementById('pe-min').value);
+    setIfPresent('pe_max', document.getElementById('pe-max').value);
+    setIfPresent('pb_min', document.getElementById('pb-min').value);
+    setIfPresent('pb_max', document.getElementById('pb-max').value);
+    setIfPresent('ps_min', document.getElementById('ps-min').value);
+    setIfPresent('ps_max', document.getElementById('ps-max').value);
+    setIfPresent('dv_min', document.getElementById('dv-min').value);
+    setIfPresent('dv_max', document.getElementById('dv-max').value);
+
+    // 市值和交易
+    setIfPresent('mv_min', document.getElementById('mv-min').value);
+    setIfPresent('mv_max', document.getElementById('mv-max').value);
+    setIfPresent('circ_mv_min', document.getElementById('circ-mv-min').value);
+    setIfPresent('circ_mv_max', document.getElementById('circ-mv-max').value);
+    setIfPresent('turnover_min', document.getElementById('turnover-min').value);
+    setIfPresent('turnover_max', document.getElementById('turnover-max').value);
+    setIfPresent('volume_ratio_min', document.getElementById('volume-ratio-min').value);
+    setIfPresent('volume_ratio_max', document.getElementById('volume-ratio-max').value);
+
+    // 技术指标
+    setIfPresent('rsi6_min', document.getElementById('rsi6-min').value);
+    setIfPresent('rsi6_max', document.getElementById('rsi6-max').value);
+    setIfPresent('kdj_k_min', document.getElementById('kdj-k-min').value);
+    setIfPresent('kdj_k_max', document.getElementById('kdj-k-max').value);
+    setIfPresent('macd_min', document.getElementById('macd-min').value);
+    setIfPresent('macd_max', document.getElementById('macd-max').value);
+    setIfPresent('cci_min', document.getElementById('cci-min').value);
+    setIfPresent('cci_max', document.getElementById('cci-max').value);
+
+    // 资金流向
+    setIfPresent('net_amount_min', document.getElementById('net-amount-min').value);
+    setIfPresent('net_amount_max', document.getElementById('net-amount-max').value);
     // 收集动态查询条件
     const dynamicConditions = [];
     for (let i = 1; i <= dynamicConditionCount; i++) {
@@ -1007,7 +928,7 @@ function getCurrentCriteria() {
             };
             
             // 验证条件完整性
-            if (condition.field_b || condition.value) {
+            if (condition.field_b || (condition.value !== null && condition.value !== '')) {
                 dynamicConditions.push(condition);
             }
         }
@@ -1069,4 +990,4 @@ function formatPercent(num) {
     return sign + Number(num).toFixed(2) + '%';
 }
 </script>
-{% endblock %} 
+{% endblock %}
