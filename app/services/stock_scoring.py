@@ -39,12 +39,14 @@ class StockScoringEngine:
             if factor_data.empty:
                 logger.warning(f"未找到因子数据: {trade_date}")
                 return pd.DataFrame()
+
+            score_column = self._resolve_factor_score_column(factor_data)
             
             # 透视表：行为ts_code，列为factor_id
             factor_scores = factor_data.pivot_table(
                 index='ts_code',
                 columns='factor_id',
-                values='z_score',  # 使用标准化后的Z分数
+                values=score_column,
                 aggfunc='first'
             ).fillna(0)
             
@@ -54,6 +56,23 @@ class StockScoringEngine:
         except Exception as e:
             logger.error(f"计算因子分数失败: {trade_date}, 错误: {e}")
             return pd.DataFrame()
+
+    def _resolve_factor_score_column(self, factor_data: pd.DataFrame) -> str:
+        """选择用于打分的数值列。
+
+        优先使用 `z_score`，如果 Parquet 中只有原始 `factor_value`，则自动回退。
+        """
+        if "z_score" in factor_data.columns:
+            z_score = pd.to_numeric(factor_data["z_score"], errors="coerce")
+            if z_score.notna().any():
+                factor_data["z_score"] = z_score
+                return "z_score"
+
+        if "factor_value" in factor_data.columns:
+            factor_data["factor_value"] = pd.to_numeric(factor_data["factor_value"], errors="coerce")
+            return "factor_value"
+
+        raise KeyError("factor_data does not contain z_score or factor_value")
     
     def calculate_composite_score(self, factor_scores: pd.DataFrame, weights: Dict[str, float],
                                  method: str = 'equal_weight') -> pd.DataFrame:
