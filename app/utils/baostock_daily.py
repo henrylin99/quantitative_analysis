@@ -1,137 +1,53 @@
 import baostock as bs
 import pandas as pd
-from db_utils import DatabaseUtils
-import time
 from datetime import datetime
-'''
-可以通过参数设置获取日k线、周k线、月k线，以及5分钟、15分钟、30分钟和60分钟k线数据
-code：股票代码，sh或sz.+6位数字代码，或者指数代码，如：sh.601398。sh：上海；sz：深圳。此参数不可为空；
-fields：指示简称，支持多指标输入，以半角逗号分隔，填写内容作为返回类型的列。详细指标列表见历史行情指标参数章节，日线与分钟线参数不同。此参数不可为空；
-start：开始日期（包含），格式“YYYY-MM-DD”，为空时取2015-01-01；
-end：结束日期（包含），格式“YYYY-MM-DD”，为空时取最近一个交易日；
-frequency：数据类型，默认为d，日k线；d=日k线、w=周、m=月、5=5分钟、15=15分钟、30=30分钟、60=60分钟k线数据，不区分大小写；指数没有分钟线数据；周线每周最后一个交易日才可以获取，月线每月最后一个交易日才可以获取。
-adjustflag：复权类型，默认不复权：3；1：后复权；2：前复权。已支持分钟线、日线、周线、月线前后复权。 BaoStock提供的是涨跌幅复权算法复权因子，具体介绍见BaoStock复权因子简介。
-'''
-# 连接到MySQL数据库
-conn, cursor = DatabaseUtils.connect_to_mysql()
 
-# 创建表结构
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS `baostock_daily_history` (
-      `ts_code` varchar(20) NOT NULL COMMENT '股票代码',
-      `timestamp` datetime NOT NULL COMMENT '交易时间',
-      `open` decimal(10,4) DEFAULT NULL COMMENT '开盘价',
-      `high` decimal(10,4) DEFAULT NULL COMMENT '最高价',
-      `low` decimal(10,4) DEFAULT NULL COMMENT '最低价',
-      `close` decimal(10,4) DEFAULT NULL COMMENT '收盘价',
-      `volume` bigint DEFAULT NULL COMMENT '成交量 （手）',
-      `amount` decimal(20,4) DEFAULT NULL COMMENT '成交额 （千元）',
-      PRIMARY KEY (`ts_code`,`timestamp`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票60分钟线行情数据表';
-''')
+from parquet_job_helpers import get_stock_codes
+from parquet_writer import save_partitioned_parquet
 
-def get_60min_stock_data_bs(stock_code, start_date, end_date):
-    """
-    使用Baostock获取股票60分钟线数据
-    :param stock_code: 股票代码，如 'sh.600519'
-    :param start_date: 开始日期，格式 'YYYY-MM-DD'
-    :param end_date: 结束日期，格式 'YYYY-MM-DD'
-    :return: DataFrame包含60分钟线数据
-    """
-    # 获取60分钟线数据
-    rs = bs.query_history_k_data_plus(stock_code,
-                                      "date,time,code,open,high,low,close,volume,amount",
-                                      start_date=start_date, end_date=end_date,
-                                      frequency="d", adjustflag="2")
 
-    data_list = []
-    while (rs.error_code == '0') & rs.next():
-        data_list.append(rs.get_row_data())
+def _to_bs_code(ts_code: str) -> str:
+    return ("sz." if ts_code.endswith(".SZ") else "sh.") + ts_code.split(".")[0]
 
-    df = pd.DataFrame(data_list, columns=rs.fields)
-    return df
+
+def _fetch_daily(stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    rs = bs.query_history_k_data_plus(
+        stock_code,
+        "date,time,code,open,high,low,close,volume,amount",
+        start_date=start_date,
+        end_date=end_date,
+        frequency="d",
+        adjustflag="2",
+    )
+    rows = []
+    while rs.error_code == "0" and rs.next():
+        rows.append(rs.get_row_data())
+    return pd.DataFrame(rows, columns=rs.fields)
 
 
 def main():
+    stock_list = get_stock_codes()
+    if not stock_list:
+        print("[baostock_daily] stock_basic.parquet is empty, skip.")
+        return
+
+    lg = bs.login()
     try:
-        # 获取股票列表
-        cursor.execute('''
-        SELECT ts_code FROM stock_basic;
-        ''')
-        stock_list = cursor.fetchall()
+        frames = []
+        for ts_code in stock_list:
+            df = _fetch_daily(_to_bs_code(ts_code), "2025-01-01", "2025-05-29")
+            if df is not None and not df.empty:
+                df = df.rename(columns={"date": "trade_date", "code": "ts_code"})
+                df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.strftime("%Y-%m-%d")
+                frames.append(df[["ts_code", "trade_date", "open", "high", "low", "close", "volume", "amount"]])
 
-        batch_size = 100
-        data_list = []
-        lg = bs.login()
-
-        for i in range(0, len(stock_list), batch_size):
-            batch_stock_list = stock_list[i:i + batch_size]
-            for stock in batch_stock_list:
-                ts_code = stock[0]
-                # 转换ts_code为baostock格式（例如：000001.SZ -> sz.000001）
-                if ts_code.endswith('.SZ'):
-                    bs_code = 'sz.' + ts_code.split('.')[0]
-                else:
-                    bs_code = 'sh.' + ts_code.split('.')[0]
-                
-                # 获取60分钟数据
-                print(bs_code)
-                df = get_60min_stock_data_bs(bs_code, '2025-01-01', '2025-05-29')
-                if df is not None and not df.empty:
-                    data_list.append(df)
-
-            # 合并当前批次的数据
-            if data_list:
-                combined_data = pd.concat(data_list, ignore_index=True)
-                # time.sleep(0.05)  # 避免请求过于频繁
-
-                # 插入数据
-                for index, row in combined_data.iterrows():
-                    try:
-                        # 将时间字符串转换为datetime对象
-                        time_str = row['time'][:14]  # 取YYYYMMDDHHMMSS部分
-                        
-                        # 检查时间字符串格式并打印
-                        # print(f"Processing time string: {time_str}")
-                        
-                        # 解析完整的日期时间字符串
-                        year = time_str[:4]
-                        month = time_str[4:6]
-                        day = time_str[6:8]
-                        hour = time_str[8:10]
-                        minute = time_str[10:12]
-                        second = time_str[12:14]
-                        
-                        # 构建datetime字符串
-                        datetime_str = f"{year}-{month}-{day} {hour}:{minute}:{second}"
-                        timestamp = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
-                        # print(f"Generated datetime: {timestamp}")
-                        
-                        cursor.execute('''
-                        INSERT IGNORE INTO baostock_daily_history (ts_code, timestamp, open, high, low, close, volume, amount)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-                        ''', (row['code'], timestamp, row['open'], row['high'], row['low'], 
-                              row['close'], row['volume'], row['amount']))
-                        
-                    except Exception as e:
-                        print(f"Error processing row: {row}")
-                        print(f"Error details: {e}")
-                        continue
-
-                # 提交事务
-                conn.commit()
-
-                # 清空当前批次的数据列表，为下一个批次做准备
-                data_list.clear()
-
-    except Exception as e:
-        print(f"程序执行出错: {e}")
-        print("Error details:", e.args)  # 打印更详细的错误信息
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+            total_saved = save_partitioned_parquet(combined, "trade_date", "baostock_daily/daily")
+            print(f"[baostock_daily] 完成，写入={total_saved}")
     finally:
-        # 关闭数据库连接
-        cursor.close()
-        conn.close()
         bs.logout()
+
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,10 @@ from datetime import datetime
 from loguru import logger
 
 from app.extensions import db
-from app.models import FactorValues, MLPredictions, StockBasic
+from app.models import FactorValues, MLPredictions
+from app.services.data_reader import ParquetDataReader
+
+_scoring_reader = ParquetDataReader()
 
 
 class StockScoringEngine:
@@ -272,16 +275,18 @@ class StockScoringEngine:
     def _get_stock_info(self, ts_codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """获取股票基本信息"""
         try:
-            stocks = StockBasic.query.filter(StockBasic.ts_code.in_(ts_codes)).all()
-            
+            basic_df = _scoring_reader.get_stock_basic()
+            basic_df = basic_df[basic_df["ts_code"].isin(set(ts_codes))]
+
             stock_info = {}
-            for stock in stocks:
-                stock_info[stock.ts_code] = {
-                    'symbol': stock.symbol,
-                    'name': stock.name,
-                    'area': stock.area,
-                    'industry': stock.industry,
-                    'list_date': stock.list_date.isoformat() if stock.list_date else None
+            for _, row in basic_df.iterrows():
+                ld = row.get("list_date")
+                stock_info[row["ts_code"]] = {
+                    'symbol': row["symbol"],
+                    'name': row["name"],
+                    'area': row["area"] if pd.notna(row.get("area")) else None,
+                    'industry': row["industry"] if pd.notna(row.get("industry")) else None,
+                    'list_date': ld.strftime("%Y-%m-%d") if hasattr(ld, "strftime") else (str(ld) if pd.notna(ld) else None)
                 }
             
             return stock_info

@@ -46,13 +46,10 @@ def test_portfolio_rebalance_apply_records_batch_run(app):
     )()
     rebalance_run = type("RebalanceRun", (), {"id": 12})()
 
-    with patch("app.api.ml_factor_api.PortfolioPosition") as portfolio_model, patch("app.api.ml_factor_api.StockDailyHistory") as price_model, patch("app.api.ml_factor_api.PortfolioRebalanceRun") as rebalance_model, patch("app.api.ml_factor_api.db") as db:
+    with patch("app.api.ml_factor_api.PortfolioPosition") as portfolio_model, patch("app.api.ml_factor_api._data_reader") as data_reader, patch("app.api.ml_factor_api.PortfolioRebalanceRun") as rebalance_model, patch("app.api.ml_factor_api.db") as db:
         portfolio_model.get_portfolio_positions.return_value = [existing_a, existing_b]
         portfolio_model.get_position_by_stock.side_effect = [existing_a, existing_b]
-        price_model.query.filter.return_value.order_by.return_value.first.side_effect = [
-            type("Price", (), {"close": 11.0})(),
-            type("Price", (), {"close": 9.0})(),
-        ]
+        data_reader.get_latest_close.side_effect = [11.0, 9.0]
         rebalance_model.create_run.return_value = rebalance_run
 
         response = client.post("/api/ml-factor/portfolio/rebalance/apply", json=payload)

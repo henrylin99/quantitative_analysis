@@ -8,15 +8,18 @@ load_dotenv()
 class Config:
     """基础配置类"""
     
-    # 数据库配置
+    # 兼容层：MySQL 仅用于遗留 ORM / 手工维护场景
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_USER = os.getenv('DB_USER', 'root')
     DB_PASSWORD = os.getenv('DB_PASSWORD', '')
     DB_NAME = os.getenv('DB_NAME', 'stock_cursor')
     DB_CHARSET = os.getenv('DB_CHARSET', 'utf8mb4')
     
-    # SQLAlchemy配置
-    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}?charset={DB_CHARSET}"
+    MYSQL_DATABASE_URI = os.getenv(
+        'MYSQL_DATABASE_URI',
+        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}?charset={DB_CHARSET}",
+    )
+    SQLALCHEMY_DATABASE_URI = MYSQL_DATABASE_URI
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 10,
@@ -43,6 +46,10 @@ class Config:
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FILE = os.getenv('LOG_FILE', 'logs/stock_analysis.log')
     
+    # 默认数据源：Parquet
+    DATA_DIR = os.getenv('DATA_DIR', os.path.join(os.path.dirname(__file__), 'data'))
+    DATA_SOURCE = os.getenv('DATA_SOURCE', 'parquet')  # 'parquet' | 'mysql'
+
     # 数据更新配置
     DATA_UPDATE_HOUR = int(os.getenv('DATA_UPDATE_HOUR', 18))  # 每日18点更新数据
     DATA_UPDATE_MINUTE = int(os.getenv('DATA_UPDATE_MINUTE', 0))
