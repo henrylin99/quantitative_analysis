@@ -2,128 +2,6 @@
 
 {% block title %}首页 - 股票分析系统{% endblock %}
 
-{% block extra_css %}
-<style>
-    /* 移动端首页优化 */
-    @media (max-width: 768px) {
-        /* 欢迎横幅移动端优化 */
-        .stock-info .card-body {
-            padding: 2rem 1rem;
-        }
-        
-        .stock-info .display-4 {
-            font-size: 2rem;
-        }
-        
-        .stock-info .lead {
-            font-size: 1rem;
-        }
-        
-        .stock-info p {
-            font-size: 0.9rem;
-        }
-        
-        .stock-info .btn {
-            margin-bottom: 0.5rem;
-            width: 100%;
-        }
-        
-        /* 功能卡片移动端优化 */
-        .metric-card .fa-3x {
-            font-size: 2rem;
-        }
-        
-        .metric-card .card-title {
-            font-size: 1rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .metric-card .card-text {
-            font-size: 0.85rem;
-            margin-bottom: 1rem;
-        }
-        
-        .metric-card .btn {
-            font-size: 0.85rem;
-            padding: 0.5rem 1rem;
-        }
-        
-        /* 数据概览卡片优化 */
-        .data-overview-card h3 {
-            font-size: 1.5rem;
-        }
-        
-        .data-overview-card .card-text {
-            font-size: 0.9rem;
-        }
-        
-        /* 系统特性卡片优化 */
-        .feature-card .card-title {
-            font-size: 1rem;
-        }
-        
-        .feature-card .card-text {
-            font-size: 0.85rem;
-        }
-        
-        /* 标题优化 */
-        h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-        
-        /* 间距优化 */
-        .mb-4 {
-            margin-bottom: 1.5rem !important;
-        }
-        
-        .mb-5 {
-            margin-bottom: 2rem !important;
-        }
-    }
-    
-    @media (max-width: 576px) {
-        .stock-info .card-body {
-            padding: 1.5rem 0.75rem;
-        }
-        
-        .stock-info .display-4 {
-            font-size: 1.75rem;
-        }
-        
-        .metric-card .fa-3x {
-            font-size: 1.75rem;
-        }
-        
-        .metric-card .card-body {
-            padding: 1rem 0.75rem;
-        }
-        
-        .data-overview-card h3 {
-            font-size: 1.25rem;
-        }
-        
-        h2 {
-            font-size: 1.25rem;
-        }
-    }
-    
-    /* 触摸优化 */
-    @media (hover: none) and (pointer: coarse) {
-        .metric-card {
-            transition: none;
-        }
-        
-        .metric-card:active {
-            transform: scale(0.98);
-        }
-        
-        .btn:active {
-            transform: scale(0.95);
-        }
-    }
-</style>
-{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -132,7 +10,7 @@
         <div class="col-12">
             <div class="card stock-info-banner">
                 <div class="card-body text-center py-5">
-                    <h1 class="display-4 mb-3">📈 股票分析系统</h1>
+                    <h1 class="display-4 mb-3">股票量化分析系统</h1>
                     <p class="lead">当前页面汇总已接通的股票分析与量化入口</p>
                     <p class="mb-4">提供股票基本面分析、技术面分析、资金流向分析、筹码分布分析等功能</p>
                     <div class="d-grid gap-2 d-md-block">
@@ -147,11 +25,11 @@
     <!-- 功能模块 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-4">🚀 核心功能</h2>
+            <h2 class="section-title">核心功能</h2>
         </div>
     </div>
 
-    <div class="row g-3 g-md-4 mb-5">
+    <div class="row g-3 g-md-4 mb-5 obs-animate">
         <!-- 股票列表 -->
         <div class="col-6 col-md-6 col-lg-3">
             <div class="card metric-card-enhanced h-100 hover-lift">
@@ -212,11 +90,11 @@
     <!-- 多因子模型系统 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-4">🧠 多因子模型系统</h2>
+            <h2 class="section-title">多因子模型系统</h2>
         </div>
     </div>
 
-    <div class="row g-3 g-md-4 mb-5">
+    <div class="row g-3 g-md-4 mb-5 obs-animate">
         <!-- 因子管理 -->
         <div class="col-6 col-md-4 col-lg-2">
             <div class="card metric-card-enhanced h-100 hover-lift">
@@ -305,12 +183,12 @@
     <!-- 实时交易分析系统 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-2">⚡ 实时交易分析系统（部分能力持续整改中）</h2>
+            <h2 class="section-title">实时交易分析系统</h2>
             <p class="text-muted mb-4">当前以真实数据源和已开放入口为准，未开放能力会继续下线或补齐。</p>
         </div>
     </div>
 
-    <div class="row g-3 g-md-4 mb-5">
+    <div class="row g-3 g-md-4 mb-5 obs-animate">
         <!-- 实时交易分析 -->
         <div class="col-12 col-md-6 col-lg-4">
             <div class="card metric-card-enhanced h-100 hover-lift">
@@ -357,7 +235,7 @@
     <!-- 数据概览 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-4">📊 数据概览</h2>
+            <h2 class="section-title">数据概览</h2>
         </div>
     </div>
 
@@ -399,11 +277,11 @@
     <!-- 系统特性 -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-4">✨ 系统特性</h2>
+            <h2 class="section-title">系统特性</h2>
         </div>
     </div>
 
-    <div class="row g-3 g-md-4">
+    <div class="row g-3 g-md-4 obs-animate">
         <div class="col-12 col-md-4">
             <div class="card card-financial h-100">
                 <div class="card-body">
