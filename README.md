@@ -44,6 +44,7 @@
 - 完善投资组合真实管理闭环
 - 实时行情分析仅保留设计稿与接口预留，暂不进入开发实施
 
+### 快速选股器，演示地址：https://stockscreener-production-dd0b.up.railway.app/
 ### 新版本开发中，演示地址：http://223.4.156.201:5173/
 
 ### 数据库下载地址：
@@ -97,13 +98,14 @@ python min5.py
 - **数据处理**: Pandas / NumPy / Scikit-learn
 - **机器学习**: XGBoost / LightGBM / CVXPY
 - **前端**: Bootstrap 5 / JavaScript
-- **数据库**: MySQL / SQLite
+- **市场数据源**: Parquet 文件（默认）
+- **应用状态层**: MySQL-compatible 数据库
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
-- MySQL 5.7或8.x
+- MySQL 5.7 或 8.x（用于应用状态层和 ORM 兼容）
 
 ### 2. 安装依赖
 ```bash
@@ -120,6 +122,8 @@ pip install -r requirements.txt
 cp .env.example .env
 docker compose up --build
 ```
+
+默认会同时启动 Web、MySQL 和 Redis。
 
 ### 3. 启动系统
 ```bash
@@ -397,8 +401,9 @@ stock_analysis/
 # SQLite（不建议使用，数据太大，速度较慢）
 SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
 
-# MySQL (默认，建议用MySQL)
-SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
+# Parquet 是默认市场数据源；应用状态层仍使用 MySQL-compatible 数据库
+DATA_SOURCE = 'parquet'
+MYSQL_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
 ```
 
 ### 日志配置
