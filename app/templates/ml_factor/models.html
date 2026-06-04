@@ -193,6 +193,152 @@
     </div>
 </div>
 
+<!-- 模型详情模态框 -->
+<div class="modal fade" id="modelDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye"></i> 模型详情
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modelDetailLoading" class="text-center py-5">
+                    <div class="spinner-border" role="status"></div>
+                    <div class="text-muted mt-2">加载模型详情中...</div>
+                </div>
+
+                <div id="modelDetailContent" style="display: none;">
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <h4 id="detailModelName" class="mb-1">--</h4>
+                            <div class="text-muted">
+                                <code id="detailModelId">--</code>
+                                <span class="ms-2 badge bg-info" id="detailModelType">--</span>
+                                <span class="ms-2 badge bg-secondary" id="detailTargetType">--</span>
+                                <span class="ms-2 badge bg-primary" id="detailStatus">--</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <div class="small text-muted">创建时间</div>
+                            <div id="detailCreatedAt">--</div>
+                            <div class="small text-muted mt-2">更新时间</div>
+                            <div id="detailUpdatedAt">--</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="small text-muted">预测总数</div>
+                                    <div class="fs-4" id="detailTotalPredictions">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="small text-muted">最近交易日</div>
+                                    <div class="fs-4" id="detailLatestTradeDate">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="small text-muted">覆盖股票数</div>
+                                    <div class="fs-4" id="detailUniqueTsCodes">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="small text-muted">模型文件</div>
+                                    <div class="fs-4" id="detailModelFileExists">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <strong>模型配置</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <small class="text-muted">因子列表</small>
+                                        <div id="detailFactorList">--</div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">模型参数</small>
+                                        <pre class="bg-light p-2 rounded mb-0" id="detailModelParams" style="white-space: pre-wrap;">--</pre>
+                                    </div>
+                                    <div class="mb-0">
+                                        <small class="text-muted">训练配置</small>
+                                        <pre class="bg-light p-2 rounded mb-0" id="detailTrainingConfig" style="white-space: pre-wrap;">--</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <strong>预测摘要</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="small text-muted">最新预测时间</div>
+                                            <div id="detailLatestCreatedAt">--</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="small text-muted">最近预测条数</div>
+                                            <div id="detailRecentCount">--</div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <small class="text-muted">最近预测明细</small>
+                                        <div class="table-responsive mt-2">
+                                            <table class="table table-sm table-striped mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>日期</th>
+                                                        <th>代码</th>
+                                                        <th>预测收益</th>
+                                                        <th>排名</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="detailRecentPredictions">
+                                                    <tr><td colspan="4" class="text-center text-muted">--</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modelDetailError" class="alert alert-danger" style="display: none;">
+                    <strong>加载失败：</strong><span id="modelDetailErrorMessage">--</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="goToPredictFromDetail()" id="detailPredictBtn">
+                    <i class="fas fa-chart-line"></i> 去预测
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 模型训练进度模态框 -->
 <div class="modal fade" id="trainingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg">
@@ -366,6 +512,7 @@ let allModels = [];
 let availableFactors = [];
 let selectedFactors = [];
 let currentPredictModelId = null;
+let currentDetailModelId = null;
 let predictionData = null;
 
 // 页面加载完成后初始化
@@ -463,8 +610,11 @@ function renderModels() {
                                 </span>
                             </td>
                             <td>${model.accuracy ? (model.accuracy * 100).toFixed(1) + '%' : '--'}</td>
-                            <td>${model.created_at || '--'}</td>
+                            <td>${formatDisplayDateTime(model.created_at)}</td>
                             <td>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="viewModel('${model.model_id}')">
+                                    <i class="fas fa-eye"></i> 查看
+                                </button>
                                 <button class="btn btn-sm btn-outline-success" onclick="trainModel('${model.model_id}')">
                                     <i class="fas fa-play"></i> 训练
                                 </button>
@@ -483,6 +633,18 @@ function renderModels() {
     `;
     
     container.innerHTML = html;
+}
+
+function formatDisplayDateTime(value) {
+    if (!value) {
+        return '--';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 // 渲染因子选择
@@ -663,15 +825,88 @@ async function deleteModel(modelId) {
     }
 }
 
+async function viewModel(modelId) {
+    currentDetailModelId = modelId;
+    const modalElement = document.getElementById('modelDetailModal');
+    const loadingElement = document.getElementById('modelDetailLoading');
+    const contentElement = document.getElementById('modelDetailContent');
+    const errorElement = document.getElementById('modelDetailError');
+
+    loadingElement.style.display = 'block';
+    contentElement.style.display = 'none';
+    errorElement.style.display = 'none';
+
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+
+    try {
+        const response = await axios.get(`/api/ml-factor/models/${modelId}`);
+        if (!response.data.success || !response.data.model) {
+            throw new Error(response.data.error || '获取模型详情失败');
+        }
+
+        renderModelDetail(response.data.model);
+        loadingElement.style.display = 'none';
+        contentElement.style.display = 'block';
+    } catch (error) {
+        console.error('获取模型详情失败:', error);
+        loadingElement.style.display = 'none';
+        errorElement.style.display = 'block';
+        document.getElementById('modelDetailErrorMessage').textContent = error.response?.data?.error || error.message;
+    }
+}
+
+function goToPredictFromDetail() {
+    const detailModal = bootstrap.Modal.getInstance(document.getElementById('modelDetailModal'));
+    if (detailModal) {
+        detailModal.hide();
+    }
+    if (!currentDetailModelId) {
+        return;
+    }
+    setTimeout(() => predictModel(currentDetailModelId), 200);
+}
+
+function renderModelDetail(model) {
+    document.getElementById('detailModelName').textContent = model.model_name || '--';
+    document.getElementById('detailModelId').textContent = model.model_id || '--';
+    document.getElementById('detailModelType').textContent = getModelTypeLabel(model.model_type);
+    document.getElementById('detailTargetType').textContent = getTargetTypeLabel(model.target_type);
+    document.getElementById('detailStatus').textContent = getStatusLabel(model.status);
+    document.getElementById('detailCreatedAt').textContent = formatDisplayDateTime(model.created_at);
+    document.getElementById('detailUpdatedAt').textContent = formatDisplayDateTime(model.updated_at);
+    document.getElementById('detailTotalPredictions').textContent = model.prediction_summary?.total_predictions ?? 0;
+    document.getElementById('detailLatestTradeDate').textContent = model.prediction_summary?.latest_trade_date || '--';
+    document.getElementById('detailUniqueTsCodes').textContent = model.prediction_summary?.unique_ts_codes ?? 0;
+    document.getElementById('detailModelFileExists').textContent = model.model_file_exists ? '是' : '否';
+    document.getElementById('detailLatestCreatedAt').textContent = formatDisplayDateTime(model.prediction_summary?.latest_created_at);
+    document.getElementById('detailRecentCount').textContent = Array.isArray(model.recent_predictions) ? model.recent_predictions.length : 0;
+    document.getElementById('detailFactorList').innerHTML = (model.factor_list || []).map(factor => `<span class="badge bg-secondary me-1 mb-1">${factor}</span>`).join('') || '--';
+    document.getElementById('detailModelParams').textContent = JSON.stringify(model.model_params || {}, null, 2);
+    document.getElementById('detailTrainingConfig').textContent = JSON.stringify(model.training_config || {}, null, 2);
+
+    const rows = Array.isArray(model.recent_predictions) && model.recent_predictions.length > 0
+        ? model.recent_predictions.map(item => `
+            <tr>
+                <td>${formatDisplayDateTime(item.trade_date)}</td>
+                <td><code>${item.ts_code || '--'}</code></td>
+                <td>${item.predicted_return != null ? Number(item.predicted_return).toFixed(4) : '--'}</td>
+                <td>${item.rank_score ?? '--'}</td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="4" class="text-center text-muted">暂无预测记录</td></tr>';
+    document.getElementById('detailRecentPredictions').innerHTML = rows;
+}
+
 // 显示训练模态框
-function showTrainingModal(model) {
+async function showTrainingModal(model) {
     // 重置模态框状态
     resetTrainingModal();
     
     // 设置模型信息
     document.getElementById('trainingModelName').textContent = model.model_name;
-    document.getElementById('trainingStartDateInput').value = '2023-01-01';
-    document.getElementById('trainingEndDateInput').value = '2024-01-01';
+    document.getElementById('trainingStartDateInput').value = '';
+    document.getElementById('trainingEndDateInput').value = '';
     
     // 显示模态框
     const modal = new bootstrap.Modal(document.getElementById('trainingModal'));
@@ -683,6 +918,34 @@ function showTrainingModal(model) {
     
     // 存储当前模型ID
     window.currentTrainingModelId = model.model_id;
+
+    await loadTrainingDateSuggestion(model.model_id);
+}
+
+async function loadTrainingDateSuggestion(modelId) {
+    try {
+        addTrainingLog('🔎 正在获取可训练日期建议...');
+        const response = await axios.get(`/api/ml-factor/models/${modelId}/training-date-range`);
+        if (!response.data.success || !response.data.date_range) {
+            throw new Error(response.data.error || '获取训练日期建议失败');
+        }
+
+        const dateRange = response.data.date_range;
+        document.getElementById('trainingStartDateInput').value = dateRange.start_date;
+        document.getElementById('trainingEndDateInput').value = dateRange.end_date;
+        addTrainingLog('📅 建议训练区间: ' + dateRange.start_date + ' 至 ' + dateRange.end_date);
+        if (dateRange.message) {
+            addTrainingLog(dateRange.message);
+        }
+    } catch (error) {
+        console.warn('获取训练日期建议失败:', error);
+        const fallbackDate = new Date();
+        fallbackDate.setDate(fallbackDate.getDate() - 2);
+        const fallbackText = fallbackDate.toISOString().slice(0, 10);
+        document.getElementById('trainingStartDateInput').value = fallbackText;
+        document.getElementById('trainingEndDateInput').value = fallbackText;
+        addTrainingLog('⚠️ 未能获取训练日期建议，已使用保守默认日期: ' + fallbackText);
+    }
 }
 
 // 开始训练
@@ -702,8 +965,8 @@ async function startTraining() {
         return;
     }
     
-    if (new Date(startDate) >= new Date(endDate)) {
-        alert('开始日期必须早于结束日期');
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('开始日期不能晚于结束日期');
         return;
     }
     
@@ -774,6 +1037,14 @@ async function executeTraining(modelId, startDate, endDate) {
 
         if (!response.data.success || !response.data.job_id) {
             throw new Error(response.data.error || '训练任务提交失败');
+        }
+
+        if (response.data.date_range_adjusted) {
+            const actualStart = response.data.start_date || startDate;
+            const actualEnd = response.data.end_date || endDate;
+            document.getElementById('trainingStartDate').textContent = actualStart;
+            document.getElementById('trainingEndDate').textContent = actualEnd;
+            addTrainingLog('📅 后端已自动调整实际训练区间: ' + actualStart + ' 至 ' + actualEnd);
         }
 
         addTrainingLog('🧾 任务已提交，开始轮询训练状态...');

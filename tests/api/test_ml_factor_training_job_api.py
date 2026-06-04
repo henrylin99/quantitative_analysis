@@ -47,3 +47,25 @@ def test_train_job_status_endpoint_returns_snapshot(app):
     assert data["success"] is True
     assert data["job"]["job_id"] == "job-123"
     assert data["job"]["status"] == "running"
+
+
+def test_training_date_range_endpoint_returns_suggestion(app):
+    client = app.test_client()
+
+    with patch("app.api.ml_factor_api.get_ml_manager") as get_manager:
+        get_manager.return_value.suggest_training_date_range.return_value = {
+            "model_id": "demo",
+            "start_date": "2024-06-10",
+            "end_date": "2024-06-10",
+            "target_type": "return_1d",
+            "target_period": 1,
+            "message": "已建议最近可计算未来收益的训练日期: 2024-06-10",
+        }
+
+        response = client.get("/api/ml-factor/models/demo/training-date-range")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["success"] is True
+    assert data["date_range"]["start_date"] == "2024-06-10"
+    assert data["date_range"]["end_date"] == "2024-06-10"
