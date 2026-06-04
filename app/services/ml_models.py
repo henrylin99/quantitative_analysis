@@ -84,6 +84,12 @@ class MLModelManager:
     def is_supported_target_type(cls, target_type: str) -> bool:
         return target_type in cls.SUPPORTED_TARGET_TYPES
 
+    @staticmethod
+    def _target_period(target_type: str) -> int:
+        if isinstance(target_type, str) and target_type.startswith("return_"):
+            return int(target_type.split("_")[1].replace("d", ""))
+        return 5
+
     def _get_model_definition(self, model_id: str) -> Dict[str, Any]:
         model_def = self.model_repo.get_definition(model_id)
         if not model_def:
@@ -93,6 +99,126 @@ class MLModelManager:
         model_def["model_params"] = model_def.get("model_params") or {}
         model_def["training_config"] = model_def.get("training_config") or {}
         return model_def
+
+    def resolve_training_date_range(self, model_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Return a training date range that can calculate future-return labels."""
+        model_def = self._get_model_definition(model_id)
+        if not model_def:
+            raise ValueError(f"未找到模型定义: {model_id}")
+
+        start_dt = pd.to_datetime(start_date, errors="coerce")
+        end_dt = pd.to_datetime(end_date, errors="coerce")
+        if pd.isna(start_dt) or pd.isna(end_dt):
+            raise ValueError("训练日期格式无效")
+        start_dt = start_dt.normalize()
+        end_dt = end_dt.normalize()
+        if start_dt > end_dt:
+            raise ValueError("开始日期不能晚于结束日期")
+
+        period = self._target_period(model_def["target_type"])
+        calendar_dates = pd.to_datetime(ParquetDataReader().get_trade_dates(), errors="coerce")
+        calendar_dates = sorted(dt.normalize() for dt in calendar_dates.dropna().drop_duplicates())
+        if not calendar_dates:
+            raise ValueError("未找到日线交易日数据，无法建议训练日期")
+        calendar_index = {dt: index for index, dt in enumerate(calendar_dates)}
+
+        def valid_trainable_dates(frame: pd.DataFrame, restrict_to_request: bool) -> List[pd.Timestamp]:
+            dates = pd.to_datetime(frame["trade_date"], errors="coerce").dropna().dt.normalize().drop_duplicates()
+            if restrict_to_request:
+                dates = [dt for dt in dates if start_dt <= dt <= end_dt]
+            return sorted(
+                dt
+                for dt in dates
+                if dt in calendar_index and calendar_index[dt] + period < len(calendar_dates)
+            )
+
+        requested_factor_data = self.factor_repo.get_values(
+            factor_ids=model_def["factor_list"],
+            start_date=start_dt.strftime("%Y-%m-%d"),
+            end_date=end_dt.strftime("%Y-%m-%d"),
+        )
+        valid_dates = []
+        using_fallback_dates = True
+        if not requested_factor_data.empty and "trade_date" in requested_factor_data.columns:
+            valid_dates = valid_trainable_dates(requested_factor_data, restrict_to_request=True)
+            using_fallback_dates = not valid_dates
+
+        if not valid_dates:
+            factor_data = self.factor_repo.get_values(factor_ids=model_def["factor_list"])
+            if factor_data.empty or "trade_date" not in factor_data.columns:
+                raise ValueError("未找到因子数据，无法建议训练日期")
+            valid_dates = valid_trainable_dates(factor_data, restrict_to_request=False)
+        if not valid_dates:
+            raise ValueError(f"没有可计算 {model_def['target_type']} 的训练日期")
+
+        if using_fallback_dates:
+            resolved_end = max(valid_dates)
+            resolved_start = resolved_end
+        else:
+            resolved_end = min(end_dt, max(valid_dates))
+            resolved_start_candidates = [dt for dt in valid_dates if dt <= resolved_end]
+            resolved_start = max(start_dt, min(resolved_start_candidates))
+        requested_start = start_dt.strftime("%Y-%m-%d")
+        requested_end = end_dt.strftime("%Y-%m-%d")
+        resolved_start_text = resolved_start.strftime("%Y-%m-%d")
+        resolved_end_text = resolved_end.strftime("%Y-%m-%d")
+        adjusted = requested_start != resolved_start_text or requested_end != resolved_end_text
+        message = None
+        if adjusted:
+            message = f"训练日期已自动调整为可计算未来收益的区间: {resolved_start_text} 至 {resolved_end_text}"
+
+        return {
+            "model_id": model_id,
+            "target_type": model_def["target_type"],
+            "target_period": period,
+            "start_date": resolved_start_text,
+            "end_date": resolved_end_text,
+            "requested_start_date": requested_start,
+            "requested_end_date": requested_end,
+            "adjusted": adjusted,
+            "message": message,
+        }
+
+    def suggest_training_date_range(self, model_id: str) -> Dict[str, Any]:
+        """Suggest a short, recent training range that has future-return labels."""
+        model_def = self._get_model_definition(model_id)
+        if not model_def:
+            raise ValueError(f"未找到模型定义: {model_id}")
+
+        period = self._target_period(model_def["target_type"])
+        factor_data = self.factor_repo.get_values(factor_ids=model_def["factor_list"])
+        if factor_data.empty or "trade_date" not in factor_data.columns:
+            raise ValueError("未找到因子数据，无法建议训练日期")
+
+        factor_dates = pd.to_datetime(factor_data["trade_date"], errors="coerce").dropna().dt.normalize().drop_duplicates()
+        factor_dates = sorted(factor_dates)
+        if not factor_dates:
+            raise ValueError("未找到有效因子日期，无法建议训练日期")
+
+        calendar_dates = pd.to_datetime(ParquetDataReader().get_trade_dates(), errors="coerce")
+        calendar_dates = sorted(dt.normalize() for dt in calendar_dates.dropna().drop_duplicates())
+        if not calendar_dates:
+            raise ValueError("未找到日线交易日数据，无法建议训练日期")
+
+        calendar_index = {dt: index for index, dt in enumerate(calendar_dates)}
+        valid_dates = [
+            dt
+            for dt in factor_dates
+            if dt in calendar_index and calendar_index[dt] + period < len(calendar_dates)
+        ]
+        if not valid_dates:
+            raise ValueError(f"没有可计算 {model_def['target_type']} 的训练日期")
+
+        resolved_date = max(valid_dates).strftime("%Y-%m-%d")
+        return {
+            "model_id": model_id,
+            "target_type": model_def["target_type"],
+            "target_period": period,
+            "start_date": resolved_date,
+            "end_date": resolved_date,
+            "adjusted": True,
+            "message": f"已建议最近可计算未来收益的训练日期: {resolved_date}",
+        }
     
     def create_model_definition(self, model_id: str, model_name: str, model_type: str,
                               factor_list: List[str], target_type: str,
@@ -169,6 +295,10 @@ class MLModelManager:
                     raise ValueError("未找到因子数据")
                 
                 logger.info(f"找到因子数据: {len(factor_data)} 条记录，日期范围: {factor_data['trade_date'].min()} 至 {factor_data['trade_date'].max()}")
+
+            factor_data = factor_data.copy()
+            factor_data["trade_date"] = pd.to_datetime(factor_data["trade_date"], errors="coerce")
+            factor_data = factor_data.dropna(subset=["trade_date"])
             
             # 透视表：行为(ts_code, trade_date)，列为factor_id
             feature_df = factor_data.pivot_table(
@@ -180,6 +310,10 @@ class MLModelManager:
             
             # 获取目标变量（未来收益率）
             target_df = self._calculate_target_returns(feature_df, model_def["target_type"])
+            if not target_df.empty:
+                target_df = target_df.copy()
+                target_df["trade_date"] = pd.to_datetime(target_df["trade_date"], errors="coerce")
+                target_df = target_df.dropna(subset=["trade_date"])
             
             # 合并特征和目标变量
             merged_df = pd.merge(feature_df, target_df, on=['ts_code', 'trade_date'], how='inner')
@@ -205,57 +339,61 @@ class MLModelManager:
     def _calculate_target_returns(self, feature_df: pd.DataFrame, target_type: str) -> pd.DataFrame:
         """计算目标变量（未来收益率）"""
         try:
+            empty_target = pd.DataFrame(columns=['ts_code', 'trade_date', 'target'])
+            if feature_df.empty or not {'ts_code', 'trade_date'}.issubset(feature_df.columns):
+                return empty_target
+
             # 解析目标类型
-            if target_type.startswith('return_'):
-                period = int(target_type.split('_')[1].replace('d', ''))
-            else:
-                period = 5  # 默认5日收益率
-            
-            target_data = []
-            
-            # 按股票分组计算未来收益率
-            for ts_code in feature_df['ts_code'].unique():
-                stock_features = feature_df[feature_df['ts_code'] == ts_code].copy()
-                stock_features = stock_features.sort_values('trade_date')
-                
-                # 获取该股票的价格数据
-                reader = ParquetDataReader()
-                price_data = reader.get_daily(ts_codes=[ts_code])
-                
-                if price_data.empty:
-                    continue
-                
-            # 为每个特征日期计算目标收益率
-            for _, row in stock_features.iterrows():
-                current_date = pd.to_datetime(row['trade_date'])
-                current_date_text = current_date.strftime("%Y-%m-%d")
-                
-                # 找到当前日期的价格
-                current_price_row = price_data[price_data['trade_date'] == current_date]
-                if current_price_row.empty:
-                    continue
-                    
-                    current_price = current_price_row.iloc[0]['close']
-                    
-                    # 找到未来日期的价格
-                    future_prices = price_data[price_data['trade_date'] > current_date].head(period)
-                    
-                    if len(future_prices) >= period:
-                        future_price = future_prices.iloc[period-1]['close']
-                        # 计算收益率
-                        return_rate = (future_price - current_price) / current_price
-                        
-                        target_data.append({
-                            'ts_code': ts_code,
-                            'trade_date': current_date_text,
-                            'target': return_rate
-                        })
-            
-            if not target_data:
+            period = self._target_period(target_type)
+
+            feature_keys = feature_df[['ts_code', 'trade_date']].copy()
+            feature_keys['ts_code'] = feature_keys['ts_code'].astype(str)
+            feature_keys['trade_date'] = pd.to_datetime(feature_keys['trade_date'], errors='coerce')
+            feature_keys = feature_keys.dropna(subset=['ts_code', 'trade_date'])
+            feature_keys['trade_date'] = feature_keys['trade_date'].dt.normalize()
+            feature_keys = feature_keys.drop_duplicates().reset_index(drop=True)
+            if feature_keys.empty:
+                return empty_target
+
+            ts_codes = feature_keys['ts_code'].dropna().unique().tolist()
+            min_date = feature_keys['trade_date'].min()
+            max_date = feature_keys['trade_date'].max()
+            price_end_date = max_date + timedelta(days=period + 10)
+
+            reader = ParquetDataReader()
+            price_data = reader.get_daily(
+                ts_codes=ts_codes,
+                start_date=min_date.strftime("%Y-%m-%d"),
+                end_date=price_end_date.strftime("%Y-%m-%d"),
+            )
+
+            if price_data.empty:
+                logger.warning("未找到任何日线价格数据，返回空目标数据")
+                return empty_target
+
+            price_data = price_data.copy()
+            required_cols = {'ts_code', 'trade_date', 'close'}
+            if not required_cols.issubset(price_data.columns):
+                logger.warning(f"日线价格数据缺少必要列: {sorted(required_cols - set(price_data.columns))}")
+                return empty_target
+
+            price_data['ts_code'] = price_data['ts_code'].astype(str)
+            price_data['trade_date'] = pd.to_datetime(price_data['trade_date'], errors='coerce')
+            price_data['close'] = pd.to_numeric(price_data['close'], errors='coerce')
+            price_data = price_data.dropna(subset=['ts_code', 'trade_date', 'close'])
+            price_data = price_data[price_data['close'] != 0]
+            price_data['trade_date'] = price_data['trade_date'].dt.normalize()
+            price_data = price_data.sort_values(['ts_code', 'trade_date']).reset_index(drop=True)
+            price_data['future_close'] = price_data.groupby('ts_code')['close'].shift(-period)
+            price_data['target'] = (price_data['future_close'] - price_data['close']) / price_data['close']
+
+            target_df = price_data[['ts_code', 'trade_date', 'target']].dropna(subset=['target'])
+            target_df = pd.merge(feature_keys, target_df, on=['ts_code', 'trade_date'], how='inner')
+
+            if target_df.empty:
                 logger.warning("无法计算真实收益率，返回空目标数据")
-                return pd.DataFrame(columns=['ts_code', 'trade_date', 'target'])
+                return empty_target
             
-            target_df = pd.DataFrame(target_data)
             logger.info(f"计算目标变量完成: {len(target_df)} 条记录")
             return target_df
             
@@ -678,7 +816,67 @@ class MLModelManager:
         except Exception as e:
             logger.error(f"获取模型列表失败: {e}")
             return []
-    
+
+    def get_model_detail(self, model_id: str) -> Dict[str, Any]:
+        """获取模型详情"""
+        try:
+            model_def = self._get_model_definition(model_id)
+            if not model_def:
+                return {}
+
+            predictions = self.model_repo.get_predictions(model_id=model_id)
+            prediction_summary = {
+                "total_predictions": 0,
+                "unique_trade_dates": 0,
+                "unique_ts_codes": 0,
+                "latest_trade_date": None,
+                "latest_created_at": None,
+            }
+            recent_predictions: List[Dict[str, Any]] = []
+            if not predictions.empty:
+                pred_df = predictions.copy()
+                if "trade_date" in pred_df.columns:
+                    pred_df["trade_date"] = pd.to_datetime(pred_df["trade_date"], errors="coerce")
+                if "created_at" in pred_df.columns:
+                    pred_df["created_at"] = pd.to_datetime(pred_df["created_at"], errors="coerce")
+                sort_cols = [c for c in ["trade_date", "created_at", "ts_code"] if c in pred_df.columns]
+                if sort_cols:
+                    ascending = [False, False, True][: len(sort_cols)]
+                    pred_df = pred_df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
+
+                prediction_summary["total_predictions"] = int(len(pred_df))
+                if "trade_date" in pred_df.columns and pred_df["trade_date"].notna().any():
+                    prediction_summary["unique_trade_dates"] = int(pred_df["trade_date"].dropna().dt.normalize().nunique())
+                    latest_trade_date = pred_df["trade_date"].dropna().max()
+                    prediction_summary["latest_trade_date"] = latest_trade_date.strftime("%Y-%m-%d")
+                if "ts_code" in pred_df.columns:
+                    prediction_summary["unique_ts_codes"] = int(pred_df["ts_code"].dropna().astype(str).nunique())
+                if "created_at" in pred_df.columns and pred_df["created_at"].notna().any():
+                    latest_created_at = pred_df["created_at"].dropna().max()
+                    prediction_summary["latest_created_at"] = latest_created_at.isoformat()
+
+                recent_predictions = pred_df.head(10).copy()
+                for column in ["trade_date", "created_at"]:
+                    if column in recent_predictions.columns:
+                        recent_predictions[column] = recent_predictions[column].apply(
+                            lambda value: value.isoformat() if hasattr(value, "isoformat") else value
+                        )
+                recent_predictions = recent_predictions.astype(object).where(pd.notna(recent_predictions), None).to_dict("records")
+
+            model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
+            scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
+
+            return {
+                **model_def,
+                "model_file_exists": os.path.exists(model_path),
+                "scaler_file_exists": os.path.exists(scaler_path),
+                "prediction_summary": prediction_summary,
+                "recent_predictions": recent_predictions,
+            }
+        except Exception as e:
+            logger.error(f"获取模型详情失败: {model_id}, 错误: {e}")
+            return {}
+
     def delete_model(self, model_id: str) -> Dict[str, Any]:
         """删除模型"""
         try:

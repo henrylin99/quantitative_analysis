@@ -93,6 +93,41 @@ def get_training_job_service():
     return training_job_service
 
 
+def _get_latest_scoring_trade_date():
+    """获取评分模块可用的最新交易日期。"""
+    try:
+        factor_df = get_scoring_engine().factor_repo.get_values()
+        if not factor_df.empty and "trade_date" in factor_df.columns:
+            latest_trade_date = pd.to_datetime(factor_df["trade_date"], errors="coerce").dropna().max()
+            if pd.notna(latest_trade_date):
+                return latest_trade_date.strftime("%Y-%m-%d")
+    except Exception as e:
+        logger.warning(f"读取因子最新交易日期失败: {e}")
+
+    try:
+        latest_trade_date = get_factor_engine().data_reader.get_stock_business_latest_date()
+        if latest_trade_date:
+            return latest_trade_date
+    except Exception as e:
+        logger.warning(f"读取业务表最新交易日期失败: {e}")
+
+    return datetime.utcnow().strftime("%Y-%m-%d")
+
+
+def _get_latest_prediction_trade_date():
+    """获取 ML 评分可用的最新预测日期。"""
+    try:
+        prediction_df = get_ml_manager().model_repo.get_predictions()
+        if not prediction_df.empty and "trade_date" in prediction_df.columns:
+            latest_trade_date = pd.to_datetime(prediction_df["trade_date"], errors="coerce").dropna().max()
+            if pd.notna(latest_trade_date):
+                return latest_trade_date.strftime("%Y-%m-%d")
+    except Exception as e:
+        logger.warning(f"读取最新预测日期失败: {e}")
+
+    return None
+
+
 def _build_model_performance_summary():
     manager = get_ml_manager()
     models = manager.get_model_list()
@@ -553,10 +588,29 @@ def train_ml_model():
             'progress': job.get('progress', 0.0),
             'step': job.get('step', ''),
             'logs': job.get('logs', []),
+            'start_date': job.get('start_date'),
+            'end_date': job.get('end_date'),
+            'requested_start_date': job.get('requested_start_date'),
+            'requested_end_date': job.get('requested_end_date'),
+            'date_range_adjusted': job.get('date_range_adjusted', False),
         }), 202
         
     except Exception as e:
         logger.error(f"训练机器学习模型失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/models/<model_id>/training-date-range', methods=['GET'])
+def suggest_model_training_date_range(model_id):
+    """获取模型训练建议日期区间"""
+    try:
+        date_range = get_ml_manager().suggest_training_date_range(model_id)
+        return jsonify({
+            'success': True,
+            'date_range': convert_numpy_types(date_range),
+        })
+    except Exception as e:
+        logger.error(f"获取模型训练建议日期失败: {model_id}, 错误: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -670,6 +724,22 @@ def get_model_list():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/models/<model_id>', methods=['GET'])
+def get_model_detail(model_id):
+    """获取模型详情"""
+    try:
+        model = get_ml_manager().get_model_detail(model_id)
+        if not model:
+            return jsonify({'error': f'未找到模型: {model_id}'}), 404
+        return jsonify({
+            'success': True,
+            'model': convert_numpy_types(model),
+        })
+    except Exception as e:
+        logger.error(f"获取模型详情失败: {model_id}, 错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/models/<model_id>', methods=['DELETE'])
 def delete_model(model_id):
     """删除模型定义、预测结果和本地模型文件"""
@@ -738,6 +808,40 @@ def factor_based_scoring():
         
     except Exception as e:
         logger.error(f"基于因子的股票打分失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/scoring/latest-trade-date', methods=['GET'])
+def latest_scoring_trade_date():
+    """返回评分页面可用的最新交易日期。"""
+    try:
+        latest_trade_date = _get_latest_scoring_trade_date()
+        return jsonify({
+            'success': True,
+            'latest_trade_date': latest_trade_date,
+        })
+    except Exception as e:
+        logger.error(f"获取最新评分交易日期失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/scoring/latest-prediction-date', methods=['GET'])
+def latest_prediction_trade_date():
+    """返回 ML 评分页面可用的最新预测日期。"""
+    try:
+        latest_trade_date = _get_latest_prediction_trade_date()
+        if not latest_trade_date:
+            return jsonify({
+                'success': False,
+                'latest_trade_date': None,
+                'error': '未找到预测数据',
+            }), 404
+        return jsonify({
+            'success': True,
+            'latest_trade_date': latest_trade_date,
+        })
+    except Exception as e:
+        logger.error(f"获取最新预测日期失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 

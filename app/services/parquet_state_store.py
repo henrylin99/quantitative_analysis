@@ -200,23 +200,33 @@ class FactorRepository:
         if df.empty:
             return df
 
+        if "trade_date" in df.columns:
+            df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+            df = df.dropna(subset=["trade_date"])
+
+        start_dt = pd.to_datetime(start_date, errors="coerce") if start_date is not None else None
+        end_dt = pd.to_datetime(end_date, errors="coerce") if end_date is not None else None
+        trade_dt = pd.to_datetime(trade_date, errors="coerce") if trade_date is not None else None
+
         if factor_ids is not None:
             df = df[df["factor_id"].isin(set(factor_ids))]
-        if trade_date is not None:
-            df = df[df["trade_date"].astype(str) == str(trade_date)]
+        if trade_dt is not None and "trade_date" in df.columns:
+            df = df[df["trade_date"].dt.normalize() == trade_dt.normalize()]
         if ts_codes is not None:
             df = df[df["ts_code"].isin(set(ts_codes))]
-        if start_date is not None:
-            df = df[df["trade_date"].astype(str) >= str(start_date)]
-        if end_date is not None:
-            df = df[df["trade_date"].astype(str) <= str(end_date)]
+        if start_dt is not None and "trade_date" in df.columns:
+            df = df[df["trade_date"] >= start_dt]
+        if end_dt is not None and "trade_date" in df.columns:
+            df = df[df["trade_date"] <= end_dt + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)]
 
         if df.empty:
             return df
 
         for column in ["trade_date", "created_at"]:
             if column in df.columns:
-                df[column] = df[column].astype(str)
+                converted = pd.to_datetime(df[column], errors="coerce")
+                if converted.notna().any():
+                    df[column] = converted
         sort_cols = [c for c in ["trade_date", "ts_code", "factor_id"] if c in df.columns]
         if sort_cols:
             df = df.sort_values(sort_cols).reset_index(drop=True)

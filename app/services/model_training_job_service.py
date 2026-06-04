@@ -18,16 +18,25 @@ class ModelTrainingJobService:
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="model-train")
 
     def submit_job(self, model_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+        resolved = self.manager.resolve_training_date_range(model_id, start_date, end_date)
+        resolved_start_date = resolved["start_date"]
+        resolved_end_date = resolved["end_date"]
         job_id = str(uuid4())
+        logs = [f"已提交训练任务: {model_id}"]
+        if resolved.get("adjusted") and resolved.get("message"):
+            logs.append(resolved["message"])
         snapshot = {
             "job_id": job_id,
             "model_id": model_id,
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": resolved_start_date,
+            "end_date": resolved_end_date,
+            "requested_start_date": resolved.get("requested_start_date", start_date),
+            "requested_end_date": resolved.get("requested_end_date", end_date),
+            "date_range_adjusted": bool(resolved.get("adjusted")),
             "status": "queued",
             "progress": 0.0,
             "step": "已加入训练队列",
-            "logs": [f"已提交训练任务: {model_id}"],
+            "logs": logs,
             "result": None,
             "error": None,
             "created_at": datetime.utcnow().isoformat(),
@@ -36,7 +45,7 @@ class ModelTrainingJobService:
         }
         with self._lock:
             self.job_store[job_id] = snapshot
-        self._executor.submit(self._run_job, job_id, model_id, start_date, end_date)
+        self._executor.submit(self._run_job, job_id, model_id, resolved_start_date, resolved_end_date)
         return deepcopy(snapshot)
 
     def get_job_snapshot(self, job_id: str) -> Optional[Dict[str, Any]]:

@@ -14,3 +14,12 @@ def test_scoring_template_hides_unfinished_export_and_portfolio_actions():
     assert "function createPortfolio()" not in html
     assert "导出功能待实现" not in html
     assert "创建投资组合功能待实现" not in html
+
+
+def test_scoring_template_switches_date_source_by_mode():
+    html = Path("app/templates/ml_factor/scoring.html").read_text(encoding="utf-8")
+
+    assert "/api/ml-factor/scoring/latest-trade-date" in html
+    assert "/api/ml-factor/scoring/latest-prediction-date" in html
+    assert "handleScoringMethodChange" in html
+    assert "loadTradeDateForMode(document.getElementById('scoringMethod').value)" in html

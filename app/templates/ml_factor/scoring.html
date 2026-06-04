@@ -79,18 +79,33 @@
 <script>
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 设置默认日期为今天
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('tradeDate').value = today;
+    document.getElementById('scoringMethod').addEventListener('change', handleScoringMethodChange);
+    loadTradeDateForMode(document.getElementById('scoringMethod').value);
 });
+
+async function loadTradeDateForMode(scoringMethod) {
+    try {
+        const endpoint = scoringMethod === 'ml_based'
+            ? '/api/ml-factor/scoring/latest-prediction-date'
+            : '/api/ml-factor/scoring/latest-trade-date';
+        const response = await axios.get(endpoint);
+        if (response.data && response.data.success && response.data.latest_trade_date) {
+            document.getElementById('tradeDate').value = response.data.latest_trade_date;
+        }
+    } catch (error) {
+        console.warn('加载最新交易日期失败，保留默认值:', error);
+    }
+}
+
+function handleScoringMethodChange(event) {
+    loadTradeDateForMode(event.target.value);
+}
 
 // 执行评分计算
 async function calculateScoring() {
     const scoringMethod = document.getElementById('scoringMethod').value;
     const topN = parseInt(document.getElementById('topN').value);
-    
-    // 使用数据库中实际存在的最新日期
-    const tradeDate = '2025-05-23';
+    const tradeDate = document.getElementById('tradeDate').value;
     
     showLoading('scoringResults');
     
