@@ -526,14 +526,21 @@ function showAnalysisLoading() {
 
 // 显示分析结果
 function showAnalysisResults() {
-    document.getElementById('stock-info-section').style.display = 'block';
-    document.getElementById('metrics-section').style.display = 'block';
-    document.getElementById('main-chart-section').style.display = 'block';
-    document.getElementById('indicators-section').style.display = 'block';
-    document.getElementById('data-section').style.display = 'block';
+    [
+        'stock-info-section',
+        'metrics-section',
+        'main-chart-section',
+        'indicators-section',
+        'data-section'
+    ].forEach(showSection);
     
     if (mainChart) mainChart.hideLoading();
     if (indicatorChart) indicatorChart.hideLoading();
+}
+
+function showSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    section.style.display = section.classList.contains('row') ? 'flex' : 'block';
 }
 
 // 显示分析错误

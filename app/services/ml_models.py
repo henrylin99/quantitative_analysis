@@ -16,20 +16,24 @@ from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_reg
 import xgboost as xgb
 import lightgbm as lgb
 
-from app.extensions import db
-from app.models import (
-    MLModelDefinition, MLPredictions, FactorValues
-)
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_state_store import (
+    FactorRepository,
+    ModelRepository,
+    ParquetStateStore,
+)
 
 
 class MLModelManager:
     """机器学习模型管理器"""
     SUPPORTED_TARGET_TYPES = {"return_1d", "return_5d", "return_20d", "ranking"}
     
-    def __init__(self):
+    def __init__(self, state_store: ParquetStateStore = None):
         self.models = {}  # 缓存已加载的模型
         self.scalers = {}  # 缓存特征缩放器
+        self.state_store = state_store or ParquetStateStore()
+        self.factor_repo = FactorRepository(self.state_store)
+        self.model_repo = ModelRepository(self.state_store)
         self.model_configs = {
             'random_forest': {
                 'regressor': RandomForestRegressor,
@@ -79,6 +83,16 @@ class MLModelManager:
     @classmethod
     def is_supported_target_type(cls, target_type: str) -> bool:
         return target_type in cls.SUPPORTED_TARGET_TYPES
+
+    def _get_model_definition(self, model_id: str) -> Dict[str, Any]:
+        model_def = self.model_repo.get_definition(model_id)
+        if not model_def:
+            return {}
+        model_def = dict(model_def)
+        model_def["factor_list"] = model_def.get("factor_list") or []
+        model_def["model_params"] = model_def.get("model_params") or {}
+        model_def["training_config"] = model_def.get("training_config") or {}
+        return model_def
     
     def create_model_definition(self, model_id: str, model_name: str, model_type: str,
                               factor_list: List[str], target_type: str,
@@ -89,9 +103,7 @@ class MLModelManager:
                 logger.warning(f"不支持的目标类型: {target_type}")
                 return False
 
-            # 检查模型是否已存在
-            existing = MLModelDefinition.query.filter_by(model_id=model_id).first()
-            if existing:
+            if self.model_repo.get_definition(model_id):
                 logger.warning(f"模型已存在: {model_id}")
                 return False
             
@@ -110,24 +122,23 @@ class MLModelManager:
                 }
             
             # 创建模型定义
-            model_def = MLModelDefinition(
-                model_id=model_id,
-                model_name=model_name,
-                model_type=model_type,
-                factor_list=factor_list,
-                target_type=target_type,
-                model_params=model_params,
-                training_config=training_config
+            self.model_repo.upsert_definition(
+                {
+                    "model_id": model_id,
+                    "model_name": model_name,
+                    "model_type": model_type,
+                    "factor_list": factor_list,
+                    "target_type": target_type,
+                    "model_params": model_params,
+                    "training_config": training_config,
+                    "is_active": True,
+                }
             )
-            
-            db.session.add(model_def)
-            db.session.commit()
             
             logger.info(f"成功创建模型定义: {model_id}")
             return True
             
         except Exception as e:
-            db.session.rollback()
             logger.error(f"创建模型定义失败: {model_id}, 错误: {e}")
             return False
     
@@ -135,30 +146,24 @@ class MLModelManager:
         """准备训练数据"""
         try:
             # 获取模型定义
-            model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
+            model_def = self._get_model_definition(model_id)
             if not model_def:
                 raise ValueError(f"未找到模型定义: {model_id}")
 
-            if not self.is_supported_target_type(model_def.target_type):
-                raise ValueError(f"不支持的目标类型: {model_def.target_type}")
+            if not self.is_supported_target_type(model_def["target_type"]):
+                raise ValueError(f"不支持的目标类型: {model_def['target_type']}")
             
             # 获取因子数据 - 先尝试指定日期范围
-            factor_query = FactorValues.query.filter(
-                FactorValues.factor_id.in_(model_def.factor_list),
-                FactorValues.trade_date >= start_date,
-                FactorValues.trade_date <= end_date
-            ).order_by(FactorValues.ts_code, FactorValues.trade_date, FactorValues.factor_id)
-            
-            factor_data = pd.read_sql(factor_query.statement, db.engine)
+            factor_data = self.factor_repo.get_values(
+                factor_ids=model_def["factor_list"],
+                start_date=start_date,
+                end_date=end_date,
+            )
             
             # 如果指定日期范围没有数据，尝试获取所有可用数据
             if factor_data.empty:
                 logger.warning(f"指定日期范围 {start_date} 至 {end_date} 没有因子数据，尝试获取所有可用数据")
-                factor_query = FactorValues.query.filter(
-                    FactorValues.factor_id.in_(model_def.factor_list)
-                ).order_by(FactorValues.ts_code, FactorValues.trade_date, FactorValues.factor_id)
-                
-                factor_data = pd.read_sql(factor_query.statement, db.engine)
+                factor_data = self.factor_repo.get_values(factor_ids=model_def["factor_list"])
                 
                 if factor_data.empty:
                     raise ValueError("未找到因子数据")
@@ -174,7 +179,7 @@ class MLModelManager:
             ).reset_index()
             
             # 获取目标变量（未来收益率）
-            target_df = self._calculate_target_returns(feature_df, model_def.target_type)
+            target_df = self._calculate_target_returns(feature_df, model_def["target_type"])
             
             # 合并特征和目标变量
             merged_df = pd.merge(feature_df, target_df, on=['ts_code', 'trade_date'], how='inner')
@@ -186,7 +191,7 @@ class MLModelManager:
                 raise ValueError("合并后数据为空")
             
             # 分离特征和目标变量
-            feature_columns = model_def.factor_list
+            feature_columns = model_def["factor_list"]
             X = merged_df[feature_columns]
             y = merged_df['target']
             
@@ -220,14 +225,15 @@ class MLModelManager:
                 if price_data.empty:
                     continue
                 
-                # 为每个特征日期计算目标收益率
-                for _, row in stock_features.iterrows():
-                    current_date = row['trade_date']
-                    
-                    # 找到当前日期的价格
-                    current_price_row = price_data[price_data['trade_date'] == current_date]
-                    if current_price_row.empty:
-                        continue
+            # 为每个特征日期计算目标收益率
+            for _, row in stock_features.iterrows():
+                current_date = pd.to_datetime(row['trade_date'])
+                current_date_text = current_date.strftime("%Y-%m-%d")
+                
+                # 找到当前日期的价格
+                current_price_row = price_data[price_data['trade_date'] == current_date]
+                if current_price_row.empty:
+                    continue
                     
                     current_price = current_price_row.iloc[0]['close']
                     
@@ -241,7 +247,7 @@ class MLModelManager:
                         
                         target_data.append({
                             'ts_code': ts_code,
-                            'trade_date': current_date,
+                            'trade_date': current_date_text,
                             'target': return_rate
                         })
             
@@ -265,7 +271,7 @@ class MLModelManager:
                     progress_callback(progress, step, message)
 
             # 获取模型定义
-            model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
+            model_def = self._get_model_definition(model_id)
             if not model_def:
                 raise ValueError(f"未找到模型定义: {model_id}")
             
@@ -277,18 +283,18 @@ class MLModelManager:
             
             # 特征工程
             report(35.0, "特征工程", "正在执行特征工程...")
-            X_processed, feature_names = self._feature_engineering(X, y, model_def.training_config)
+            X_processed, feature_names = self._feature_engineering(X, y, model_def["training_config"])
             
             # 分割训练集和测试集
             report(50.0, "拆分训练集", "正在拆分训练集和测试集...")
-            test_size = model_def.training_config.get('test_size', 0.2)
+            test_size = model_def["training_config"].get('test_size', 0.2)
             X_train, X_test, y_train, y_test = train_test_split(
                 X_processed, y, test_size=test_size, random_state=42, shuffle=False
             )
             
             # 创建模型
-            report(65.0, "创建模型", f"正在创建模型: {model_def.model_type}")
-            model = self._create_model(model_def.model_type, model_def.model_params)
+            report(65.0, "创建模型", f"正在创建模型: {model_def['model_type']}")
+            model = self._create_model(model_def["model_type"], model_def["model_params"])
             
             # 训练模型
             report(80.0, "训练模型", "正在训练模型...")
@@ -320,8 +326,8 @@ class MLModelManager:
                 metrics['feature_importance'] = feature_importance
             
             # 交叉验证
-            if model_def.training_config.get('validation_method') == 'time_series_split':
-                cv_folds = model_def.training_config.get('cv_folds', 5)
+            if model_def["training_config"].get('validation_method') == 'time_series_split':
+                cv_folds = model_def["training_config"].get('cv_folds', 5)
                 tscv = TimeSeriesSplit(n_splits=cv_folds)
                 cv_scores = cross_val_score(model, X_processed, y, cv=tscv, scoring='r2')
                 metrics['cv_mean'] = cv_scores.mean()
@@ -453,33 +459,25 @@ class MLModelManager:
                 return pd.DataFrame()
             
             # 获取模型定义
-            model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
+            model_def = self._get_model_definition(model_id)
             if not model_def:
                 logger.error(f"未找到模型定义: {model_id}")
                 return pd.DataFrame()
             
             # 获取因子数据 - 先尝试指定日期
-            factor_query = FactorValues.query.filter(
-                FactorValues.factor_id.in_(model_def.factor_list),
-                FactorValues.trade_date == trade_date
+            factor_data = self.factor_repo.get_values(
+                factor_ids=model_def["factor_list"],
+                trade_date=trade_date,
+                ts_codes=ts_codes,
             )
-            
-            if ts_codes:
-                factor_query = factor_query.filter(FactorValues.ts_code.in_(ts_codes))
-            
-            factor_data = pd.read_sql(factor_query.statement, db.engine)
             
             # 如果指定日期没有数据，使用最新可用数据
             if factor_data.empty:
                 logger.warning(f"指定日期 {trade_date} 没有因子数据，使用最新可用数据")
-                factor_query = FactorValues.query.filter(
-                    FactorValues.factor_id.in_(model_def.factor_list)
+                factor_data = self.factor_repo.get_values(
+                    factor_ids=model_def["factor_list"],
+                    ts_codes=ts_codes,
                 )
-                
-                if ts_codes:
-                    factor_query = factor_query.filter(FactorValues.ts_code.in_(ts_codes))
-                
-                factor_data = pd.read_sql(factor_query.statement, db.engine)
                 
                 if factor_data.empty:
                     logger.warning(f"未找到任何因子数据")
@@ -499,7 +497,7 @@ class MLModelManager:
             )
             
             # 确保所有需要的因子都存在
-            missing_factors = set(model_def.factor_list) - set(feature_df.columns)
+            missing_factors = set(model_def["factor_list"]) - set(feature_df.columns)
             if missing_factors:
                 logger.warning(f"缺少因子: {missing_factors}")
                 # 用0填充缺失的因子
@@ -507,7 +505,7 @@ class MLModelManager:
                     feature_df[factor] = 0
             
             # 按照训练时的顺序排列特征
-            feature_df = feature_df[model_def.factor_list]
+            feature_df = feature_df[model_def["factor_list"]]
             
             # 删除包含缺失值的行
             feature_df = feature_df.dropna()
@@ -560,39 +558,12 @@ class MLModelManager:
         try:
             if predictions_df.empty:
                 return True
-            
-            # 删除已存在的预测结果
-            trade_dates = predictions_df['trade_date'].unique()
-            model_ids = predictions_df['model_id'].unique()
-            
-            for trade_date in trade_dates:
-                for model_id in model_ids:
-                    MLPredictions.query.filter_by(
-                        trade_date=trade_date,
-                        model_id=model_id
-                    ).delete()
-            
-            # 批量插入新预测结果
-            records = []
-            for _, row in predictions_df.iterrows():
-                record = MLPredictions(
-                    ts_code=row['ts_code'],
-                    trade_date=row['trade_date'],
-                    model_id=row['model_id'],
-                    predicted_return=row['predicted_return'],
-                    probability_score=row['probability_score'],
-                    rank_score=row['rank_score']
-                )
-                records.append(record)
-            
-            db.session.bulk_save_objects(records)
-            db.session.commit()
-            
-            logger.info(f"成功保存 {len(records)} 条预测结果")
+
+            written = self.model_repo.save_predictions(predictions_df)
+            logger.info(f"成功保存 {written} 条预测结果")
             return True
             
         except Exception as e:
-            db.session.rollback()
             logger.error(f"保存预测结果失败: {e}")
             return False
     
@@ -600,24 +571,26 @@ class MLModelManager:
         """评估模型性能"""
         try:
             # 获取预测结果
-            pred_query = MLPredictions.query.filter(
-                MLPredictions.model_id == model_id,
-                MLPredictions.trade_date >= start_date,
-                MLPredictions.trade_date <= end_date
-            ).order_by(MLPredictions.trade_date, MLPredictions.ts_code)
-            
-            pred_data = pd.read_sql(pred_query.statement, db.engine)
+            pred_data = self.model_repo.get_predictions(
+                model_id=model_id,
+                trade_date=None,
+            )
+            if not pred_data.empty:
+                pred_data = pred_data[
+                    (pred_data["trade_date"] >= start_date) &
+                    (pred_data["trade_date"] <= end_date)
+                ].sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
             
             if pred_data.empty:
                 return {'error': '未找到预测数据'}
             
             # 获取实际收益率
-            model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
+            model_def = self._get_model_definition(model_id)
             if not model_def:
                 return {'error': '未找到模型定义'}
             
             # 计算实际收益率
-            actual_returns = self._get_actual_returns(pred_data, model_def.target_type)
+            actual_returns = self._get_actual_returns(pred_data, model_def["target_type"])
             
             # 合并预测和实际数据
             merged_data = pd.merge(
@@ -679,7 +652,9 @@ class MLModelManager:
                 stock_prices[f'return_{period}d'] = stock_prices['close'].pct_change(period).shift(-period)
                 
                 # 只保留预测日期对应的收益率
-                pred_dates = pred_data[pred_data['ts_code'] == ts_code]['trade_date'].unique()
+                pred_dates = pd.to_datetime(
+                    pred_data[pred_data['ts_code'] == ts_code]['trade_date'].unique()
+                )
                 stock_result = stock_prices[stock_prices['trade_date'].isin(pred_dates)]
                 
                 if not stock_result.empty:
@@ -699,8 +674,7 @@ class MLModelManager:
     def get_model_list(self) -> List[Dict[str, Any]]:
         """获取模型列表"""
         try:
-            models = MLModelDefinition.query.filter_by(is_active=True).all()
-            return [model.to_dict() for model in models]
+            return self.model_repo.list_definitions(include_inactive=False)
         except Exception as e:
             logger.error(f"获取模型列表失败: {e}")
             return []
@@ -708,17 +682,19 @@ class MLModelManager:
     def delete_model(self, model_id: str) -> Dict[str, Any]:
         """删除模型"""
         try:
-            model_def = MLModelDefinition.query.filter_by(model_id=model_id).first()
+            model_def = self._get_model_definition(model_id)
             if not model_def:
                 return {
                     'success': False,
                     'error': f'未找到模型定义: {model_id}'
                 }
 
-            db.session.delete(model_def)
-            deleted_prediction_count = MLPredictions.query.filter_by(model_id=model_id).delete()
-            
-            db.session.commit()
+            pred_data = self.model_repo.get_predictions(model_id=model_id)
+            deleted_prediction_count = len(pred_data) if not pred_data.empty else 0
+            self.model_repo.delete_definition(model_id)
+            if not pred_data.empty:
+                deleted_prediction_count = len(pred_data)
+            # delete_definition already removes predictions for the model
             
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
@@ -745,7 +721,6 @@ class MLModelManager:
             }
             
         except Exception as e:
-            db.session.rollback()
             logger.error(f"删除模型失败: {model_id}, 错误: {e}")
             return {
                 'success': False,
