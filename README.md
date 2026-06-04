@@ -97,13 +97,13 @@ python min5.py
 - **数据处理**: Pandas / NumPy / Scikit-learn
 - **机器学习**: XGBoost / LightGBM / CVXPY
 - **前端**: Bootstrap 5 / JavaScript
-- **数据库**: MySQL / SQLite
+- **数据源**: Parquet 文件（默认）/ SQLite / MySQL 兼容层
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
-- MySQL 5.7或8.x
+- 默认无需 MySQL；如需使用遗留兼容层，再额外配置 MySQL 5.7 或 8.x
 
 ### 2. 安装依赖
 ```bash
@@ -397,8 +397,9 @@ stock_analysis/
 # SQLite（不建议使用，数据太大，速度较慢）
 SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
 
-# MySQL (默认，建议用MySQL)
-SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
+# Parquet 是默认数据源；如需遗留 ORM 兼容，可配置 MySQL
+DATA_SOURCE = 'parquet'
+MYSQL_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
 ```
 
 ### 日志配置
