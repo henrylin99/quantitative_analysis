@@ -104,5 +104,5 @@ def save_partitioned_parquet(
     frame[date_col] = pd.to_datetime(frame[date_col]).dt.strftime("%Y-%m-%d")
     total = 0
     for date_value, group in frame.groupby(date_col, sort=True):
-        total += save_to_parquet(group.drop(columns=[date_col]), date_value, table, data_dir=data_dir)
+        total += save_to_parquet(group, date_value, table, data_dir=data_dir)
     return total

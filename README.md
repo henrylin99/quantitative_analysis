@@ -97,13 +97,14 @@ python min5.py
 - **数据处理**: Pandas / NumPy / Scikit-learn
 - **机器学习**: XGBoost / LightGBM / CVXPY
 - **前端**: Bootstrap 5 / JavaScript
-- **数据源**: Parquet 文件（默认）/ SQLite / MySQL 兼容层
+- **市场数据源**: Parquet 文件（默认）
+- **应用状态层**: MySQL-compatible 数据库
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
-- 默认无需 MySQL；如需使用遗留兼容层，再额外配置 MySQL 5.7 或 8.x
+- MySQL 5.7 或 8.x（用于应用状态层和 ORM 兼容）
 
 ### 2. 安装依赖
 ```bash
@@ -120,6 +121,8 @@ pip install -r requirements.txt
 cp .env.example .env
 docker compose up --build
 ```
+
+默认会同时启动 Web、MySQL 和 Redis。
 
 ### 3. 启动系统
 ```bash
@@ -397,7 +400,7 @@ stock_analysis/
 # SQLite（不建议使用，数据太大，速度较慢）
 SQLALCHEMY_DATABASE_URI = 'sqlite:///stock_analysis.db'
 
-# Parquet 是默认数据源；如需遗留 ORM 兼容，可配置 MySQL
+# Parquet 是默认市场数据源；应用状态层仍使用 MySQL-compatible 数据库
 DATA_SOURCE = 'parquet'
 MYSQL_DATABASE_URI = 'mysql+pymysql://user:password@localhost/stock_analysis'
 ```
