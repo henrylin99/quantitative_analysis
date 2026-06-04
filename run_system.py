@@ -16,7 +16,6 @@ import subprocess
 import time
 import webbrowser
 from pathlib import Path
-from sqlalchemy import inspect
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent
@@ -26,7 +25,12 @@ from app import create_app
 from app.extensions import db
 from app.services.factor_engine import FactorEngine
 from config import config
-from startup_runtime import build_health_report, build_health_summary_lines, build_startup_report
+from startup_runtime import (
+    build_health_report,
+    build_health_summary_lines,
+    build_startup_report,
+    inspect_parquet_data_assets,
+)
 
 
 class SystemManager:
@@ -87,26 +91,12 @@ class SystemManager:
         if not self.app:
             self.app = create_app('development')
 
-        with self.app.app_context():
-            existing_tables = set()
-            non_empty_tables = set()
-            connected = False
-            try:
-                inspector = inspect(db.engine)
-                existing_tables = set(inspector.get_table_names())
-                connected = True
-                for table in existing_tables & {"stock_basic", "stock_trade_calendar", "data_job_run"}:
-                    count = db.session.execute(db.text(f"SELECT COUNT(*) FROM {table}")).scalar()
-                    if count and int(count) > 0:
-                        non_empty_tables.add(table)
-            except Exception:
-                connected = False
-
-            return self.build_health_summary(
-                connected=connected,
-                existing_tables=existing_tables,
-                non_empty_tables=non_empty_tables,
-            )
+        connected, existing_tables, non_empty_tables = inspect_parquet_data_assets()
+        return self.build_health_summary(
+            connected=connected,
+            existing_tables=existing_tables,
+            non_empty_tables=non_empty_tables,
+        )
 
     def print_health_summary(self, report):
         for line in build_health_summary_lines(report):
