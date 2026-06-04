@@ -65,3 +65,44 @@ def save_to_parquet(
 
     logger.info(f"写入 parquet: {parquet_path} ({len(df)} 行)")
     return len(df)
+
+
+def save_single_parquet(
+    df: pd.DataFrame,
+    filename: str,
+    data_dir: Optional[str] = None,
+) -> int:
+    """将 DataFrame 写入单文件 Parquet。"""
+    if df is None or df.empty:
+        return 0
+
+    if data_dir is None:
+        data_dir = os.getenv(
+            "DATA_DIR",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
+        )
+
+    path = os.path.join(data_dir, filename)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df = df.copy()
+    df.to_parquet(path, index=False, engine="pyarrow")
+    logger.info(f"写入 parquet: {path} ({len(df)} 行)")
+    return len(df)
+
+
+def save_partitioned_parquet(
+    df: pd.DataFrame,
+    date_col: str,
+    table: str,
+    data_dir: Optional[str] = None,
+) -> int:
+    """按日期列分组后写入 Hive 分区格式的 parquet 文件。"""
+    if df is None or df.empty or date_col not in df.columns:
+        return 0
+
+    frame = df.copy()
+    frame[date_col] = pd.to_datetime(frame[date_col]).dt.strftime("%Y-%m-%d")
+    total = 0
+    for date_value, group in frame.groupby(date_col, sort=True):
+        total += save_to_parquet(group.drop(columns=[date_col]), date_value, table, data_dir=data_dir)
+    return total
