@@ -369,7 +369,10 @@ class ParquetDataReader:
         # 排序
         if "trade_date" in result.columns:
             result["trade_date"] = pd.to_datetime(result["trade_date"])
-            result = result.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+            sort_cols = ["trade_date"]
+            if "ts_code" in result.columns:
+                sort_cols.append("ts_code")
+            result = result.sort_values(sort_cols).reset_index(drop=True)
 
         return result
 
