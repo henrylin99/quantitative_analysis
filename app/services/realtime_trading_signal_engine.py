@@ -12,8 +12,8 @@ import logging
 
 from app.models.trading_signal import TradingSignal
 from app.models.realtime_indicator import RealtimeIndicator
-from app.models.stock_minute_data import StockMinuteData
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
+from app.services.data_reader import ParquetDataReader
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class RealtimeTradingSignalEngine:
     
     def __init__(self):
         self.indicator_engine = RealtimeIndicatorEngine()
+        self.minute_reader = ParquetDataReader().get_minute_reader()
         self.strategies = self._initialize_strategies()
     
     def _initialize_strategies(self):
@@ -45,32 +46,21 @@ class RealtimeTradingSignalEngine:
             # 获取历史数据
             end_time = datetime.now()
             start_time = end_time - timedelta(days=lookback_days)
-            
-            # 获取价格数据
-            price_data = StockMinuteData.get_data_range(
+
+            price_data = self.minute_reader.get_data(
                 ts_code=ts_code,
+                period_type=period_type,
                 start_time=start_time,
-                end_time=end_time,
-                period_type=period_type
+                end_time=end_time
             )
-            
+
             if len(price_data) < 50:  # 需要足够的历史数据
                 return {
                     'success': False,
                     'message': f'历史数据不足，需要至少50个数据点，当前只有{len(price_data)}个'
                 }
-            
-            # 转换为DataFrame
-            df = pd.DataFrame([{
-                'datetime': d.datetime,
-                'open': d.open,
-                'high': d.high,
-                'low': d.low,
-                'close': d.close,
-                'volume': d.volume,
-                'amount': d.amount
-            } for d in price_data])
-            
+
+            df = price_data[['datetime', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
             df = df.sort_values('datetime').reset_index(drop=True)
             
             # 获取技术指标数据
@@ -793,31 +783,20 @@ class RealtimeTradingSignalEngine:
             start_time = datetime.fromisoformat(start_date)
             end_time = datetime.fromisoformat(end_date)
             
-            # 获取历史数据
-            price_data = StockMinuteData.get_data_range(
+            price_data = self.minute_reader.get_data(
                 ts_code=ts_code,
+                period_type=period_type,
                 start_time=start_time,
-                end_time=end_time,
-                period_type=period_type
+                end_time=end_time
             )
-            
+
             if len(price_data) < 100:
                 return {
                     'success': False,
                     'message': '历史数据不足，无法进行回测'
                 }
-            
-            # 模拟信号生成和交易
-            df = pd.DataFrame([{
-                'datetime': d.datetime,
-                'open': d.open,
-                'high': d.high,
-                'low': d.low,
-                'close': d.close,
-                'volume': d.volume,
-                'amount': d.amount
-            } for d in price_data])
-            
+
+            df = price_data[['datetime', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
             df = df.sort_values('datetime').reset_index(drop=True)
             
             # 计算回测指标

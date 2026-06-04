@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Mapping
+import os
+from pathlib import Path
+from typing import Mapping, Tuple
 
-REQUIRED_TABLES = (
-    "stock_basic",
-    "stock_trade_calendar",
-    "data_job_run",
+PARQUET_ASSETS = (
+    "stock_basic.parquet",
+    "stock_trade_calendar.parquet",
+    "daily_history/daily",
+    "daily_basic/daily",
 )
 
 
@@ -18,39 +21,72 @@ def build_health_report(
 ) -> dict[str, object]:
     existing_tables = existing_tables or set()
     non_empty_tables = non_empty_tables or set()
-    missing_tables = [table for table in REQUIRED_TABLES if table not in existing_tables]
-    empty_tables = [
-        table for table in REQUIRED_TABLES if table in existing_tables and table not in non_empty_tables
+    missing_parquet_assets = [asset for asset in PARQUET_ASSETS if asset not in existing_tables]
+    empty_parquet_assets = [
+        asset for asset in PARQUET_ASSETS if asset in existing_tables and asset not in non_empty_tables
     ]
     mode = str(app_config.get("DATA_JOB_EXECUTION_MODE", "celery") or "celery").lower()
     next_actions: list[str] = []
 
     if not connected:
-        next_actions.append("数据库连接失败，请先检查 .env 中的数据库配置，并确认数据库服务已经启动。")
-    elif "data_job_run" in missing_tables:
-        next_actions.append("缺少 data_job_run 等任务表，请先执行数据库初始化，再进入日频数据中心。")
-    elif {"stock_trade_calendar", "stock_basic"} & set(missing_tables):
-        next_actions.append("优先执行交易日历和股票基础资料下载任务，补齐基础依赖后再执行其他日频任务。")
-    elif {"stock_trade_calendar", "stock_basic"} & set(empty_tables):
-        next_actions.append("优先执行交易日历和股票基础资料下载任务，当前关键基础表仍为空。")
-    elif empty_tables:
-        next_actions.append("数据库结构已就绪，请按数据管理页推荐初始化顺序补齐剩余核心数据。")
+        next_actions.append("Parquet 数据目录不可用，请先检查 DATA_DIR 配置和本地文件系统权限。")
+    elif {"stock_trade_calendar.parquet", "stock_basic.parquet"} & set(missing_parquet_assets):
+        next_actions.append("优先执行交易日历和股票基础资料下载任务，补齐基础 Parquet 资产后再执行其他日频任务。")
+    elif {"stock_trade_calendar.parquet", "stock_basic.parquet"} & set(empty_parquet_assets):
+        next_actions.append("优先执行交易日历和股票基础资料下载任务，当前关键 Parquet 资产仍为空。")
+    elif empty_parquet_assets:
+        next_actions.append("Parquet 目录结构已就绪，请按数据管理页推荐初始化顺序补齐剩余核心数据。")
     else:
         next_actions.append("基础检查通过，可直接使用数据管理页面执行日频任务或分钟数据维护。")
 
     return {
         "entrypoint": "run.py",
         "database": {
-            "ok": bool(connected) and not missing_tables,
+            "ok": bool(connected) and not missing_parquet_assets,
             "connected": bool(connected),
-            "missing_tables": missing_tables,
-            "empty_tables": empty_tables,
+            "missing_tables": missing_parquet_assets,
+            "empty_tables": empty_parquet_assets,
+            "missing_parquet_assets": missing_parquet_assets,
+            "empty_parquet_assets": empty_parquet_assets,
             "next_actions": next_actions,
         },
         "data_jobs": {
             "execution_mode": mode,
         },
     }
+
+
+def inspect_parquet_data_assets(data_dir: str | None = None) -> Tuple[bool, set[str], set[str]]:
+    """Inspect the Parquet assets required by the data-management page."""
+    root = Path(
+        data_dir
+        or os.getenv(
+            "DATA_DIR",
+            os.path.join(os.path.dirname(__file__), "data"),
+        )
+    )
+    if not root.exists():
+        return False, set(), set()
+
+    existing_assets: set[str] = set()
+    non_empty_assets: set[str] = set()
+
+    for asset in PARQUET_ASSETS:
+        asset_path = root / asset
+        if asset_path.is_file():
+            existing_assets.add(asset)
+            if asset_path.stat().st_size > 0:
+                non_empty_assets.add(asset)
+            continue
+
+        if asset_path.is_dir():
+            parquet_files = [path for path in asset_path.rglob("data.parquet") if path.is_file()]
+            if parquet_files:
+                existing_assets.add(asset)
+                if any(path.stat().st_size > 0 for path in parquet_files):
+                    non_empty_assets.add(asset)
+
+    return True, existing_assets, non_empty_assets
 
 
 def build_health_summary_lines(report: Mapping[str, object]) -> list[str]:
@@ -63,16 +99,16 @@ def build_health_summary_lines(report: Mapping[str, object]) -> list[str]:
     lines = [
         "健康检查摘要:",
         f"  - 主启动入口: {report.get('entrypoint', 'run.py')}",
-        f"  - 数据库连接: {'正常' if database.get('connected') else '失败'}",
+        f"  - Parquet 数据目录: {'正常' if database.get('connected') else '失败'}",
     ]
 
     if missing_tables:
-        lines.append(f"  - 缺失关键表: {', '.join(missing_tables)}")
+        lines.append(f"  - 缺失关键资产: {', '.join(missing_tables)}")
     else:
-        lines.append("  - 关键表检查: 通过")
+        lines.append("  - 关键资产检查: 通过")
 
     if empty_tables:
-        lines.append(f"  - 空表提示: {', '.join(empty_tables)}")
+        lines.append(f"  - 空资产提示: {', '.join(empty_tables)}")
 
     lines.append(f"  - 数据任务模式: {data_jobs.get('execution_mode', '-')}")
 

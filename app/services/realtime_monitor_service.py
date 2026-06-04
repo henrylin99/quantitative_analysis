@@ -8,11 +8,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
-from sqlalchemy import func, desc, asc
 
-from app.models.stock_minute_data import StockMinuteData
-from app.models.stock_basic import StockBasic
-from app.models.realtime_indicator import RealtimeIndicator
+from app.services.data_reader import ParquetDataReader
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +19,8 @@ class RealtimeMonitorService:
     
     def __init__(self):
         self.sector_mapping = self._initialize_sector_mapping()
+        self.data_reader = ParquetDataReader()
+        self.minute_reader = self.data_reader.get_minute_reader()
     
     def _initialize_sector_mapping(self):
         """初始化板块映射"""
@@ -56,6 +55,36 @@ class RealtimeMonitorService:
             '化工': ['000792.SZ', '002648.SZ', '600309.SH', '000059.SZ'],
             '非银金融': ['000166.SZ', '002736.SZ', '600030.SH', '000776.SZ']
         }
+
+    def _minute_frame(
+        self,
+        period_type: str = '1min',
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        ts_codes: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        """Load minute rows from parquet and optionally filter by codes."""
+        df = self.minute_reader.get_data(
+            period_type=period_type,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        if df.empty:
+            return df
+        if ts_codes:
+            df = df[df["ts_code"].isin(set(ts_codes))]
+        return df
+
+    @staticmethod
+    def _latest_rows(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or "datetime" not in df.columns or "ts_code" not in df.columns:
+            return pd.DataFrame()
+        return (
+            df.sort_values("datetime")
+            .groupby("ts_code", as_index=False, sort=False)
+            .tail(1)
+            .reset_index(drop=True)
+        )
     
     def get_realtime_quotes(self, stock_codes: List[str] = None, 
                            period_type: str = '1min', limit: int = 50) -> Dict:
@@ -65,49 +94,38 @@ class RealtimeMonitorService:
             if not stock_codes:
                 stock_codes = self._get_active_stocks(limit)
             
-            # 获取最新价格数据
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=1)  # 最近1小时
-            
+            minute_df = self._minute_frame(period_type=period_type, start_time=start_time, end_time=end_time, ts_codes=stock_codes)
+            latest_rows = self._latest_rows(minute_df)
+
             quotes = []
-            for ts_code in stock_codes:
+            for _, latest_data in latest_rows.iterrows():
+                ts_code = latest_data["ts_code"]
                 try:
-                    # 获取最新数据
-                    latest_data = StockMinuteData.query.filter(
-                        StockMinuteData.ts_code == ts_code,
-                        StockMinuteData.period_type == period_type,
-                        StockMinuteData.datetime >= start_time
-                    ).order_by(desc(StockMinuteData.datetime)).first()
-                    
-                    if not latest_data:
-                        continue
-                    
-                    # 获取前一交易日收盘价（用于计算涨跌幅）
-                    prev_close = self._get_previous_close(ts_code, latest_data.datetime, period_type)
-                    
-                    # 计算涨跌幅
+                    current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
+                    prev_close = self._get_previous_close(ts_code, current_time, period_type)
+
                     change_pct = 0.0
                     if prev_close and prev_close > 0:
-                        change_pct = (latest_data.close - prev_close) / prev_close * 100
-                    
-                    # 计算成交量比
-                    volume_ratio = self._calculate_volume_ratio(ts_code, latest_data.datetime, period_type)
-                    
+                        change_pct = (latest_data["close"] - prev_close) / prev_close * 100
+
+                    volume_ratio = self._calculate_volume_ratio(ts_code, current_time, period_type)
+
                     quotes.append({
                         'ts_code': ts_code,
                         'name': self._get_stock_name(ts_code),
-                        'current_price': latest_data.close,
-                        'open_price': latest_data.open,
-                        'high_price': latest_data.high,
-                        'low_price': latest_data.low,
-                        'volume': latest_data.volume,
-                        'amount': latest_data.amount,
+                        'current_price': latest_data["close"],
+                        'open_price': latest_data["open"],
+                        'high_price': latest_data["high"],
+                        'low_price': latest_data["low"],
+                        'volume': latest_data["volume"],
+                        'amount': latest_data["amount"],
                         'change_pct': change_pct,
                         'volume_ratio': volume_ratio,
-                        'update_time': latest_data.datetime.isoformat(),
-                        'turnover_rate': self._calculate_turnover_rate(ts_code, latest_data.volume)
+                        'update_time': current_time.isoformat(),
+                        'turnover_rate': self._calculate_turnover_rate(ts_code, latest_data["volume"])
                     })
-                    
                 except Exception as e:
                     logger.error(f"获取 {ts_code} 行情数据失败: {str(e)}")
                     continue
@@ -131,32 +149,29 @@ class RealtimeMonitorService:
         try:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
+            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time)
+            latest_rows = self._latest_rows(minute_df)
             
             sector_performance = []
             
             for sector_name, stock_codes in self.sector_mapping.items():
                 try:
+                    sector_rows = latest_rows[latest_rows["ts_code"].isin(stock_codes)].copy()
+                    if sector_rows.empty:
+                        continue
+
                     sector_changes = []
                     sector_volumes = []
                     sector_amounts = []
-                    
-                    for ts_code in stock_codes:
-                        # 获取最新数据
-                        latest_data = StockMinuteData.query.filter(
-                            StockMinuteData.ts_code == ts_code,
-                            StockMinuteData.datetime >= start_time
-                        ).order_by(desc(StockMinuteData.datetime)).first()
-                        
-                        if not latest_data:
-                            continue
-                        
-                        # 计算涨跌幅
-                        prev_close = self._get_previous_close(ts_code, latest_data.datetime, '1min')
+
+                    for _, latest_data in sector_rows.iterrows():
+                        current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
+                        prev_close = self._get_previous_close(latest_data["ts_code"], current_time, '1min')
                         if prev_close and prev_close > 0:
-                            change_pct = (latest_data.close - prev_close) / prev_close * 100
+                            change_pct = (latest_data["close"] - prev_close) / prev_close * 100
                             sector_changes.append(change_pct)
-                            sector_volumes.append(latest_data.volume)
-                            sector_amounts.append(latest_data.amount)
+                            sector_volumes.append(latest_data["volume"])
+                            sector_amounts.append(latest_data["amount"])
                     
                     if sector_changes:
                         # 计算板块平均涨跌幅（等权重）
@@ -208,63 +223,42 @@ class RealtimeMonitorService:
         try:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
-            
-            # 获取所有活跃股票
             active_stocks = self._get_active_stocks(200)
+            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time, ts_codes=active_stocks)
+            latest_rows = self._latest_rows(minute_df)
             
             anomalies = []
             
-            for ts_code in active_stocks:
+            for _, latest_data in latest_rows.iterrows():
+                ts_code = latest_data["ts_code"]
                 try:
-                    # 获取最新数据
-                    latest_data = StockMinuteData.query.filter(
-                        StockMinuteData.ts_code == ts_code,
-                        StockMinuteData.datetime >= start_time
-                    ).order_by(desc(StockMinuteData.datetime)).first()
-                    
-                    if not latest_data:
-                        continue
-                    
-                    # 计算涨跌幅
-                    prev_close = self._get_previous_close(ts_code, latest_data.datetime, '1min')
+                    current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
+                    prev_close = self._get_previous_close(ts_code, current_time, '1min')
                     if not prev_close or prev_close <= 0:
                         continue
-                    
-                    change_pct = (latest_data.close - prev_close) / prev_close * 100
-                    
-                    # 计算成交量比
-                    volume_ratio = self._calculate_volume_ratio(ts_code, latest_data.datetime, '1min')
-                    
-                    # 检测异动条件
+
+                    change_pct = (latest_data["close"] - prev_close) / prev_close * 100
+                    volume_ratio = self._calculate_volume_ratio(ts_code, current_time, '1min')
+
                     anomaly_types = []
-                    
-                    # 价格异动
                     if abs(change_pct) >= change_threshold:
-                        if change_pct > 0:
-                            anomaly_types.append('急涨')
-                        else:
-                            anomaly_types.append('急跌')
-                    
-                    # 成交量异动
+                        anomaly_types.append('急涨' if change_pct > 0 else '急跌')
                     if volume_ratio >= volume_threshold:
                         anomaly_types.append('放量')
-                    
-                    # 价格突破（简单判断）
                     if self._check_price_breakout(ts_code, latest_data):
                         anomaly_types.append('突破')
-                    
+
                     if anomaly_types:
                         anomalies.append({
                             'ts_code': ts_code,
                             'name': self._get_stock_name(ts_code),
-                            'current_price': latest_data.close,
+                            'current_price': latest_data["close"],
                             'change_pct': change_pct,
                             'volume_ratio': volume_ratio,
                             'anomaly_types': anomaly_types,
                             'anomaly_score': self._calculate_anomaly_score(change_pct, volume_ratio),
-                            'update_time': latest_data.datetime.isoformat()
+                            'update_time': current_time.isoformat()
                         })
-                        
                 except Exception as e:
                     logger.error(f"检测 {ts_code} 异动失败: {str(e)}")
                     continue
@@ -294,9 +288,9 @@ class RealtimeMonitorService:
         try:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
-            
-            # 获取所有活跃股票的数据
             active_stocks = self._get_active_stocks(500)
+            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time, ts_codes=active_stocks)
+            latest_rows = self._latest_rows(minute_df)
             
             rising_stocks = 0
             falling_stocks = 0
@@ -305,38 +299,27 @@ class RealtimeMonitorService:
             total_amount = 0
             changes = []
             
-            for ts_code in active_stocks:
+            for _, latest_data in latest_rows.iterrows():
                 try:
-                    # 获取最新数据
-                    latest_data = StockMinuteData.query.filter(
-                        StockMinuteData.ts_code == ts_code,
-                        StockMinuteData.datetime >= start_time
-                    ).order_by(desc(StockMinuteData.datetime)).first()
-                    
-                    if not latest_data:
-                        continue
-                    
-                    # 计算涨跌幅
-                    prev_close = self._get_previous_close(ts_code, latest_data.datetime, '1min')
+                    current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
+                    prev_close = self._get_previous_close(latest_data["ts_code"], current_time, '1min')
                     if not prev_close or prev_close <= 0:
                         continue
-                    
-                    change_pct = (latest_data.close - prev_close) / prev_close * 100
+
+                    change_pct = (latest_data["close"] - prev_close) / prev_close * 100
                     changes.append(change_pct)
-                    
-                    # 统计涨跌家数
+
                     if change_pct > 0.1:
                         rising_stocks += 1
                     elif change_pct < -0.1:
                         falling_stocks += 1
                     else:
                         unchanged_stocks += 1
-                    
-                    total_volume += latest_data.volume
-                    total_amount += latest_data.amount
-                    
+
+                    total_volume += latest_data["volume"]
+                    total_amount += latest_data["amount"]
                 except Exception as e:
-                    logger.error(f"处理 {ts_code} 市场情绪数据失败: {str(e)}")
+                    logger.error(f"处理 {latest_data['ts_code']} 市场情绪数据失败: {str(e)}")
                     continue
             
             total_stocks = rising_stocks + falling_stocks + unchanged_stocks
@@ -404,29 +387,28 @@ class RealtimeMonitorService:
     def get_monitor_overview(self) -> Dict:
         """获取监控概览"""
         try:
-            # 获取基础统计
-            total_stocks = StockMinuteData.query.with_entities(
-                func.count(func.distinct(StockMinuteData.ts_code))
-            ).scalar() or 0
-            
-            # 获取最新更新时间
-            latest_time = StockMinuteData.query.with_entities(
-                func.max(StockMinuteData.datetime)
-            ).scalar()
-            
-            # 获取今日数据量
+            minute_df = self._minute_frame(period_type='1min')
+            if minute_df.empty:
+                return {
+                    'success': True,
+                    'data': {
+                        'total_stocks': 0,
+                        'active_stocks': 0,
+                        'today_records': 0,
+                        'latest_update': None,
+                        'system_status': 'running',
+                        'data_delay': None
+                    },
+                    'message': '监控概览获取成功'
+                }
+
+            minute_df["datetime"] = pd.to_datetime(minute_df["datetime"], errors="coerce")
+            total_stocks = int(minute_df["ts_code"].dropna().astype(str).nunique()) if "ts_code" in minute_df.columns else 0
+            latest_time = minute_df["datetime"].max()
             today = datetime.now().date()
-            today_records = StockMinuteData.query.filter(
-                func.date(StockMinuteData.datetime) == today
-            ).count()
-            
-            # 获取活跃股票数（最近1小时有数据）
+            today_records = int((minute_df["datetime"].dt.date == today).sum())
             recent_time = datetime.now() - timedelta(hours=1)
-            active_stocks = StockMinuteData.query.filter(
-                StockMinuteData.datetime >= recent_time
-            ).with_entities(
-                func.count(func.distinct(StockMinuteData.ts_code))
-            ).scalar() or 0
+            active_stocks = int(minute_df[minute_df["datetime"] >= recent_time]["ts_code"].dropna().astype(str).nunique())
             
             return {
                 'success': True,
@@ -448,16 +430,11 @@ class RealtimeMonitorService:
     def _get_active_stocks(self, limit: int = 100) -> List[str]:
         """获取活跃股票列表"""
         try:
-            # 获取最近1小时有数据的股票
             recent_time = datetime.now() - timedelta(hours=1)
-            
-            active_stocks = StockMinuteData.query.filter(
-                StockMinuteData.datetime >= recent_time
-            ).with_entities(
-                StockMinuteData.ts_code
-            ).distinct().limit(limit).all()
-            
-            return [stock[0] for stock in active_stocks]
+            minute_df = self._minute_frame(period_type='1min', start_time=recent_time, end_time=datetime.now())
+            if minute_df.empty or "ts_code" not in minute_df.columns:
+                return ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH', '000858.SZ']
+            return minute_df["ts_code"].dropna().astype(str).drop_duplicates().head(limit).tolist()
             
         except Exception as e:
             logger.error(f"获取活跃股票失败: {str(e)}")
@@ -467,16 +444,14 @@ class RealtimeMonitorService:
     def _get_previous_close(self, ts_code: str, current_time: datetime, period_type: str) -> Optional[float]:
         """获取前一交易日收盘价"""
         try:
-            # 简化处理：获取当前时间前1小时的数据作为基准
             prev_time = current_time - timedelta(hours=1)
-            
-            prev_data = StockMinuteData.query.filter(
-                StockMinuteData.ts_code == ts_code,
-                StockMinuteData.period_type == period_type,
-                StockMinuteData.datetime <= prev_time
-            ).order_by(desc(StockMinuteData.datetime)).first()
-            
-            return prev_data.close if prev_data else None
+            df = self._minute_frame(period_type=period_type, end_time=prev_time, ts_codes=[ts_code])
+            if df.empty:
+                return None
+            latest = self._latest_rows(df)
+            if latest.empty:
+                return None
+            return float(latest.iloc[0]["close"])
             
         except Exception as e:
             logger.error(f"获取 {ts_code} 前收盘价失败: {str(e)}")
@@ -485,32 +460,25 @@ class RealtimeMonitorService:
     def _calculate_volume_ratio(self, ts_code: str, current_time: datetime, period_type: str) -> float:
         """计算成交量比"""
         try:
-            # 获取最近20个周期的平均成交量
             start_time = current_time - timedelta(hours=20)
-            
-            avg_volume = StockMinuteData.query.filter(
-                StockMinuteData.ts_code == ts_code,
-                StockMinuteData.period_type == period_type,
-                StockMinuteData.datetime >= start_time,
-                StockMinuteData.datetime < current_time
-            ).with_entities(
-                func.avg(StockMinuteData.volume)
-            ).scalar()
-            
-            if not avg_volume or avg_volume == 0:
+            df = self._minute_frame(period_type=period_type, start_time=start_time, end_time=current_time, ts_codes=[ts_code])
+            if df.empty:
                 return 1.0
-            
-            # 获取当前成交量
-            current_data = StockMinuteData.query.filter(
-                StockMinuteData.ts_code == ts_code,
-                StockMinuteData.period_type == period_type,
-                StockMinuteData.datetime == current_time
-            ).first()
-            
-            if not current_data:
+
+            avg_volume = df["volume"].dropna().mean()
+            if pd.isna(avg_volume) or avg_volume == 0:
                 return 1.0
-            
-            return current_data.volume / avg_volume
+
+            current_rows = df[df["datetime"] == current_time]
+            if current_rows.empty:
+                latest = self._latest_rows(df)
+                if latest.empty:
+                    return 1.0
+                current_volume = latest.iloc[0]["volume"]
+            else:
+                current_volume = current_rows.iloc[0]["volume"]
+
+            return float(current_volume) / float(avg_volume)
             
         except Exception as e:
             logger.error(f"计算 {ts_code} 成交量比失败: {str(e)}")
@@ -530,8 +498,10 @@ class RealtimeMonitorService:
     def _get_stock_name(self, ts_code: str) -> str:
         """获取股票名称"""
         try:
-            stock_basic = StockBasic.query.filter_by(ts_code=ts_code).first()
-            return stock_basic.name if stock_basic else ts_code
+            stock_basic = self.data_reader.get_stock_basic(ts_code)
+            if stock_basic.empty or "name" not in stock_basic.columns:
+                return ts_code
+            return str(stock_basic.iloc[0]["name"])
         except Exception as e:
             logger.error(f"获取 {ts_code} 股票名称失败: {str(e)}")
             return ts_code
@@ -539,24 +509,23 @@ class RealtimeMonitorService:
     def _check_price_breakout(self, ts_code: str, latest_data) -> bool:
         """检查价格突破（简化版本）"""
         try:
-            # 获取最近20个周期的最高价和最低价
-            start_time = latest_data.datetime - timedelta(hours=20)
-            
-            price_data = StockMinuteData.query.filter(
-                StockMinuteData.ts_code == ts_code,
-                StockMinuteData.datetime >= start_time,
-                StockMinuteData.datetime < latest_data.datetime
-            ).with_entities(
-                func.max(StockMinuteData.high).label('max_high'),
-                func.min(StockMinuteData.low).label('min_low')
-            ).first()
-            
-            if not price_data or not price_data.max_high or not price_data.min_low:
+            latest_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
+            start_time = latest_time - timedelta(hours=20)
+            price_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=latest_time, ts_codes=[ts_code])
+
+            if price_df.empty:
                 return False
-            
-            # 检查是否突破最高价或最低价
-            return (latest_data.high > price_data.max_high * 1.01 or 
-                   latest_data.low < price_data.min_low * 0.99)
+
+            price_df = price_df[price_df["datetime"] < latest_time]
+            if price_df.empty:
+                return False
+
+            max_high = price_df["high"].max()
+            min_low = price_df["low"].min()
+            if pd.isna(max_high) or pd.isna(min_low):
+                return False
+
+            return (latest_data["high"] > max_high * 1.01 or latest_data["low"] < min_low * 0.99)
             
         except Exception as e:
             logger.error(f"检查 {ts_code} 价格突破失败: {str(e)}")

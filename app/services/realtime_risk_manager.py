@@ -8,13 +8,12 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
-from sqlalchemy import func, desc, asc
 
-from app.models.stock_minute_data import StockMinuteData
 from app.models.stock_basic import StockBasic
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
 from app.extensions import db
+from app.services.data_reader import ParquetDataReader
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +31,7 @@ class RealtimeRiskManager:
             'correlation_limit': 0.80,  # 相关性限制
             'drawdown_limit': 0.15  # 最大回撤限制
         }
+        self.minute_reader = ParquetDataReader().get_minute_reader()
     
     def calculate_portfolio_risk(self, portfolio_id: str, period_days: int = 252) -> Dict:
         """计算投资组合风险指标"""
@@ -333,39 +333,32 @@ class RealtimeRiskManager:
     def _get_price_data(self, stock_codes: List[str], start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """获取价格数据"""
         try:
-            # 查询分钟数据，聚合为日数据
             price_data = []
-            
+
             for ts_code in stock_codes:
-                data = StockMinuteData.query.filter(
-                    StockMinuteData.ts_code == ts_code,
-                    StockMinuteData.period_type == '60min',  # 使用小时数据
-                    StockMinuteData.datetime >= start_date,
-                    StockMinuteData.datetime <= end_date
-                ).order_by(StockMinuteData.datetime).all()
-                
-                if data:
-                    df = pd.DataFrame([{
-                        'datetime': d.datetime,
-                        'close': d.close,
-                        'ts_code': d.ts_code
-                    } for d in data])
-                    
-                    # 按日期聚合
-                    df['date'] = df['datetime'].dt.date
-                    daily_data = df.groupby('date')['close'].last().reset_index()
-                    daily_data['ts_code'] = ts_code
-                    price_data.append(daily_data)
-            
+                data = self.minute_reader.get_data(
+                    ts_code=ts_code,
+                    period_type='60min',
+                    start_time=start_date,
+                    end_time=end_date,
+                )
+                if data.empty:
+                    continue
+
+                df = data.copy()
+                df['datetime'] = pd.to_datetime(df['datetime'])
+                df['date'] = df['datetime'].dt.date
+                daily_data = df.sort_values('datetime').groupby('date')['close'].last().reset_index()
+                daily_data['ts_code'] = ts_code
+                price_data.append(daily_data)
+
             if price_data:
-                # 合并所有股票数据
                 all_data = pd.concat(price_data, ignore_index=True)
-                # 透视表，日期为索引，股票为列
                 pivot_data = all_data.pivot(index='date', columns='ts_code', values='close')
-                return pivot_data.fillna(method='ffill')
-            
+                return pivot_data.ffill()
+
             return pd.DataFrame()
-            
+
         except Exception as e:
             logger.error(f"获取价格数据失败: {str(e)}")
             return pd.DataFrame()
@@ -540,11 +533,10 @@ class RealtimeRiskManager:
     def _get_current_price(self, ts_code: str) -> Optional[float]:
         """获取当前价格"""
         try:
-            latest_data = StockMinuteData.query.filter_by(
-                ts_code=ts_code
-            ).order_by(desc(StockMinuteData.datetime)).first()
-            
-            return latest_data.close if latest_data else None
+            latest_data = self.minute_reader.get_latest_data(ts_code, '1min', 1)
+            if latest_data.empty:
+                return None
+            return float(latest_data.iloc[0]['close'])
             
         except Exception as e:
             logger.error(f"获取 {ts_code} 当前价格失败: {str(e)}")
