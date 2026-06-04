@@ -8,6 +8,57 @@ import numpy as np
 
 _data_reader = ParquetDataReader()
 
+FINANCIAL_FIELDS = {
+    "balance_sheet": [
+        ("total_assets", "总资产"),
+        ("total_cur_assets", "流动资产合计"),
+        ("money_cap", "货币资金"),
+        ("accounts_receiv", "应收账款"),
+        ("inventories", "存货"),
+        ("fix_assets", "固定资产"),
+        ("intan_assets", "无形资产"),
+        ("goodwill", "商誉"),
+        ("total_liab", "总负债"),
+        ("total_cur_liab", "流动负债合计"),
+        ("st_borr", "短期借款"),
+        ("lt_borr", "长期借款"),
+        ("total_hldr_eqy_inc_min_int", "所有者权益合计"),
+        ("total_share", "总股本"),
+        ("undistr_porfit", "未分配利润"),
+        ("surplus_rese", "盈余公积"),
+    ],
+    "income_statement": [
+        ("total_revenue", "营业总收入"),
+        ("revenue", "营业收入"),
+        ("total_cogs", "营业总成本"),
+        ("oper_cost", "营业成本"),
+        ("sell_exp", "销售费用"),
+        ("admin_exp", "管理费用"),
+        ("fin_exp", "财务费用"),
+        ("rd_exp", "研发费用"),
+        ("operate_profit", "营业利润"),
+        ("total_profit", "利润总额"),
+        ("income_tax", "所得税"),
+        ("n_income", "净利润"),
+        ("n_income_attr_p", "归属净利润"),
+        ("basic_eps", "基本每股收益"),
+        ("diluted_eps", "稀释每股收益"),
+    ],
+    "cash_flow": [
+        ("n_cashflow_act", "经营活动现金流净额"),
+        ("c_inf_fr_operate_a", "经营活动现金流入小计"),
+        ("st_cash_out_act", "经营活动现金流出小计"),
+        ("n_cashflow_inv_act", "投资活动现金流净额"),
+        ("stot_inflows_inv_act", "投资活动现金流入小计"),
+        ("stot_out_inv_act", "投资活动现金流出小计"),
+        ("n_cash_flows_fnc_act", "筹资活动现金流净额"),
+        ("stot_cash_in_fnc_act", "筹资活动现金流入小计"),
+        ("stot_cashout_fnc_act", "筹资活动现金流出小计"),
+        ("n_incr_cash_cash_equ", "现金及等价物净增加额"),
+        ("c_cash_equ_end_period", "期末现金及等价物余额"),
+    ],
+}
+
 class StockService:
     """股票数据服务类"""
     
@@ -192,6 +243,77 @@ class StockService:
         except Exception as e:
             logger.error(f"获取筹码分布数据失败: {ts_code}, 错误: {e}")
             return []
+
+    @staticmethod
+    @cached(expire=3600, key_prefix='financials')
+    def get_financials(ts_code: str):
+        """获取股票最新一期财务三表数据"""
+        try:
+            balance_df = _data_reader.get_balance_sheet([ts_code])
+            income_df = _data_reader.get_income_statement([ts_code])
+            cash_df = _data_reader.get_cash_flow([ts_code])
+
+            return {
+                "balance_sheet": StockService._extract_latest_financial_row(balance_df, "balance_sheet"),
+                "income_statement": StockService._extract_latest_financial_row(income_df, "income_statement"),
+                "cash_flow": StockService._extract_latest_financial_row(cash_df, "cash_flow"),
+            }
+        except Exception as e:
+            logger.error(f"获取财务数据失败: {ts_code}, 错误: {e}")
+            return {
+                "balance_sheet": None,
+                "income_statement": None,
+                "cash_flow": None,
+            }
+
+    @staticmethod
+    def _extract_latest_financial_row(df: pd.DataFrame, table_name: str):
+        if df is None or df.empty:
+            return None
+
+        work_df = df.copy()
+        if "report_type" in work_df.columns:
+            filtered = work_df[work_df["report_type"].astype(str).isin({"1", "1.0", "nan"})]
+            if not filtered.empty:
+                work_df = filtered
+
+        if "update_flag" in work_df.columns:
+            work_df["__update_rank"] = work_df["update_flag"].astype(str).map(lambda x: 1 if x == "1" else 0)
+        else:
+            work_df["__update_rank"] = 0
+
+        if "ann_date" in work_df.columns:
+            work_df["__ann_date"] = work_df["ann_date"].astype(str)
+        else:
+            work_df["__ann_date"] = ""
+
+        if "end_date" in work_df.columns:
+            work_df["__end_date"] = work_df["end_date"].astype(str)
+            work_df = work_df.sort_values(
+                ["ts_code", "__end_date", "__update_rank", "__ann_date"],
+                ascending=[True, False, False, False],
+            )
+        else:
+            work_df = work_df.sort_values(["ts_code"], ascending=[True])
+
+        row = work_df.iloc[0].to_dict()
+        fields = FINANCIAL_FIELDS.get(table_name, [])
+        payload = {}
+
+        if "end_date" in row:
+            payload["end_date"] = _format_financial_date(row.get("end_date"))
+        if "ann_date" in row:
+            payload["ann_date"] = _format_financial_date(row.get("ann_date"))
+
+        for field, _label in fields:
+            value = row.get(field)
+            if pd.isna(value):
+                value = None
+            elif hasattr(value, "item"):
+                value = value.item()
+            payload[field] = value
+
+        return payload
     
     @staticmethod
     def get_stock_detail(ts_code: str):
@@ -249,6 +371,41 @@ class StockService:
     def screen_stocks(criteria: Dict):
         """基于 Parquet 大宽表的增强筛选（原 MySQL JOIN 已迁移）"""
         try:
+            def _normalize(value):
+                if value is None:
+                    return None
+                if isinstance(value, str):
+                    value = value.strip()
+                    return value if value != '' else None
+                return value
+
+            cleaned_criteria = {}
+            for key, value in (criteria or {}).items():
+                if key == 'dynamic_conditions':
+                    continue
+                normalized = _normalize(value)
+                if normalized is not None:
+                    cleaned_criteria[key] = normalized
+
+            dynamic_conditions = []
+            for cond in (criteria or {}).get('dynamic_conditions', []):
+                if not isinstance(cond, dict):
+                    continue
+                field_a = _normalize(cond.get('field_a'))
+                operator = _normalize(cond.get('operator'))
+                field_b = _normalize(cond.get('field_b'))
+                value = _normalize(cond.get('value'))
+                if field_a and operator and (field_b or value is not None):
+                    dynamic_conditions.append({
+                        'field_a': field_a,
+                        'operator': operator,
+                        'field_b': field_b,
+                        'value': value
+                    })
+
+            criteria = cleaned_criteria
+            criteria['dynamic_conditions'] = dynamic_conditions
+
             # 1. 确定查询日期
             trade_date = criteria.get('trade_date')
             if not trade_date:
@@ -354,7 +511,21 @@ class StockService:
                     lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else (str(x) if pd.notna(x) else None)
                 )
 
-            stocks = df.where(df.notna(), None).to_dict(orient='records')
+            def _clean_value(value):
+                if value is None:
+                    return None
+                if isinstance(value, float) and np.isnan(value):
+                    return None
+                if isinstance(value, (np.generic,)):
+                    value = value.item()
+                if pd.isna(value):
+                    return None
+                return value
+
+            stocks = [
+                {key: _clean_value(value) for key, value in record.items()}
+                for record in df.to_dict(orient='records')
+            ]
 
             # 限制返回数量
             max_results = 200
@@ -450,15 +621,11 @@ class StockService:
     def _calculate_macd(prices, fast=12, slow=26, signal=9):
         """计算MACD指标"""
         try:
-            import pandas as pd
-            
             prices = pd.Series(prices)
             
-            # 计算EMA
             ema_fast = prices.ewm(span=fast).mean()
             ema_slow = prices.ewm(span=slow).mean()
             
-            # 计算DIF和DEA
             dif = ema_fast - ema_slow
             dea = dif.ewm(span=signal).mean()
             macd = (dif - dea) * 2
@@ -476,16 +643,12 @@ class StockService:
     def _calculate_kdj(data, n=9):
         """计算KDJ指标"""
         try:
-            import pandas as pd
-            
             df = pd.DataFrame(data)
             
-            # 计算RSV
             low_min = df['low'].rolling(window=n).min()
             high_max = df['high'].rolling(window=n).max()
             rsv = (df['close'] - low_min) / (high_max - low_min) * 100
             
-            # 计算K、D、J
             k = rsv.ewm(alpha=1/3).mean()
             d = k.ewm(alpha=1/3).mean()
             j = 3 * k - 2 * d
@@ -503,8 +666,6 @@ class StockService:
     def _calculate_rsi(prices, periods=[6, 12, 24]):
         """计算RSI指标"""
         try:
-            import pandas as pd
-            
             prices = pd.Series(prices)
             delta = prices.diff()
             
@@ -527,8 +688,6 @@ class StockService:
     def _calculate_bollinger_bands(prices, window=20, num_std=2):
         """计算布林带指标"""
         try:
-            import pandas as pd
-            
             prices = pd.Series(prices)
             
             if len(prices) >= window:
@@ -547,4 +706,15 @@ class StockService:
             return {}
         except Exception as e:
             logger.error(f"计算布林带失败: {e}")
-            return {} 
+            return {}
+
+
+def _format_financial_date(value):
+    if value is None or pd.isna(value):
+        return None
+    value = str(value)
+    if len(value) == 8 and value.isdigit():
+        return f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+    if len(value) == 10 and value[4] == "-" and value[7] == "-":
+        return value
+    return value

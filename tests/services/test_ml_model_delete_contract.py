@@ -2,36 +2,37 @@ from pathlib import Path
 
 import pytest
 
-from app.extensions import db
-from app.models import MLModelDefinition, MLPredictions
 from app.services.ml_models import MLModelManager
+from app.services.parquet_state_store import ParquetStateStore
 
 pytestmark = pytest.mark.module_ml_model
 
 
 def test_delete_model_removes_definition_predictions_files_and_cache(app, tmp_path):
-    manager = MLModelManager()
+    manager = MLModelManager(state_store=ParquetStateStore(base_dir=str(tmp_path / "state")))
     manager.model_dir = str(tmp_path)
 
-    model = MLModelDefinition(
+    manager.create_model_definition(
         model_id="delete-me",
         model_name="Delete Me",
         model_type="random_forest",
         factor_list=["factor_a"],
         target_type="return_5d",
     )
-    prediction = MLPredictions(
-        ts_code="000001.SZ",
-        trade_date="2024-01-02",
-        model_id="delete-me",
-        predicted_return=0.1,
-        probability_score=0.5,
-        rank_score=1,
+    manager.save_predictions(
+        __import__("pandas").DataFrame(
+            [
+                {
+                    "ts_code": "000001.SZ",
+                    "trade_date": "2024-01-02",
+                    "model_id": "delete-me",
+                    "predicted_return": 0.1,
+                    "probability_score": 0.5,
+                    "rank_score": 1,
+                }
+            ]
+        )
     )
-
-    db.session.add(model)
-    db.session.add(prediction)
-    db.session.commit()
 
     model_file = tmp_path / "delete-me.pkl"
     scaler_file = tmp_path / "delete-me_scaler.pkl"
@@ -43,8 +44,8 @@ def test_delete_model_removes_definition_predictions_files_and_cache(app, tmp_pa
     result = manager.delete_model("delete-me")
 
     assert result["success"] is True
-    assert MLModelDefinition.query.filter_by(model_id="delete-me").first() is None
-    assert MLPredictions.query.filter_by(model_id="delete-me").count() == 0
+    assert manager.model_repo.get_definition("delete-me")["is_active"] is False
+    assert manager.model_repo.get_predictions(model_id="delete-me").empty
     assert not model_file.exists()
     assert not scaler_file.exists()
     assert "delete-me" not in manager.models
