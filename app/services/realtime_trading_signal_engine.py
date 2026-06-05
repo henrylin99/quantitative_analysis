@@ -14,6 +14,7 @@ from app.models.trading_signal import TradingSignal
 from app.models.realtime_indicator import RealtimeIndicator
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_event_store import ParquetEventStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class RealtimeTradingSignalEngine:
     def __init__(self):
         self.indicator_engine = RealtimeIndicatorEngine()
         self.minute_reader = ParquetDataReader().get_minute_reader()
+        self.event_store = ParquetEventStore()
         self.strategies = self._initialize_strategies()
     
     def _initialize_strategies(self):
@@ -107,26 +109,29 @@ class RealtimeTradingSignalEngine:
     def _get_indicators_data(self, ts_code: str, period_type: str, 
                            start_time: datetime, end_time: datetime) -> Dict:
         """获取技术指标数据"""
-        indicators = RealtimeIndicator.query.filter(
-            RealtimeIndicator.ts_code == ts_code,
-            RealtimeIndicator.period_type == period_type,
-            RealtimeIndicator.datetime >= start_time,
-            RealtimeIndicator.datetime <= end_time
-        ).order_by(RealtimeIndicator.datetime.asc()).all()
+        indicators = self.event_store.get_indicators_by_time_range(
+            ts_code=ts_code,
+            period_type=period_type,
+            start_time=start_time,
+            end_time=end_time,
+        )
         
         # 按指标名称分组
         indicators_dict = {}
-        for indicator in indicators:
-            if indicator.indicator_name not in indicators_dict:
-                indicators_dict[indicator.indicator_name] = []
-            
-            indicators_dict[indicator.indicator_name].append({
-                'datetime': indicator.datetime,
-                'value1': indicator.value1,
-                'value2': indicator.value2,
-                'value3': indicator.value3,
-                'value4': indicator.value4
-            })
+        if not indicators.empty:
+            indicators = indicators.sort_values("datetime").reset_index(drop=True)
+            for _, indicator in indicators.iterrows():
+                indicator_name = indicator.get("indicator_name")
+                if indicator_name not in indicators_dict:
+                    indicators_dict[indicator_name] = []
+
+                indicators_dict[indicator_name].append({
+                    'datetime': indicator.get('datetime'),
+                    'value1': indicator.get('value1'),
+                    'value2': indicator.get('value2'),
+                    'value3': indicator.get('value3'),
+                    'value4': indicator.get('value4')
+                })
         
         return indicators_dict
     

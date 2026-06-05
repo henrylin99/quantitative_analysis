@@ -8,7 +8,7 @@ class DataJobCursor(db.Model):
 
     __tablename__ = "data_job_cursor"
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     job_type = db.Column(db.String(64), nullable=False, index=True)
     cursor_key = db.Column(db.String(128), nullable=False)
     cursor_value = db.Column(db.String(255), nullable=False)

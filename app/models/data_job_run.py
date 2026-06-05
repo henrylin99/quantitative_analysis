@@ -8,7 +8,7 @@ class DataJobRun(db.Model):
 
     __tablename__ = "data_job_run"
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     job_type = db.Column(db.String(64), nullable=False, index=True)
     status = db.Column(db.String(32), nullable=False, default="pending", index=True)
     progress = db.Column(db.Float, nullable=False, default=0.0)
