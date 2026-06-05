@@ -10,7 +10,6 @@ import logging
 from app.services.realtime_risk_manager import RealtimeRiskManager
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
-from app.extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -142,12 +141,10 @@ def create_risk_alert():
 def resolve_risk_alert(alert_id):
     """解决风险预警"""
     try:
-        alert = RiskAlert.query.get(alert_id)
+        alert = RiskAlert.resolve_by_id(alert_id)
         
         if not alert:
             return jsonify({'success': False, 'message': '预警记录不存在'})
-        
-        alert.resolve_alert()
         
         return jsonify({
             'success': True,
@@ -180,7 +177,7 @@ def create_portfolio_position():
             return jsonify({'success': False, 'message': '该股票持仓已存在'})
         
         # 创建持仓
-        position = PortfolioPosition(
+        position = PortfolioPosition.create_position(
             portfolio_id=portfolio_id,
             ts_code=ts_code,
             position_size=position_size,
@@ -189,10 +186,7 @@ def create_portfolio_position():
             market_value=position_size * avg_cost,
             sector=sector
         )
-        
-        db.session.add(position)
-        db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'data': position.to_dict(),
@@ -253,34 +247,19 @@ def update_portfolio_position(portfolio_id, position_id):
     try:
         data = request.get_json()
         
-        position = PortfolioPosition.query.filter_by(
-            id=position_id,
-            portfolio_id=portfolio_id
-        ).first()
+        position = PortfolioPosition.update_position_by_id(
+            portfolio_id,
+            position_id,
+            position_size=float(data['position_size']) if 'position_size' in data else None,
+            avg_cost=float(data['avg_cost']) if 'avg_cost' in data else None,
+            current_price=float(data['current_price']) if 'current_price' in data else None,
+            sector=data.get('sector'),
+            stop_loss_price=float(data['stop_loss_price']) if 'stop_loss_price' in data else None,
+            take_profit_price=float(data['take_profit_price']) if 'take_profit_price' in data else None,
+        )
         
         if not position:
             return jsonify({'success': False, 'message': '持仓记录不存在'})
-        
-        # 更新字段
-        if 'position_size' in data:
-            position.position_size = float(data['position_size'])
-        if 'avg_cost' in data:
-            position.avg_cost = float(data['avg_cost'])
-        if 'current_price' in data:
-            position.current_price = float(data['current_price'])
-        if 'sector' in data:
-            position.sector = data['sector']
-        if 'stop_loss_price' in data:
-            position.stop_loss_price = float(data['stop_loss_price'])
-        if 'take_profit_price' in data:
-            position.take_profit_price = float(data['take_profit_price'])
-        
-        # 重新计算市值和盈亏
-        if position.current_price:
-            position.market_value = position.position_size * position.current_price
-            position.unrealized_pnl = (position.current_price - position.avg_cost) * position.position_size
-        
-        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -297,17 +276,8 @@ def update_portfolio_position(portfolio_id, position_id):
 def delete_portfolio_position(portfolio_id, position_id):
     """删除投资组合持仓"""
     try:
-        position = PortfolioPosition.query.filter_by(
-            id=position_id,
-            portfolio_id=portfolio_id
-        ).first()
-        
-        if not position:
+        if not PortfolioPosition.delete_position_by_id(portfolio_id, position_id):
             return jsonify({'success': False, 'message': '持仓记录不存在'})
-        
-        # 软删除
-        position.is_active = False
-        db.session.commit()
         
         return jsonify({
             'success': True,

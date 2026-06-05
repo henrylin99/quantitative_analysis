@@ -5,6 +5,7 @@
 
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+import os
 import logging
 import json
 import numpy as np
@@ -20,8 +21,23 @@ logger = logging.getLogger(__name__)
 # 创建蓝图
 realtime_indicators_bp = Blueprint('realtime_indicators', __name__)
 
-# 初始化指标引擎
-indicator_engine = RealtimeIndicatorEngine()
+indicator_engine = None
+_indicator_engine_data_dir = None
+
+
+def get_indicator_engine():
+    global indicator_engine, _indicator_engine_data_dir
+    current_data_dir = os.getenv("DATA_DIR")
+
+    if indicator_engine is None:
+        indicator_engine = RealtimeIndicatorEngine()
+        _indicator_engine_data_dir = current_data_dir
+        return indicator_engine
+
+    if _indicator_engine_data_dir != current_data_dir:
+        indicator_engine = RealtimeIndicatorEngine()
+        _indicator_engine_data_dir = current_data_dir
+    return indicator_engine
 
 
 @realtime_indicators_bp.route('/calculate', methods=['POST'])
@@ -38,7 +54,7 @@ def calculate_indicators():
             return jsonify({'success': False, 'message': '股票代码不能为空'})
         
         # 计算指标
-        result = indicator_engine.calculate_indicators(
+        result = get_indicator_engine().calculate_indicators(
             ts_code=ts_code,
             period_type=period_type,
             indicators=indicators,
@@ -133,7 +149,7 @@ def calculate_multi_period():
             return jsonify({'success': False, 'message': '股票代码不能为空'})
         
         # 计算多周期指标
-        result = indicator_engine.calculate_multi_period_indicators(
+        result = get_indicator_engine().calculate_multi_period_indicators(
             ts_code=ts_code,
             indicators=indicators,
             periods=periods

@@ -15,8 +15,19 @@ logger = logging.getLogger(__name__)
 # 创建蓝图
 realtime_signals_bp = Blueprint('realtime_signals', __name__)
 
-# 初始化信号引擎
-signal_engine = RealtimeTradingSignalEngine()
+signal_engine = None
+_signal_engine_data_dir = None
+
+
+def get_signal_engine():
+    global signal_engine, _signal_engine_data_dir
+    current_data_dir = __import__("os").getenv("DATA_DIR")
+    if signal_engine is not None:
+        return signal_engine
+    if _signal_engine_data_dir != current_data_dir:
+        signal_engine = RealtimeTradingSignalEngine()
+        _signal_engine_data_dir = current_data_dir
+    return signal_engine
 
 
 @realtime_signals_bp.route('/generate', methods=['POST'])
@@ -33,7 +44,7 @@ def generate_signals():
             return jsonify({'success': False, 'message': '股票代码不能为空'})
         
         # 生成信号
-        result = signal_engine.generate_signals(
+        result = get_signal_engine().generate_signals(
             ts_code=ts_code,
             period_type=period_type,
             strategies=strategies,
@@ -60,7 +71,7 @@ def fuse_signals():
             return jsonify({'success': False, 'message': '股票代码不能为空'})
         
         # 融合信号
-        result = signal_engine.fuse_signals(
+        result = get_signal_engine().fuse_signals(
             ts_code=ts_code,
             period_type=period_type,
             time_window_hours=time_window_hours
@@ -182,7 +193,7 @@ def get_signal_performance():
 def get_supported_strategies():
     """获取支持的策略列表"""
     try:
-        strategies = signal_engine.get_supported_strategies()
+        strategies = get_signal_engine().get_supported_strategies()
         
         return jsonify({
             'success': True,
@@ -248,7 +259,7 @@ def batch_generate_signals():
         
         for ts_code in stock_codes:
             try:
-                result = signal_engine.generate_signals(
+                result = get_signal_engine().generate_signals(
                     ts_code=ts_code,
                     period_type=period_type,
                     strategies=strategies,
@@ -366,7 +377,7 @@ def multi_stock_fusion():
         
         for ts_code in stock_codes:
             try:
-                result = signal_engine.fuse_signals(
+                result = get_signal_engine().fuse_signals(
                     ts_code=ts_code,
                     period_type=period_type,
                     time_window_hours=time_window_hours

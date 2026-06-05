@@ -46,11 +46,6 @@ class _ReportTypeGroupQuery:
         ]
 
 
-class _FakeSession:
-    def query(self, *args, **kwargs):
-        return _ReportTypeGroupQuery()
-
-
 def test_reports_blueprint_is_registered_under_expected_prefix():
     app = _build_app()
     client = app.test_client()
@@ -130,7 +125,7 @@ def test_report_metadata_endpoints_expose_stable_response_shape():
             patch("app.api.realtime_report.RealtimeReport.query", report_query),
             patch("app.api.realtime_report.ReportTemplate.query", template_query),
             patch("app.api.realtime_report.ReportSubscription.query", subscription_query),
-            patch("app.api.realtime_report.db.session", _FakeSession()),
+            patch("app.models.realtime_report.db.session.query", return_value=_ReportTypeGroupQuery()),
         ):
             report_types = client.get("/api/realtime-analysis/reports/report-types")
             schedule_types = client.get("/api/realtime-analysis/reports/schedule-types")
@@ -154,3 +149,67 @@ def test_report_metadata_endpoints_expose_stable_response_shape():
     assert statistics_data["data"]["templates"]["active"] == 2
     assert statistics_data["data"]["subscriptions"]["active"] == 3
     assert statistics_data["data"]["report_type_stats"]["daily_summary"] == 2
+
+
+def test_update_report_template_forwards_updated_fields():
+    app = _build_app()
+    client = app.test_client()
+
+    template = SimpleNamespace(
+        id=12,
+        template_name="原模板",
+        template_type="daily_summary",
+        description="原描述",
+        is_active=True,
+        is_default=False,
+        to_dict=lambda: {
+            "id": 12,
+            "template_name": "原模板",
+            "template_type": "daily_summary",
+            "description": "原描述",
+            "components": [],
+            "is_active": True,
+            "is_default": False,
+        },
+    )
+
+    updated_template = SimpleNamespace(
+        to_dict=lambda: {
+            "id": 12,
+            "template_name": "新模板",
+            "template_type": "market_overview",
+            "description": "新描述",
+            "components": ["summary"],
+            "is_active": False,
+            "is_default": True,
+        }
+    )
+
+    with (
+        patch("app.api.realtime_report.ReportTemplate.get_by_id", return_value=template),
+        patch("app.api.realtime_report.ReportTemplate.update_template_by_id", return_value=updated_template) as update_template,
+    ):
+        response = client.put(
+            "/api/realtime-analysis/reports/templates/12",
+            json={
+                "template_name": "新模板",
+                "template_type": "market_overview",
+                "description": "新描述",
+                "components": ["summary"],
+                "is_active": False,
+                "is_default": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert update_template.call_args.kwargs == {
+        "template_name": "新模板",
+        "template_type": "market_overview",
+        "description": "新描述",
+        "components": ["summary"],
+        "is_active": False,
+        "is_default": True,
+    }
+    data = response.get_json()
+    assert data["success"] is True
+    assert data["data"]["template_name"] == "新模板"

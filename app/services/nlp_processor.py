@@ -528,7 +528,7 @@ class BusinessDictionaryManager:
         """加载同义词词典"""
         try:
             # 从数据库加载业务词典
-            dictionaries = BusinessDictionary.query.filter_by(is_active=True).all()
+            dictionaries = BusinessDictionary.list_active()
             
             for dictionary in dictionaries:
                 category = dictionary.category

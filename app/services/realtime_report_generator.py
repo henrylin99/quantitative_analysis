@@ -3,7 +3,6 @@
 提供多种类型的分析报告生成功能
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
@@ -11,13 +10,11 @@ import pandas as pd
 import numpy as np
 
 from app.models.realtime_report import ReportTemplate, RealtimeReport, ReportSubscription
-from app.models.stock_minute_data import StockMinuteData
-from app.models.realtime_indicator import RealtimeIndicator
 from app.models.trading_signal import TradingSignal
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
-from app.extensions import db
 from app.services.data_reader import ParquetDataReader
+from app.services.parquet_event_store import ParquetEventStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +26,7 @@ class RealtimeReportGenerator:
         """初始化报告生成器"""
         self.data_reader = ParquetDataReader()
         self.minute_reader = self.data_reader.get_minute_reader()
+        self.event_store = ParquetEventStore()
         self.report_types = {
             'daily_summary': '每日市场总结',
             'portfolio_analysis': '投资组合分析',
@@ -110,16 +108,19 @@ class RealtimeReportGenerator:
             
             # 收集报告数据
             report_data = self._collect_report_data(report_type, parameters or {})
-            
+
             # 生成报告内容
             report_content = self._generate_report_content(report_type, template, report_data)
-            
+
             # 更新报告
             generation_time = (datetime.utcnow() - start_time).total_seconds()
-            report.report_content = json.dumps(report_content)
-            report.report_data = json.dumps(report_data)
-            report.update_status('completed', generation_time=generation_time)
-            
+            report.update_generation_result(
+                report_content=report_content,
+                report_data=report_data,
+                status='completed',
+                generation_time=generation_time,
+            )
+
             return {
                 'success': True,
                 'data': {
@@ -136,7 +137,10 @@ class RealtimeReportGenerator:
         except Exception as e:
             logger.error(f"生成报告失败: {str(e)}")
             if 'report' in locals():
-                report.update_status('failed', error_message=str(e))
+                report.update_generation_result(
+                    status='failed',
+                    error_message=str(e),
+                )
             return {
                 'success': False,
                 'message': f'报告生成失败: {str(e)}'
@@ -145,7 +149,7 @@ class RealtimeReportGenerator:
     def _get_or_create_template(self, report_type: str, template_id: Optional[int]) -> Optional[ReportTemplate]:
         """获取或创建模板"""
         if template_id:
-            template = ReportTemplate.query.get(template_id)
+            template = ReportTemplate.get_by_id(template_id)
             if template and template.template_type == report_type:
                 return template
         
@@ -165,8 +169,7 @@ class RealtimeReportGenerator:
                 components=template_config.get('sections', []),
                 created_by='system'
             )
-            template.is_default = True
-            db.session.commit()
+            ReportTemplate.update_template_by_id(template.id, is_default=True)
             return template
         
         return None
@@ -215,16 +218,8 @@ class RealtimeReportGenerator:
         # 获取当天 5min 技术指标数量与信号数量
         day_start = datetime.combine(today, datetime.min.time())
         day_end = datetime.combine(today, datetime.max.time())
-        indicator_count = RealtimeIndicator.query.filter(
-            RealtimeIndicator.datetime >= day_start,
-            RealtimeIndicator.datetime <= day_end,
-            RealtimeIndicator.period_type == '5min'
-        ).count()
-        signal_count = TradingSignal.query.filter(
-            TradingSignal.created_at >= day_start,
-            TradingSignal.created_at <= day_end,
-            TradingSignal.period_type == '5min'
-        ).count()
+        indicator_count = self._count_indicators_in_range(day_start, day_end, period_type='5min')
+        signal_count = self._count_signals_in_range(day_start, day_end, period_type='5min')
         
         return {
             'date': today.isoformat(),
@@ -286,7 +281,7 @@ class RealtimeReportGenerator:
             }
         
         # 获取风险预警
-        alerts = RiskAlert.query.filter_by(is_resolved=False).all()
+        alerts = RiskAlert.get_active_alerts()
         
         # 计算基础风险指标
         total_value = sum(pos.market_value or 0 for pos in positions)
@@ -319,12 +314,12 @@ class RealtimeReportGenerator:
     def _collect_signal_data(self) -> Dict[str, Any]:
         """收集交易信号数据"""
         # 获取最近的交易信号
-        recent_signals = TradingSignal.query.filter(
-            TradingSignal.created_at >= datetime.utcnow() - timedelta(days=7),
-            TradingSignal.period_type == '5min'
-        ).all()
-        recent_signals.sort(key=lambda signal: signal.created_at or datetime.min, reverse=True)
-        recent_signals = recent_signals[:100]
+        recent_signals = self._load_recent_signals(
+            start_time=datetime.utcnow() - timedelta(days=7),
+            end_time=datetime.utcnow(),
+            period_type='5min',
+            limit=100,
+        )
         
         # 统计信号类型分布
         signal_types = {}
@@ -365,6 +360,41 @@ class RealtimeReportGenerator:
             'recent_signals': [signal.to_dict() for signal in recent_signals[:20]],  # 最近20个信号
             'analysis_date': datetime.utcnow().isoformat()
         }
+
+    def _count_indicators_in_range(self, start_time: datetime, end_time: datetime, period_type: Optional[str] = None) -> int:
+        frame = self.event_store.get_indicators_by_time_range(
+            ts_code=None,
+            period_type=period_type,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        return int(len(frame)) if not frame.empty else 0
+
+    def _count_signals_in_range(self, start_time: datetime, end_time: datetime, period_type: Optional[str] = None) -> int:
+        frame = self.event_store.get_signals_by_time_range(
+            start_time=start_time,
+            end_time=end_time,
+        )
+        if not frame.empty:
+            if period_type and "period_type" in frame.columns:
+                frame = frame[frame["period_type"] == period_type]
+            return int(len(frame))
+        return 0
+
+    def _load_recent_signals(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        period_type: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Any]:
+        frame = self.event_store.get_signals_by_time_range(start_time=start_time, end_time=end_time)
+        if not frame.empty:
+            if period_type and "period_type" in frame.columns:
+                frame = frame[frame["period_type"] == period_type]
+            frame = frame.sort_values("datetime", ascending=False).head(limit)
+            return [TradingSignal._row_to_event(row) for _, row in frame.iterrows()]
+        return []
     
     def _collect_market_data(self) -> Dict[str, Any]:
         """收集市场数据"""
@@ -394,15 +424,17 @@ class RealtimeReportGenerator:
         # 获取当天 5min 技术指标统计
         day_start = datetime.combine(today, datetime.min.time())
         day_end = datetime.combine(today, datetime.max.time())
-        indicator_stats_query = db.session.query(
-            RealtimeIndicator.indicator_name,
-            db.func.count(RealtimeIndicator.id).label('count')
-        ).filter(
-            RealtimeIndicator.datetime >= day_start,
-            RealtimeIndicator.datetime <= day_end,
-            RealtimeIndicator.period_type == '5min'
-        ).group_by(RealtimeIndicator.indicator_name).all()
-        indicator_stats = {stat.indicator_name: stat.count for stat in indicator_stats_query}
+        indicator_stats_df = self.event_store.get_indicators_by_time_range(
+            ts_code=None,
+            period_type='5min',
+            start_time=day_start,
+            end_time=day_end,
+        )
+        indicator_stats = {}
+        if not indicator_stats_df.empty and "indicator_name" in indicator_stats_df.columns:
+            indicator_stats = indicator_stats_df["indicator_name"].fillna("UNKNOWN").value_counts().to_dict()
+        else:
+            indicator_stats = {}
         
         return {
             'market_overview': {
@@ -587,9 +619,7 @@ class RealtimeReportGenerator:
             if report_type:
                 reports = RealtimeReport.get_reports_by_type(report_type, limit)
             else:
-                reports = RealtimeReport.query.order_by(
-                    RealtimeReport.generated_at.desc()
-                ).limit(limit).all()
+                reports = RealtimeReport.list_reports(limit=limit)
             
             return {
                 'success': True,
@@ -607,7 +637,7 @@ class RealtimeReportGenerator:
     def get_report_by_id(self, report_id: int) -> Dict[str, Any]:
         """根据ID获取报告"""
         try:
-            report = RealtimeReport.query.get(report_id)
+            report = RealtimeReport.get_by_id(report_id)
             
             if not report:
                 return {
@@ -634,8 +664,7 @@ class RealtimeReportGenerator:
             if template_type:
                 templates = ReportTemplate.get_templates_by_type(template_type)
             else:
-                templates = ReportTemplate.query.filter_by(is_active=True)\
-                                              .order_by(ReportTemplate.created_at.desc()).all()
+                templates = ReportTemplate.list_templates(active_only=True)
             
             return {
                 'success': True,

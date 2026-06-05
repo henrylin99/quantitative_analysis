@@ -394,7 +394,7 @@ class StockService:
     
     @staticmethod
     def screen_stocks(criteria: Dict):
-        """基于 Parquet 大宽表的增强筛选（原 MySQL JOIN 已迁移）"""
+        """基于 Parquet 大宽表的增强筛选（原 JOIN 逻辑已迁移）"""
         try:
             def _normalize(value):
                 if value is None:

@@ -114,7 +114,7 @@ class ParquetDataJobStateStore:
             )
             base_dir = os.path.join(data_dir, "data_job_state")
         self.store = ParquetStateStore(base_dir=base_dir)
-        self._migrate_legacy_state_if_needed()
+        self._migrate_previous_state_if_needed()
         self._normalize_state_files()
 
     def create_run(
@@ -280,24 +280,24 @@ class ParquetDataJobStateStore:
             updated_at=_to_python(row.get("updated_at")),
         )
 
-    def _migrate_legacy_state_if_needed(self) -> None:
+    def _migrate_previous_state_if_needed(self) -> None:
         current_runs = self.store.path_for(self.TABLE_RUNS)
         current_cursors = self.store.path_for(self.TABLE_CURSORS)
         current_dir = self.store.base_dir
-        legacy_dir = current_dir.parent / "ml_factor_state"
+        previous_dir = current_dir.parent / "ml_factor_state"
 
-        if legacy_dir == current_dir:
+        if previous_dir == current_dir:
             return
 
         migrations = [
-            (legacy_dir / f"{self.TABLE_RUNS}.parquet", current_runs),
-            (legacy_dir / f"{self.TABLE_CURSORS}.parquet", current_cursors),
+            (previous_dir / f"{self.TABLE_RUNS}.parquet", current_runs),
+            (previous_dir / f"{self.TABLE_CURSORS}.parquet", current_cursors),
         ]
-        for legacy_path, current_path in migrations:
-            if current_path.exists() or not legacy_path.exists():
+        for previous_path, current_path in migrations:
+            if current_path.exists() or not previous_path.exists():
                 continue
             current_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(legacy_path), str(current_path))
+            shutil.move(str(previous_path), str(current_path))
 
     def _normalize_state_files(self) -> None:
         self._normalize_runs_file()

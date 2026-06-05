@@ -12,7 +12,6 @@ import logging
 from app.models.stock_basic import StockBasic
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
-from app.extensions import db
 from app.services.data_reader import ParquetDataReader
 
 logger = logging.getLogger(__name__)
@@ -175,10 +174,12 @@ class RealtimeRiskManager:
                 take_profit_price = self._calculate_take_profit_price(
                     position, take_profit_method, take_profit_value
                 )
-                
+
                 # 更新止损止盈价格
-                position.stop_loss_price = stop_loss_price
-                position.take_profit_price = take_profit_price
+                position.update_risk_limits(
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price,
+                )
                 
                 # 检查是否触发
                 if position.is_stop_loss_triggered():
@@ -211,9 +212,6 @@ class RealtimeRiskManager:
                     'take_profit_distance': (take_profit_price - position.current_price) / position.current_price * 100
                 })
             
-            # 提交数据库更改
-            db.session.commit()
-            
             return {
                 'success': True,
                 'data': {
@@ -242,7 +240,7 @@ class RealtimeRiskManager:
             # 获取预警记录
             alerts = RiskAlert.get_active_alerts(
                 alert_level=alert_level
-            ) if active_only else RiskAlert.query.all()
+            ) if active_only else RiskAlert.list_all()
             
             # 如果指定了组合ID，需要过滤相关股票
             if portfolio_id:
@@ -287,12 +285,7 @@ class RealtimeRiskManager:
         """创建风险预警"""
         try:
             # 检查是否已存在相同的活跃预警
-            existing_alert = RiskAlert.query.filter_by(
-                ts_code=ts_code,
-                alert_type=alert_type,
-                is_active=True,
-                is_resolved=False
-            ).first()
+            existing_alert = RiskAlert.get_existing_active_alert(ts_code, alert_type)
             
             if existing_alert:
                 return {
@@ -302,10 +295,11 @@ class RealtimeRiskManager:
             
             # 获取当前价格和持仓信息
             current_price = self._get_current_price(ts_code)
-            position = PortfolioPosition.query.filter_by(
-                ts_code=ts_code,
-                is_active=True
-            ).first()
+            position = None
+            for candidate in PortfolioPosition.list_positions(active_only=True):
+                if candidate.ts_code == ts_code:
+                    position = candidate
+                    break
             
             # 创建预警
             alert = RiskAlert.create_alert(

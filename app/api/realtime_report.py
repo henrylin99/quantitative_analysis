@@ -4,13 +4,11 @@
 """
 
 from flask import Blueprint, request, jsonify
-from datetime import datetime
 import logging
 
 from app.services.realtime_report_generator import RealtimeReportGenerator
 from app.services.report_dispatch_service import ReportDispatchService
 from app.models.realtime_report import ReportTemplate, RealtimeReport, ReportSubscription
-from app.extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +88,12 @@ def get_report_by_id(report_id):
 def delete_report(report_id):
     """删除报告"""
     try:
-        report = RealtimeReport.query.get(report_id)
+        report = RealtimeReport.get_by_id(report_id)
         
         if not report:
             return jsonify({'success': False, 'message': '报告不存在'}), 404
         
-        db.session.delete(report)
-        db.session.commit()
+        RealtimeReport.delete_report_by_id(report_id)
         
         return jsonify({
             'success': True,
@@ -159,7 +156,7 @@ def create_report_template():
 def get_template_by_id(template_id):
     """根据ID获取模板"""
     try:
-        template = ReportTemplate.query.get(template_id)
+        template = ReportTemplate.get_by_id(template_id)
         
         if not template:
             return jsonify({'success': False, 'message': '模板不存在'}), 404
@@ -179,32 +176,25 @@ def get_template_by_id(template_id):
 def update_report_template(template_id):
     """更新报告模板"""
     try:
-        template = ReportTemplate.query.get(template_id)
+        template = ReportTemplate.get_by_id(template_id)
         
         if not template:
             return jsonify({'success': False, 'message': '模板不存在'}), 404
         
         data = request.get_json()
-        
-        # 更新模板字段
-        if 'template_name' in data:
-            template.template_name = data['template_name']
-        if 'description' in data:
-            template.description = data['description']
-        if 'components' in data:
-            import json
-            template.components = json.dumps(data['components'])
-        if 'is_active' in data:
-            template.is_active = data['is_active']
-        if 'is_default' in data:
-            template.is_default = data['is_default']
-        
-        template.updated_at = datetime.utcnow()
-        db.session.commit()
+        updated_template = ReportTemplate.update_template_by_id(
+            template_id,
+            template_name=data.get('template_name', template.template_name),
+            template_type=data.get('template_type', template.template_type),
+            description=data.get('description', template.description),
+            components=data.get('components', template.to_dict().get('components', [])),
+            is_active=data.get('is_active', template.is_active),
+            is_default=data.get('is_default', template.is_default),
+        )
         
         return jsonify({
             'success': True,
-            'data': template.to_dict(),
+            'data': updated_template.to_dict(),
             'message': '模板更新成功'
         })
         
@@ -217,21 +207,20 @@ def update_report_template(template_id):
 def delete_report_template(template_id):
     """删除报告模板"""
     try:
-        template = ReportTemplate.query.get(template_id)
+        template = ReportTemplate.get_by_id(template_id)
         
         if not template:
             return jsonify({'success': False, 'message': '模板不存在'}), 404
         
         # 检查是否有关联的报告
-        report_count = RealtimeReport.query.filter_by(template_id=template_id).count()
+        report_count = RealtimeReport.count_reports_by_template(template_id)
         if report_count > 0:
             return jsonify({
                 'success': False,
                 'message': f'模板被 {report_count} 个报告使用，无法删除'
             }), 400
         
-        db.session.delete(template)
-        db.session.commit()
+        ReportTemplate.delete_template_by_id(template_id)
         
         return jsonify({
             'success': True,
@@ -247,9 +236,7 @@ def delete_report_template(template_id):
 def get_subscriptions():
     """获取订阅列表"""
     try:
-        subscriptions = ReportSubscription.query.order_by(
-            ReportSubscription.created_at.desc()
-        ).all()
+        subscriptions = ReportSubscription.list_subscriptions()
         
         return jsonify({
             'success': True,
@@ -284,7 +271,7 @@ def create_subscription():
             }), 400
         
         # 验证模板是否存在
-        template = ReportTemplate.query.get(template_id)
+        template = ReportTemplate.get_by_id(template_id)
         if not template:
             return jsonify({
                 'success': False,
@@ -318,7 +305,7 @@ def create_subscription():
 def get_subscription_by_id(subscription_id):
     """根据ID获取订阅"""
     try:
-        subscription = ReportSubscription.query.get(subscription_id)
+        subscription = ReportSubscription.get_by_id(subscription_id)
         
         if not subscription:
             return jsonify({'success': False, 'message': '订阅不存在'}), 404
@@ -338,37 +325,26 @@ def get_subscription_by_id(subscription_id):
 def update_subscription(subscription_id):
     """更新订阅"""
     try:
-        subscription = ReportSubscription.query.get(subscription_id)
+        subscription = ReportSubscription.get_by_id(subscription_id)
         
         if not subscription:
             return jsonify({'success': False, 'message': '订阅不存在'}), 404
         
         data = request.get_json()
-        
-        # 更新订阅字段
-        if 'subscription_name' in data:
-            subscription.subscription_name = data['subscription_name']
-        if 'subscriber_email' in data:
-            subscription.subscriber_email = data['subscriber_email']
-        if 'subscriber_phone' in data:
-            subscription.subscriber_phone = data['subscriber_phone']
-        if 'schedule_type' in data:
-            subscription.schedule_type = data['schedule_type']
-        if 'schedule_config' in data:
-            import json
-            subscription.schedule_config = json.dumps(data['schedule_config'])
-        if 'notification_channels' in data:
-            import json
-            subscription.notification_channels = json.dumps(data['notification_channels'])
-        if 'is_active' in data:
-            subscription.is_active = data['is_active']
-        
-        subscription.updated_at = datetime.utcnow()
-        db.session.commit()
+        updated_subscription = ReportSubscription.update_subscription_by_id(
+            subscription_id,
+            subscription_name=data.get('subscription_name', subscription.subscription_name),
+            subscriber_email=data.get('subscriber_email', subscription.subscriber_email),
+            subscriber_phone=data.get('subscriber_phone', subscription.subscriber_phone),
+            schedule_type=data.get('schedule_type', subscription.schedule_type),
+            schedule_config=data.get('schedule_config', subscription.schedule_config),
+            notification_channels=data.get('notification_channels', subscription.notification_channels),
+            is_active=data.get('is_active', subscription.is_active),
+        )
         
         return jsonify({
             'success': True,
-            'data': subscription.to_dict(),
+            'data': updated_subscription.to_dict(),
             'message': '订阅更新成功'
         })
         
@@ -381,13 +357,12 @@ def update_subscription(subscription_id):
 def delete_subscription(subscription_id):
     """删除订阅"""
     try:
-        subscription = ReportSubscription.query.get(subscription_id)
+        subscription = ReportSubscription.get_by_id(subscription_id)
         
         if not subscription:
             return jsonify({'success': False, 'message': '订阅不存在'}), 404
         
-        db.session.delete(subscription)
-        db.session.commit()
+        ReportSubscription.delete_subscription_by_id(subscription_id)
         
         return jsonify({
             'success': True,
@@ -461,24 +436,20 @@ def get_report_statistics():
     """获取报告统计信息"""
     try:
         # 统计报告数量
-        total_reports = RealtimeReport.query.count()
-        completed_reports = RealtimeReport.query.filter_by(report_status='completed').count()
-        failed_reports = RealtimeReport.query.filter_by(report_status='failed').count()
+        total_reports = RealtimeReport.count_reports()
+        completed_reports = RealtimeReport.count_reports(status='completed')
+        failed_reports = RealtimeReport.count_reports(status='failed')
         
         # 统计模板数量
-        total_templates = ReportTemplate.query.count()
-        active_templates = ReportTemplate.query.filter_by(is_active=True).count()
+        total_templates = ReportTemplate.count_templates()
+        active_templates = ReportTemplate.count_templates(active_only=True)
         
         # 统计订阅数量
-        total_subscriptions = ReportSubscription.query.count()
-        active_subscriptions = ReportSubscription.query.filter_by(is_active=True).count()
+        total_subscriptions = ReportSubscription.count_subscriptions()
+        active_subscriptions = ReportSubscription.count_subscriptions(active_only=True)
         
         # 按类型统计报告
-        from sqlalchemy import func
-        report_type_stats = db.session.query(
-            RealtimeReport.report_type,
-            func.count(RealtimeReport.id).label('count')
-        ).group_by(RealtimeReport.report_type).all()
+        report_type_stats = RealtimeReport.get_report_type_stats()
         
         return jsonify({
             'success': True,
@@ -497,9 +468,7 @@ def get_report_statistics():
                     'total': total_subscriptions,
                     'active': active_subscriptions
                 },
-                'report_type_stats': {
-                    stat.report_type: stat.count for stat in report_type_stats
-                }
+                'report_type_stats': report_type_stats
             },
             'message': '统计信息获取成功'
         })

@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-LEGACY_REALTIME_SYNC_DISABLED_MESSAGE = 'legacy分钟数据同步已禁用，请使用真实数据源'
+REALTIME_SYNC_DISABLED_MESSAGE = '分钟数据同步已禁用，请使用真实数据源'
 
 
 class RealtimeDataManager:
@@ -101,7 +101,15 @@ class RealtimeDataManager:
                     )
                 return result
 
-            return self._sync_minute_data_legacy(ts_code, start_date, end_date, period_type)
+            return {
+                'success': False,
+                'message': REALTIME_SYNC_DISABLED_MESSAGE,
+                'data_count': 0,
+                'ts_code': ts_code,
+                'start_date': start_date,
+                'end_date': end_date,
+                'period_type': period_type
+            }
             
         except Exception as e:
             logger.error(f"同步数据失败: {str(e)}")
@@ -132,10 +140,10 @@ class RealtimeDataManager:
             source = self._resolve_minute_data_source(data_source, use_baostock)
 
             if source not in {'baostock', 'tongdaxin'}:
-                logger.warning("批量分钟数据legacy同步已禁用")
+                logger.warning("批量分钟数据同步已禁用")
                 return {
                     'success': False,
-                    'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
+                    'message': REALTIME_SYNC_DISABLED_MESSAGE,
                     'total_stocks': len(stock_list),
                     'success_stocks': 0,
                     'failed_stocks': len(stock_list),
@@ -186,10 +194,10 @@ class RealtimeDataManager:
             source = self._resolve_minute_data_source(data_source, use_baostock)
 
             if source not in {'baostock', 'tongdaxin'}:
-                logger.warning("全周期分钟数据legacy同步已禁用")
+                logger.warning("全周期分钟数据同步已禁用")
                 return {
                     'success': False,
-                    'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
+                    'message': REALTIME_SYNC_DISABLED_MESSAGE,
                     'ts_code': ts_code,
                     'period_types': ['1min', '5min', '15min', '30min', '60min']
                 }
@@ -223,21 +231,6 @@ class RealtimeDataManager:
             logger.error(f"获取股票列表异常: {e}")
             return []
     
-    def _sync_minute_data_legacy(self, ts_code: str, start_date: str, end_date: str, period_type: str) -> Dict:
-        """
-        原有的同步方式（保持兼容性）
-        """
-        logger.warning("legacy 分钟数据同步已禁用，避免写入模拟行情数据")
-        return {
-            'success': False,
-            'message': LEGACY_REALTIME_SYNC_DISABLED_MESSAGE,
-            'data_count': 0,
-            'ts_code': ts_code,
-            'start_date': start_date,
-            'end_date': end_date,
-            'period_type': period_type
-        }
-
     def _resolve_minute_data_source(self, data_source: Optional[str], use_baostock: bool) -> str:
         if data_source:
             return str(data_source).strip().lower()
