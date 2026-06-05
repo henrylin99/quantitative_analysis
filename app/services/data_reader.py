@@ -387,7 +387,14 @@ class ParquetDataReader:
 
         # 排序
         if "trade_date" in result.columns:
-            result["trade_date"] = pd.to_datetime(result["trade_date"])
+            # 同一批 parquet 可能同时存在 YYYYMMDD 和 YYYY-MM-DD 两种格式，
+            # 用 mixed 解析可以兼容历史增量数据，避免把整批历史读空。
+            result["trade_date"] = pd.to_datetime(
+                result["trade_date"],
+                errors="coerce",
+                format="mixed",
+            )
+            result = result.dropna(subset=["trade_date"])
             sort_cols = ["trade_date"]
             if "ts_code" in result.columns:
                 sort_cols.append("ts_code")

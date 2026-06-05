@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
 
-from app.models.stock_basic import StockBasic
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
 from app.services.data_reader import ParquetDataReader
