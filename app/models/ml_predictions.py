@@ -18,7 +18,7 @@ class MLPredictions(db.Model):
     __table_args__ = (
         Index('idx_model_date', 'model_id', 'trade_date'),
         Index('idx_date_rank', 'trade_date', 'rank_score'),
-        Index('idx_ts_code_date', 'ts_code', 'trade_date'),
+        Index('idx_ml_ts_code_date', 'ts_code', 'trade_date'),
     )
     
     def to_dict(self):

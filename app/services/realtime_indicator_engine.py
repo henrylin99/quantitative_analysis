@@ -365,29 +365,20 @@ class RealtimeIndicatorEngine:
                             'error': str(e),
                         }
             
-            # 存储指标数据到数据库
+            # 存储指标数据到 Parquet 事件存储
             cleaned_indicator_data = []
             storage_warning = None
             if indicator_data:
                 try:
-                    # 删除旧数据
-                    RealtimeIndicator.query.filter(
-                        RealtimeIndicator.ts_code == ts_code,
-                        RealtimeIndicator.period_type == period_type,
-                        RealtimeIndicator.datetime >= start_time
-                    ).delete()
-                    
                     cleaned_indicator_data = self._clean_indicator_data(indicator_data)
                     success, message = RealtimeIndicator.batch_insert(cleaned_indicator_data)
                     if not success:
                         storage_warning = f"存储指标数据失败: {message}"
                         logger.error(storage_warning)
                 except SQLAlchemyError as e:
-                    db.session.rollback()
                     storage_warning = f"指标数据落库失败: {str(e)}"
                     logger.warning(storage_warning)
                 except Exception as e:
-                    db.session.rollback()
                     storage_warning = f"指标数据落库异常: {str(e)}"
                     logger.warning(storage_warning)
             
