@@ -338,7 +338,7 @@ class RealtimeRiskManager:
             for ts_code in stock_codes:
                 data = self.minute_reader.get_data(
                     ts_code=ts_code,
-                    period_type='60min',
+                    period_type='5min',
                     start_time=start_date,
                     end_time=end_date,
                 )
@@ -533,7 +533,7 @@ class RealtimeRiskManager:
     def _get_current_price(self, ts_code: str) -> Optional[float]:
         """获取当前价格"""
         try:
-            latest_data = self.minute_reader.get_latest_data(ts_code, '1min', 1)
+            latest_data = self.minute_reader.get_latest_data(ts_code, '5min', 1)
             if latest_data.empty:
                 return None
             return float(latest_data.iloc[0]['close'])
