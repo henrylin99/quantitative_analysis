@@ -15,10 +15,10 @@ SCRIPTS = [
 ]
 
 
-def test_scripts_use_job_env_helper():
+def test_scripts_use_parquet_job_helpers():
     for rel in SCRIPTS:
         content = Path(rel).read_text(encoding="utf-8").lower()
-        assert "from job_env import" in content
+        assert "from parquet_job_helpers import" in content
 
 
 def test_scripts_do_not_truncate_tables():

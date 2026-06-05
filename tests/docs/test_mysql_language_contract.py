@@ -21,6 +21,8 @@ def test_docs_and_prompt_language_default_to_parquet_not_mysql():
         assert phrase not in claude
         assert phrase not in llm_service
 
-    assert "Parquet 文件（默认）" in readme
+    # README should describe Parquet as the data source
+    assert "不需要 MySQL" in readme or "不需要再安装mysql" in readme
     assert "DATA_SOURCE" in claude
-    assert "默认兼容 MySQL 语法" in llm_service
+    # LLM prompt should target SQLite, not MySQL
+    assert "目标数据库是 SQLite" in llm_service
