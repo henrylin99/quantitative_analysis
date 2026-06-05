@@ -276,7 +276,7 @@
         // 加载所有数据
         function loadAllData() {
             loadOverview();
-            loadQuotes('1min');
+            loadQuotes('5min');
             loadSectors(1);
             loadAnomalies(5.0, 3.0);
             loadSentiment(1);
@@ -340,7 +340,7 @@
         }
 
         // 加载实时行情
-        function loadQuotes(periodType = '1min') {
+        function loadQuotes(periodType = '5min') {
             const loading = document.getElementById('quotesLoading');
             loading.classList.remove('d-none');
 

@@ -25,7 +25,7 @@ def generate_signals():
     try:
         data = request.get_json()
         ts_code = data.get('ts_code')
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         strategies = data.get('strategies')  # 可选，None表示使用所有策略
         lookback_days = data.get('lookback_days', 5)
         
@@ -53,7 +53,7 @@ def fuse_signals():
     try:
         data = request.get_json()
         ts_code = data.get('ts_code')
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         time_window_hours = data.get('time_window_hours', 1)
         
         if not ts_code:
@@ -204,7 +204,7 @@ def backtest_strategy():
         ts_code = data.get('ts_code')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         
         if not all([strategy_name, ts_code, start_date, end_date]):
             return jsonify({
@@ -234,7 +234,7 @@ def batch_generate_signals():
     try:
         data = request.get_json()
         stock_codes = data.get('stock_codes', [])
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         strategies = data.get('strategies')
         lookback_days = data.get('lookback_days', 5)
         
@@ -356,7 +356,7 @@ def multi_stock_fusion():
     try:
         data = request.get_json()
         stock_codes = data.get('stock_codes', [])
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         time_window_hours = data.get('time_window_hours', 1)
         
         if not stock_codes:

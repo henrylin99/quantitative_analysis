@@ -35,7 +35,7 @@ def get_realtime_quotes():
     try:
         # 获取请求参数
         stock_codes_param = request.args.get('stock_codes')
-        period_type = request.args.get('period_type', '1min')
+        period_type = request.args.get('period_type', '5min')
         limit = int(request.args.get('limit', 50))
         
         # 解析股票代码列表
@@ -120,7 +120,7 @@ def add_to_watchlist():
         # 获取这些股票的实时行情
         result = monitor_service.get_realtime_quotes(
             stock_codes=stock_codes,
-            period_type='1min',
+            period_type='5min',
             limit=len(stock_codes)
         )
         
@@ -233,7 +233,7 @@ def get_top_movers():
     """获取涨跌幅排行"""
     try:
         limit = int(request.args.get('limit', 20))
-        period_type = request.args.get('period_type', '1min')
+        period_type = request.args.get('period_type', '5min')
         
         # 获取实时行情数据
         quotes_result = monitor_service.get_realtime_quotes(
