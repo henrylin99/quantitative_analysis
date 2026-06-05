@@ -48,7 +48,8 @@ class MinuteParquetReader:
                 result["datetime"] = result["datetime"].dt.tz_localize(None)
             result = result.dropna(subset=["datetime"])
         if ts_code is not None and "ts_code" in result.columns:
-            result = result[result["ts_code"] == ts_code]
+            candidate_codes = _minute_code_aliases(ts_code)
+            result = result[result["ts_code"].astype(str).isin(candidate_codes)]
         if period_type is not None and "period_type" in result.columns:
             result = result[result["period_type"] == period_type]
         if start_time is not None:
@@ -163,3 +164,19 @@ def _normalize_dt(value: str | datetime) -> datetime:
         return datetime.strptime(text, "%Y%m%d")
     dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
     return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+def _minute_code_aliases(value: str) -> set[str]:
+    text = str(value).strip()
+    lower_text = text.lower()
+    aliases = {text, lower_text}
+
+    if lower_text.startswith(("sh.", "sz.")):
+        market, symbol = lower_text.split(".", 1)
+        aliases.add(f"{symbol}.{market.upper()}")
+    elif lower_text.endswith(".sh") or lower_text.endswith(".sz"):
+        symbol, market = lower_text.split(".", 1)
+        aliases.add(f"{market}.{symbol}")
+        aliases.add(f"{symbol}.{market.upper()}")
+
+    return aliases

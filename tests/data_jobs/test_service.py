@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from app.services.data_jobs.service import DataJobService
+from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
 
 pytestmark = pytest.mark.module_data_jobs
 
@@ -34,3 +35,23 @@ def test_submit_creates_run_and_dispatches_task():
     delay.assert_called_once_with(run.id)
     assert run.status == "queued"
     assert store.updated is True
+
+
+def test_service_uses_store_for_list_runs_and_get_run(tmp_path):
+    store = ParquetDataJobStateStore(base_dir=str(tmp_path / "state"))
+    run = store.create_run("stock_basic", {"start_date": "20260101"})
+    store.update_run_status(run, "queued", progress=0.0, progress_message="任务已入队")
+    service = DataJobService(state_store=store)
+
+    runs = service.list_runs(limit=10, status="queued")
+    fetched = service.get_run(run.id)
+
+    assert len(runs) == 1
+    assert runs[0].id == run.id
+    assert fetched is not None
+    assert fetched.id == run.id
+
+
+def test_service_defaults_to_parquet_state_store():
+    service = DataJobService()
+    assert isinstance(service.state_store, ParquetDataJobStateStore)

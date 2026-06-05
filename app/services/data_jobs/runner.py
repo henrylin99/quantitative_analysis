@@ -28,6 +28,12 @@ class ScriptRunner:
 
         full_path = self.project_root / script_path
         merged_env = os.environ.copy()
+        existing_pythonpath = merged_env.get("PYTHONPATH", "")
+        project_root_text = str(self.project_root)
+        if existing_pythonpath:
+            merged_env["PYTHONPATH"] = f"{project_root_text}{os.pathsep}{existing_pythonpath}"
+        else:
+            merged_env["PYTHONPATH"] = project_root_text
         if env:
             merged_env.update(env)
         if params:

@@ -1,7 +1,7 @@
 """
 分钟级数据同步服务
 整合1、5、15、30、60分钟K线数据获取功能
-适配Flask-SQLAlchemy系统
+适配 Parquet 持久化系统
 """
 
 import baostock as bs
@@ -9,11 +9,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import logging
 from typing import List, Dict, Optional
-from app.extensions import db
-from app.models.stock_minute_data import StockMinuteData
-from app.utils.db_utils import DatabaseUtils
 from app.services.minute_parquet_store import MinuteParquetStore
-from sqlalchemy import text
 import time
 
 logger = logging.getLogger(__name__)
@@ -67,15 +63,21 @@ class MinuteDataSyncService:
     def convert_ts_code_to_bs_code(self, ts_code: str) -> str:
         """
         转换股票代码格式
-        ts_code格式: 000001.SZ -> bs_code格式: sz.000001
+        支持以下输入，并统一输出为 Baostock 格式:
+        000001.SZ -> sz.000001
+        600000.SH -> sh.600000
+        sz.300502 -> sz.300502
         """
-        if ts_code.endswith('.SZ'):
-            return 'sz.' + ts_code.split('.')[0]
-        elif ts_code.endswith('.SH'):
-            return 'sh.' + ts_code.split('.')[0]
-        else:
-            # 如果已经是bs格式，直接返回
-            return ts_code
+        code = str(ts_code).strip()
+        lower_code = code.lower()
+
+        if lower_code.startswith(('sz.', 'sh.')):
+            return lower_code
+        if lower_code.endswith('.sz'):
+            return 'sz.' + lower_code.split('.')[0]
+        if lower_code.endswith('.sh'):
+            return 'sh.' + lower_code.split('.')[0]
+        return lower_code
     
     def get_stock_minute_data_bs(self, stock_code: str, start_date: str, 
                                 end_date: str, period_type: str = '1min') -> Optional[pd.DataFrame]:
@@ -83,7 +85,7 @@ class MinuteDataSyncService:
         使用Baostock获取股票分钟线数据
         
         Args:
-            stock_code: 股票代码，如 'sh.600519' 或 '600519.SH'
+            stock_code: 股票代码，如 'sh.600519'、'sz.300502' 或 '600519.SH'
             start_date: 开始日期，格式 'YYYY-MM-DD'
             end_date: 结束日期，格式 'YYYY-MM-DD'
             period_type: 周期类型，如 '1min', '5min', '15min', '30min', '60min'
@@ -161,8 +163,8 @@ class MinuteDataSyncService:
             # 添加周期类型
             df['period_type'] = period_type
             
-            # 转换股票代码格式（bs格式转回ts格式）
-            df['ts_code'] = df['code'].apply(self._convert_bs_code_to_ts_code)
+            # 分钟线链路统一存储 Baostock 代码格式
+            df['ts_code'] = df['code'].apply(self.convert_ts_code_to_bs_code)
             
             # 计算涨跌幅等字段
             df = self._calculate_technical_fields(df)
@@ -204,22 +206,6 @@ class MinuteDataSyncService:
         except Exception as e:
             logger.error(f"解析时间字符串失败: {time_str}, 错误: {e}")
             return datetime.now()
-    
-    def _convert_bs_code_to_ts_code(self, bs_code: str) -> str:
-        """
-        转换bs格式代码为ts格式
-        sz.000001 -> 000001.SZ
-        sh.600519 -> 600519.SH
-        """
-        try:
-            if bs_code.startswith('sz.'):
-                return bs_code[3:] + '.SZ'
-            elif bs_code.startswith('sh.'):
-                return bs_code[3:] + '.SH'
-            else:
-                return bs_code
-        except:
-            return bs_code
     
     def _calculate_technical_fields(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -282,45 +268,11 @@ class MinuteDataSyncService:
                     'data_count': 0
                 }
             
-            # 转换为字典列表
-            data_list = df.to_dict('records')
-
             parquet_count = self.parquet_store.write_frame(df, period_type)
-            
-            # 批量插入数据库
-            success_count = 0
-            error_count = 0
-            
-            for data in data_list:
-                try:
-                    # 检查是否已存在
-                    existing = StockMinuteData.query.filter_by(
-                        ts_code=data['ts_code'],
-                        datetime=data['datetime'],
-                        period_type=data['period_type']
-                    ).first()
-                    
-                    if existing:
-                        # 更新现有记录
-                        for key, value in data.items():
-                            if hasattr(existing, key):
-                                setattr(existing, key, value)
-                    else:
-                        # 创建新记录
-                        minute_data = StockMinuteData(**data)
-                        db.session.add(minute_data)
-                    
-                    success_count += 1
-                    
-                except Exception as e:
-                    logger.error(f"插入数据失败: {data}, 错误: {e}")
-                    error_count += 1
-                    continue
-            
-            # 提交事务
-            db.session.commit()
-            
-            logger.info(f"同步{ts_code}的{period_type}数据完成，成功: {success_count}, 失败: {error_count}")
+            success_count = parquet_count
+            error_count = max(len(df) - parquet_count, 0)
+
+            logger.info(f"同步{ts_code}的{period_type}数据完成，写入 Parquet: {parquet_count}, 失败: {error_count}")
             
             return {
                 'success': True,
@@ -333,7 +285,6 @@ class MinuteDataSyncService:
             }
             
         except Exception as e:
-            db.session.rollback()
             logger.error(f"同步{ts_code}的{period_type}数据异常: {e}")
             return {
                 'success': False,
@@ -419,28 +370,21 @@ class MinuteDataSyncService:
     
     def get_stock_list_from_db(self) -> List[str]:
         """
-        从数据库获取股票列表
+        从 Parquet 股票基础资料获取股票列表
         """
         try:
-            # 尝试从stock_basic表获取
-            result = db.session.execute(text("SELECT ts_code FROM stock_basic LIMIT 100"))
-            stock_list = [row[0] for row in result.fetchall()]
-            
-            if stock_list:
-                logger.info(f"从数据库获取到{len(stock_list)}只股票")
-                return stock_list
-            else:
-                # 如果没有数据，返回一些测试股票
-                test_stocks = [
-                    '000001.SZ', '000002.SZ', '600000.SH', '600036.SH', '600519.SH'
-                ]
-                logger.warning("数据库中没有股票列表，使用测试股票")
-                return test_stocks
-                
+            from app.services.data_reader import ParquetDataReader
+
+            df = ParquetDataReader().get_stock_basic()
+            if df.empty or "ts_code" not in df.columns:
+                logger.warning("Parquet 股票基础资料为空")
+                return []
+            stock_list = df["ts_code"].dropna().astype(str).tolist()
+            logger.info(f"从 Parquet 获取到{len(stock_list)}只股票")
+            return stock_list
         except Exception as e:
             logger.error(f"获取股票列表异常: {e}")
-            # 返回测试股票
-            return ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH', '600519.SH']
+            return []
     
     def sync_all_periods_for_stock(self, ts_code: str, start_date: str = None, 
                                   end_date: str = None) -> Dict:

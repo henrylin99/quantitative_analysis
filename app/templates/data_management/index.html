@@ -46,7 +46,8 @@
         <div class="row mb-4">
             <div class="col-12">
                 <h2><i class="fas fa-database text-primary"></i> 数据管理</h2>
-                <p class="text-muted">当前页面用于 Parquet 资产检查、日频任务、Baostock 分钟数据接入、聚合与质量检查。</p>
+                <p class="text-muted">当前页面用于日频任务、Baostock 分钟数据接入、聚合与质量检查。</p>
+                <p class="text-muted small mb-0">同时提供 Parquet 资产检查与分钟线数据链路验证。</p>
             </div>
         </div>
 
@@ -193,7 +194,7 @@
                                 <form id="syncForm">
                                     <div class="mb-3">
                                         <label for="syncStockCode" class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="syncStockCode" placeholder="例如: 000001.SZ" required>
+                                        <input type="text" class="form-control" id="syncStockCode" placeholder="例如: sz.000001 或 sh.600000" required>
                                     </div>
                                     <div class="row mb-3">
                                         <div class="col-md-6">
@@ -281,7 +282,7 @@
                                 <form id="aggregateForm">
                                     <div class="mb-3">
                                         <label for="aggStockCode" class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="aggStockCode" placeholder="例如: 000001.SZ" required>
+                                        <input type="text" class="form-control" id="aggStockCode" placeholder="例如: sz.000001 或 sh.600000" required>
                                     </div>
                                     <div class="row">
                                         <div class="col-md-6">
@@ -325,7 +326,7 @@
                                     <div class="row">
                                         <div class="col-md-6">
                                             <label for="qualityStockCode" class="form-label">股票代码</label>
-                                            <input type="text" class="form-control" id="qualityStockCode" placeholder="例如: 000001.SZ" required>
+                                            <input type="text" class="form-control" id="qualityStockCode" placeholder="例如: sz.000001 或 sh.600000" required>
                                         </div>
                                         <div class="col-md-3">
                                             <label for="qualityPeriod" class="form-label">周期</label>
@@ -918,7 +919,7 @@
                         <div class="mb-3">
                             <label for="batchStockList" class="form-label">股票代码列表</label>
                             <textarea class="form-control" id="batchStockList" rows="6" 
-                                placeholder="请输入股票代码，每行一个或用逗号分隔&#10;例如:&#10;000001.SZ&#10;000002.SZ&#10;600000.SH"></textarea>
+                                placeholder="请输入股票代码，每行一个或用逗号分隔&#10;例如:&#10;sz.000001&#10;sz.000002&#10;sh.600000"></textarea>
                             <div class="form-text">支持每行一个代码或用逗号分隔</div>
                         </div>
                         <div class="row mb-3">

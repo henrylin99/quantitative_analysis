@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.extensions import db
-from app.models.data_job_run import DataJobRun
+from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
 from app.services.data_jobs.registry import JobRegistry
-from app.services.data_jobs.state_store import DataJobStateStore
 from app.tasks.data_jobs_tasks import run_data_job
 
 try:
@@ -34,14 +32,14 @@ class DataJobService:
     def __init__(
         self,
         registry: Optional[JobRegistry] = None,
-        state_store: Optional[DataJobStateStore] = None,
+        state_store: Optional[Any] = None,
         execution_mode: Optional[str] = None,
     ):
         self.registry = registry or JobRegistry()
-        self.state_store = state_store or DataJobStateStore(db.session)
+        self.state_store = state_store or ParquetDataJobStateStore()
         self.execution_mode = _resolve_execution_mode(execution_mode)
 
-    def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None) -> DataJobRun:
+    def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None):
         definition = self.registry.get_job(job_type)
         params = params or {}
         find_active_duplicate = getattr(self.state_store, "find_active_duplicate", None)
@@ -93,7 +91,7 @@ class DataJobService:
         run_data_job.delay(run.id)
         return run
 
-    def retry(self, run_id: int) -> DataJobRun:
+    def retry(self, run_id: int):
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"job run not found: {run_id}")
@@ -105,10 +103,7 @@ class DataJobService:
         return self.registry.list_jobs()
 
     def list_runs(self, limit: int = 50, status: Optional[str] = None):
-        query = DataJobRun.query.order_by(DataJobRun.id.desc())
-        if status:
-            query = query.filter(DataJobRun.status == status)
-        return query.limit(limit).all()
+        return self.state_store.list_runs(limit=limit, status=status)
 
-    def get_run(self, run_id: int) -> Optional[DataJobRun]:
-        return DataJobRun.query.filter_by(id=run_id).first()
+    def get_run(self, run_id: int):
+        return self.state_store.get_run(run_id)
