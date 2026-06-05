@@ -14,7 +14,6 @@ import math
 
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.models.realtime_indicator import RealtimeIndicator
-from app.models.stock_minute_data import StockMinuteData
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +249,7 @@ def get_indicator_history():
 def get_supported_indicators():
     """获取支持的指标列表"""
     try:
-        indicators = indicator_engine.get_supported_indicators()
+        indicators = get_indicator_engine().get_supported_indicators()
         
         return jsonify({
             'success': True,
@@ -298,7 +297,7 @@ def batch_calculate_indicators():
         
         for ts_code in stock_codes:
             try:
-                result = indicator_engine.calculate_indicators(
+                result = get_indicator_engine().calculate_indicators(
                     ts_code=ts_code,
                     period_type=period_type,
                     indicators=indicators,
