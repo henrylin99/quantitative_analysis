@@ -212,11 +212,19 @@ class RealtimeReportGenerator:
         minute_data_count = int(len(minute_df))
         active_stocks = int(minute_df["ts_code"].dropna().astype(str).nunique()) if not minute_df.empty and "ts_code" in minute_df.columns else 0
         
-        # 获取技术指标数量与信号数量
-        indicator_stats = RealtimeIndicator.get_indicator_stats()
-        signal_stats = TradingSignal.get_signal_stats()
-        indicator_count = indicator_stats.get('total_records', 0)
-        signal_count = signal_stats.get('total_signals', 0)
+        # 获取当天 5min 技术指标数量与信号数量
+        day_start = datetime.combine(today, datetime.min.time())
+        day_end = datetime.combine(today, datetime.max.time())
+        indicator_count = RealtimeIndicator.query.filter(
+            RealtimeIndicator.datetime >= day_start,
+            RealtimeIndicator.datetime <= day_end,
+            RealtimeIndicator.period_type == '5min'
+        ).count()
+        signal_count = TradingSignal.query.filter(
+            TradingSignal.created_at >= day_start,
+            TradingSignal.created_at <= day_end,
+            TradingSignal.period_type == '5min'
+        ).count()
         
         return {
             'date': today.isoformat(),
@@ -383,8 +391,18 @@ class RealtimeReportGenerator:
         total_volume = sum(stock["total_volume"] or 0 for stock in active_stocks)
         avg_data_points = np.mean([stock["data_points"] for stock in active_stocks]) if active_stocks else 0
         
-        # 获取技术指标统计
-        indicator_stats = RealtimeIndicator.get_indicator_stats().get('indicator_stats', {})
+        # 获取当天 5min 技术指标统计
+        day_start = datetime.combine(today, datetime.min.time())
+        day_end = datetime.combine(today, datetime.max.time())
+        indicator_stats_query = db.session.query(
+            RealtimeIndicator.indicator_name,
+            db.func.count(RealtimeIndicator.id).label('count')
+        ).filter(
+            RealtimeIndicator.datetime >= day_start,
+            RealtimeIndicator.datetime <= day_end,
+            RealtimeIndicator.period_type == '5min'
+        ).group_by(RealtimeIndicator.indicator_name).all()
+        indicator_stats = {stat.indicator_name: stat.count for stat in indicator_stats_query}
         
         return {
             'market_overview': {

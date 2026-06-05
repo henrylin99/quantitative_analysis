@@ -60,7 +60,7 @@ class RealtimeDataManager:
         self.minute_store = MinuteParquetStore()
     
     def sync_minute_data(self, ts_code: str, start_date: str = None, end_date: str = None, 
-                        period_type: str = '1min', use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
+                        period_type: str = '5min', use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
         """
         同步分钟级数据
         
@@ -111,7 +111,7 @@ class RealtimeDataManager:
                 'data_count': 0
             }
     
-    def sync_multiple_stocks_data(self, stock_list: List[str], period_type: str = '1min',
+    def sync_multiple_stocks_data(self, stock_list: List[str], period_type: str = '5min',
                                  start_date: str = None, end_date: str = None,
                                  batch_size: int = 10, use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
         """

@@ -29,7 +29,7 @@ def sync_minute_data():
         ts_code = data.get('ts_code')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         use_baostock = data.get('use_baostock', True)
         data_source = data.get('data_source', 'tongdaxin')
         
@@ -65,7 +65,7 @@ def sync_multiple_stocks():
     try:
         data = request.get_json()
         stock_list = data.get('stock_list', [])
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         batch_size = data.get('batch_size', 10)
