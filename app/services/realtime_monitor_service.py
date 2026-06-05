@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class RealtimeMonitorService:
     """实时监控服务"""
+    DEFAULT_PERIOD_TYPE = "5min"
     
     def __init__(self):
         self.sector_mapping = self._initialize_sector_mapping()
@@ -58,7 +59,7 @@ class RealtimeMonitorService:
 
     def _minute_frame(
         self,
-        period_type: str = '1min',
+        period_type: str = DEFAULT_PERIOD_TYPE,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         ts_codes: Optional[List[str]] = None,
@@ -87,7 +88,7 @@ class RealtimeMonitorService:
         )
     
     def get_realtime_quotes(self, stock_codes: List[str] = None, 
-                           period_type: str = '1min', limit: int = 50) -> Dict:
+                           period_type: str = DEFAULT_PERIOD_TYPE, limit: int = 50) -> Dict:
         """获取实时行情数据"""
         try:
             # 如果没有指定股票代码，获取活跃股票
@@ -149,7 +150,7 @@ class RealtimeMonitorService:
         try:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
-            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time)
+            minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=start_time, end_time=end_time)
             latest_rows = self._latest_rows(minute_df)
             
             sector_performance = []
@@ -166,7 +167,7 @@ class RealtimeMonitorService:
 
                     for _, latest_data in sector_rows.iterrows():
                         current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
-                        prev_close = self._get_previous_close(latest_data["ts_code"], current_time, '1min')
+                        prev_close = self._get_previous_close(latest_data["ts_code"], current_time, self.DEFAULT_PERIOD_TYPE)
                         if prev_close and prev_close > 0:
                             change_pct = (latest_data["close"] - prev_close) / prev_close * 100
                             sector_changes.append(change_pct)
@@ -224,7 +225,7 @@ class RealtimeMonitorService:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
             active_stocks = self._get_active_stocks(200)
-            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time, ts_codes=active_stocks)
+            minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=start_time, end_time=end_time, ts_codes=active_stocks)
             latest_rows = self._latest_rows(minute_df)
             
             anomalies = []
@@ -233,12 +234,12 @@ class RealtimeMonitorService:
                 ts_code = latest_data["ts_code"]
                 try:
                     current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
-                    prev_close = self._get_previous_close(ts_code, current_time, '1min')
+                    prev_close = self._get_previous_close(ts_code, current_time, self.DEFAULT_PERIOD_TYPE)
                     if not prev_close or prev_close <= 0:
                         continue
 
                     change_pct = (latest_data["close"] - prev_close) / prev_close * 100
-                    volume_ratio = self._calculate_volume_ratio(ts_code, current_time, '1min')
+                    volume_ratio = self._calculate_volume_ratio(ts_code, current_time, self.DEFAULT_PERIOD_TYPE)
 
                     anomaly_types = []
                     if abs(change_pct) >= change_threshold:
@@ -289,7 +290,7 @@ class RealtimeMonitorService:
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=period_hours)
             active_stocks = self._get_active_stocks(500)
-            minute_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=end_time, ts_codes=active_stocks)
+            minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=start_time, end_time=end_time, ts_codes=active_stocks)
             latest_rows = self._latest_rows(minute_df)
             
             rising_stocks = 0
@@ -302,7 +303,7 @@ class RealtimeMonitorService:
             for _, latest_data in latest_rows.iterrows():
                 try:
                     current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
-                    prev_close = self._get_previous_close(latest_data["ts_code"], current_time, '1min')
+                    prev_close = self._get_previous_close(latest_data["ts_code"], current_time, self.DEFAULT_PERIOD_TYPE)
                     if not prev_close or prev_close <= 0:
                         continue
 
@@ -387,7 +388,7 @@ class RealtimeMonitorService:
     def get_monitor_overview(self) -> Dict:
         """获取监控概览"""
         try:
-            minute_df = self._minute_frame(period_type='1min')
+            minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE)
             if minute_df.empty:
                 return {
                     'success': True,
@@ -431,7 +432,7 @@ class RealtimeMonitorService:
         """获取活跃股票列表"""
         try:
             recent_time = datetime.now() - timedelta(hours=1)
-            minute_df = self._minute_frame(period_type='1min', start_time=recent_time, end_time=datetime.now())
+            minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=recent_time, end_time=datetime.now())
             if minute_df.empty or "ts_code" not in minute_df.columns:
                 return ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH', '000858.SZ']
             return minute_df["ts_code"].dropna().astype(str).drop_duplicates().head(limit).tolist()
@@ -511,7 +512,7 @@ class RealtimeMonitorService:
         try:
             latest_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
             start_time = latest_time - timedelta(hours=20)
-            price_df = self._minute_frame(period_type='1min', start_time=start_time, end_time=latest_time, ts_codes=[ts_code])
+            price_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=start_time, end_time=latest_time, ts_codes=[ts_code])
 
             if price_df.empty:
                 return False

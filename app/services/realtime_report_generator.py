@@ -17,6 +17,7 @@ from app.models.trading_signal import TradingSignal
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert
 from app.extensions import db
+from app.services.data_reader import ParquetDataReader
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class RealtimeReportGenerator:
     
     def __init__(self):
         """初始化报告生成器"""
+        self.data_reader = ParquetDataReader()
+        self.minute_reader = self.data_reader.get_minute_reader()
         self.report_types = {
             'daily_summary': '每日市场总结',
             'portfolio_analysis': '投资组合分析',
@@ -203,25 +206,24 @@ class RealtimeReportGenerator:
     def _collect_daily_summary_data(self) -> Dict[str, Any]:
         """收集每日总结数据"""
         today = datetime.now().date()
+
+        minute_df = self._load_minute_frame("5min", today, today)
+
+        minute_data_count = int(len(minute_df))
+        active_stocks = int(minute_df["ts_code"].dropna().astype(str).nunique()) if not minute_df.empty and "ts_code" in minute_df.columns else 0
         
-        # 获取今日分钟数据统计
-        minute_data_count = StockMinuteData.query.filter(
-            db.func.date(StockMinuteData.datetime) == today
-        ).count()
-        
-        # 获取活跃股票数量
-        active_stocks = db.session.query(StockMinuteData.ts_code).filter(
-            db.func.date(StockMinuteData.datetime) == today
-        ).distinct().count()
-        
-        # 获取技术指标数量
+        # 获取当天 5min 技术指标数量与信号数量
+        day_start = datetime.combine(today, datetime.min.time())
+        day_end = datetime.combine(today, datetime.max.time())
         indicator_count = RealtimeIndicator.query.filter(
-            db.func.date(RealtimeIndicator.datetime) == today
+            RealtimeIndicator.datetime >= day_start,
+            RealtimeIndicator.datetime <= day_end,
+            RealtimeIndicator.period_type == '5min'
         ).count()
-        
-        # 获取交易信号数量
         signal_count = TradingSignal.query.filter(
-            db.func.date(TradingSignal.created_at) == today
+            TradingSignal.created_at >= day_start,
+            TradingSignal.created_at <= day_end,
+            TradingSignal.period_type == '5min'
         ).count()
         
         return {
@@ -318,8 +320,11 @@ class RealtimeReportGenerator:
         """收集交易信号数据"""
         # 获取最近的交易信号
         recent_signals = TradingSignal.query.filter(
-            TradingSignal.created_at >= datetime.utcnow() - timedelta(days=7)
-        ).order_by(TradingSignal.created_at.desc()).limit(100).all()
+            TradingSignal.created_at >= datetime.utcnow() - timedelta(days=7),
+            TradingSignal.period_type == '5min'
+        ).all()
+        recent_signals.sort(key=lambda signal: signal.created_at or datetime.min, reverse=True)
+        recent_signals = recent_signals[:100]
         
         # 统计信号类型分布
         signal_types = {}
@@ -354,7 +359,8 @@ class RealtimeReportGenerator:
                 'total_signals': len(recent_signals),
                 'signal_types': signal_types,
                 'strategy_performance': strategy_performance,
-                'analysis_period': '最近7天'
+                'analysis_period': '最近7天',
+                'period_type': '5min'
             },
             'recent_signals': [signal.to_dict() for signal in recent_signals[:20]],  # 最近20个信号
             'analysis_date': datetime.utcnow().isoformat()
@@ -363,29 +369,40 @@ class RealtimeReportGenerator:
     def _collect_market_data(self) -> Dict[str, Any]:
         """收集市场数据"""
         today = datetime.now().date()
+        minute_df = self._load_minute_frame("5min", today, today)
+
+        if minute_df.empty:
+            active_stocks = []
+        else:
+            minute_df = minute_df.copy()
+            minute_df["datetime"] = pd.to_datetime(minute_df["datetime"], errors="coerce")
+            active_stocks = []
+            for ts_code, group in minute_df.groupby("ts_code"):
+                active_stocks.append(
+                    {
+                        "ts_code": ts_code,
+                        "data_points": int(len(group)),
+                        "high": float(group["close"].max()) if "close" in group.columns and not group["close"].empty else None,
+                        "low": float(group["close"].min()) if "close" in group.columns and not group["close"].empty else None,
+                        "total_volume": float(group["volume"].sum()) if "volume" in group.columns and not group["volume"].empty else 0,
+                    }
+                )
+
+        total_volume = sum(stock["total_volume"] or 0 for stock in active_stocks)
+        avg_data_points = np.mean([stock["data_points"] for stock in active_stocks]) if active_stocks else 0
         
-        # 获取今日活跃股票
-        active_stocks = db.session.query(
-            StockMinuteData.ts_code,
-            db.func.count(StockMinuteData.id).label('data_points'),
-            db.func.max(StockMinuteData.close).label('high'),
-            db.func.min(StockMinuteData.close).label('low'),
-            db.func.sum(StockMinuteData.volume).label('total_volume')
-        ).filter(
-            db.func.date(StockMinuteData.datetime) == today
-        ).group_by(StockMinuteData.ts_code).all()
-        
-        # 计算市场统计
-        total_volume = sum(stock.total_volume or 0 for stock in active_stocks)
-        avg_data_points = np.mean([stock.data_points for stock in active_stocks]) if active_stocks else 0
-        
-        # 获取技术指标统计
-        indicator_stats = db.session.query(
-            RealtimeIndicator.indicator_type,
+        # 获取当天 5min 技术指标统计
+        day_start = datetime.combine(today, datetime.min.time())
+        day_end = datetime.combine(today, datetime.max.time())
+        indicator_stats_query = db.session.query(
+            RealtimeIndicator.indicator_name,
             db.func.count(RealtimeIndicator.id).label('count')
         ).filter(
-            db.func.date(RealtimeIndicator.datetime) == today
-        ).group_by(RealtimeIndicator.indicator_type).all()
+            RealtimeIndicator.datetime >= day_start,
+            RealtimeIndicator.datetime <= day_end,
+            RealtimeIndicator.period_type == '5min'
+        ).group_by(RealtimeIndicator.indicator_name).all()
+        indicator_stats = {stat.indicator_name: stat.count for stat in indicator_stats_query}
         
         return {
             'market_overview': {
@@ -394,20 +411,15 @@ class RealtimeReportGenerator:
                 'avg_data_points': avg_data_points,
                 'analysis_date': today.isoformat()
             },
-            'stock_activity': [
-                {
-                    'ts_code': stock.ts_code,
-                    'data_points': stock.data_points,
-                    'high': stock.high,
-                    'low': stock.low,
-                    'total_volume': stock.total_volume
-                }
-                for stock in active_stocks[:20]  # 前20只活跃股票
-            ],
-            'indicator_distribution': {
-                stat.indicator_type: stat.count for stat in indicator_stats
-            }
+            'stock_activity': active_stocks[:20],
+            'indicator_distribution': indicator_stats
         }
+
+    def _load_minute_frame(self, period_type: str, start_date, end_date) -> pd.DataFrame:
+        """Load minute parquet data for a date range."""
+        start_dt = datetime.combine(start_date, datetime.min.time()) if hasattr(start_date, "year") else start_date
+        end_dt = datetime.combine(end_date, datetime.max.time()) if hasattr(end_date, "year") else end_date
+        return self.minute_reader.get_data(period_type=period_type, start_time=start_dt, end_time=end_dt)
     
     def _generate_report_content(self, report_type: str, template: Optional[ReportTemplate], 
                                report_data: Dict[str, Any]) -> Dict[str, Any]:

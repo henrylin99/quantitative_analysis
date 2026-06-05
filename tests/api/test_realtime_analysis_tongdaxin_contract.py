@@ -30,3 +30,21 @@ def test_sync_endpoint_passes_tongdaxin_data_source():
 
     assert response.status_code == 200
     assert manager.sync_minute_data.call_args.kwargs["data_source"] == "tongdaxin"
+
+
+def test_sync_endpoint_defaults_to_five_minute_period():
+    app = _build_app()
+    client = app.test_client()
+
+    with patch("app.api.realtime_analysis.data_manager") as manager:
+        manager.sync_minute_data.return_value = {"success": True, "message": "ok", "data_count": 1}
+        response = client.post(
+            "/api/realtime-analysis/data/sync",
+            json={
+                "ts_code": "sh.600000",
+                "data_source": "tongdaxin",
+            },
+        )
+
+    assert response.status_code == 200
+    assert manager.sync_minute_data.call_args.kwargs["period_type"] == "5min"
