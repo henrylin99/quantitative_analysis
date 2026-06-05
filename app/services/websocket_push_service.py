@@ -11,7 +11,6 @@ from typing import Dict, List, Any, Optional
 import json
 
 from app.extensions import db
-from app.models.stock_minute_data import StockMinuteData
 from app.models.realtime_indicator import RealtimeIndicator
 from app.models.trading_signal import TradingSignal
 from app.models.risk_alert import RiskAlert
