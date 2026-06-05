@@ -11,6 +11,7 @@ from app.extensions import db
 from loguru import logger
 import json
 import math
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.realtime_indicator import RealtimeIndicator
 from app.services.data_reader import ParquetDataReader
@@ -82,6 +83,81 @@ class RealtimeIndicatorEngine:
                     cleaned_item[key] = value
             cleaned_data.append(cleaned_item)
         return cleaned_data
+
+    def _normalize_indicator_series(self, values):
+        """将指标序列统一为可存储/可展示的列表。"""
+        if isinstance(values, pd.Series):
+            return values.tolist()
+        if isinstance(values, tuple):
+            return list(values)
+        if isinstance(values, list):
+            return values
+        return [values]
+
+    def _extract_latest_value(self, values):
+        """提取序列中的最新有效值。"""
+        normalized = self._normalize_indicator_series(values)
+        for item in reversed(normalized):
+            if item is None:
+                continue
+            if isinstance(item, (list, tuple)):
+                if any(part is not None for part in item):
+                    return list(item)
+                continue
+            if pd.isna(item):
+                continue
+            return item
+        return None
+
+    def _build_indicator_storage_rows(
+        self,
+        ts_code: str,
+        period_type: str,
+        indicator: str,
+        indicator_result: Dict,
+        df: pd.DataFrame,
+    ) -> tuple[list[Dict], Dict[str, Any]]:
+        """把单个指标的结果展开成存储行和摘要。"""
+        storage_rows: list[Dict] = []
+        latest_values: Dict[str, Any] = {}
+
+        if not isinstance(indicator_result, dict):
+            return storage_rows, latest_values
+
+        for sub_name, values in indicator_result.items():
+            normalized_values = self._normalize_indicator_series(values)
+            latest_values[sub_name] = self._clean_nan_values(self._extract_latest_value(normalized_values))
+
+            for i, row in df.iterrows():
+                if i >= len(normalized_values):
+                    break
+
+                value = normalized_values[i]
+                if value is None or (isinstance(value, float) and pd.isna(value)):
+                    continue
+
+                if isinstance(value, (int, float)):
+                    value1, value2, value3, value4 = value, None, None, None
+                elif isinstance(value, (list, tuple)):
+                    value1 = value[0] if len(value) > 0 else None
+                    value2 = value[1] if len(value) > 1 else None
+                    value3 = value[2] if len(value) > 2 else None
+                    value4 = value[3] if len(value) > 3 else None
+                else:
+                    continue
+
+                storage_rows.append({
+                    'ts_code': ts_code,
+                    'datetime': row['datetime'],
+                    'period_type': period_type,
+                    'indicator_name': indicator,
+                    'value1': value1,
+                    'value2': value2,
+                    'value3': value3,
+                    'value4': value4
+                })
+
+        return storage_rows, latest_values
     
     def _clean_results_for_json(self, results: Dict) -> Dict:
         """清理结果中的NaN值，确保JSON序列化安全"""
@@ -256,57 +332,64 @@ class RealtimeIndicatorEngine:
             # 计算指标
             results = {}
             indicator_data = []
+            latest_values = {}
+            indicator_summary = {}
             
             for indicator in indicators:
                 if indicator in self.supported_indicators:
                     try:
                         indicator_result = self.supported_indicators[indicator](df)
                         results[indicator] = indicator_result
-                        
-                        # 准备存储数据
-                        for i, row in df.iterrows():
-                            if indicator in indicator_result and i < len(indicator_result[indicator]):
-                                values = indicator_result[indicator][i]
-                                if values is not None:
-                                    # 处理单值和多值指标
-                                    if isinstance(values, (int, float)):
-                                        value1, value2, value3, value4 = values, None, None, None
-                                    elif isinstance(values, (list, tuple)):
-                                        value1 = values[0] if len(values) > 0 else None
-                                        value2 = values[1] if len(values) > 1 else None
-                                        value3 = values[2] if len(values) > 2 else None
-                                        value4 = values[3] if len(values) > 3 else None
-                                    else:
-                                        continue
-                                    
-                                    indicator_data.append({
-                                        'ts_code': ts_code,
-                                        'datetime': row['datetime'],
-                                        'period_type': period_type,
-                                        'indicator_name': indicator,
-                                        'value1': value1,
-                                        'value2': value2,
-                                        'value3': value3,
-                                        'value4': value4
-                                    })
+                        rows, summary = self._build_indicator_storage_rows(
+                            ts_code=ts_code,
+                            period_type=period_type,
+                            indicator=indicator,
+                            indicator_result=indicator_result,
+                            df=df,
+                        )
+                        indicator_data.extend(rows)
+                        latest_values[indicator] = summary
+                        indicator_summary[indicator] = {
+                            'sub_indicators': list(indicator_result.keys()) if isinstance(indicator_result, dict) else [],
+                            'latest_values': summary,
+                            'stored_records': len(rows)
+                        }
                     except Exception as e:
                         logger.error(f"计算指标 {indicator} 失败: {str(e)}")
                         results[indicator] = {'error': str(e)}
+                        latest_values[indicator] = {}
+                        indicator_summary[indicator] = {
+                            'sub_indicators': [],
+                            'latest_values': {},
+                            'stored_records': 0,
+                            'error': str(e),
+                        }
             
             # 存储指标数据到数据库
             cleaned_indicator_data = []
+            storage_warning = None
             if indicator_data:
-                # 删除旧数据
-                RealtimeIndicator.query.filter(
-                    RealtimeIndicator.ts_code == ts_code,
-                    RealtimeIndicator.period_type == period_type,
-                    RealtimeIndicator.datetime >= start_time
-                ).delete()
-                
-                cleaned_indicator_data = self._clean_indicator_data(indicator_data)
-                success, message = RealtimeIndicator.batch_insert(cleaned_indicator_data)
-                if not success:
-                    logger.error(f"存储指标数据失败: {message}")
+                try:
+                    # 删除旧数据
+                    RealtimeIndicator.query.filter(
+                        RealtimeIndicator.ts_code == ts_code,
+                        RealtimeIndicator.period_type == period_type,
+                        RealtimeIndicator.datetime >= start_time
+                    ).delete()
+                    
+                    cleaned_indicator_data = self._clean_indicator_data(indicator_data)
+                    success, message = RealtimeIndicator.batch_insert(cleaned_indicator_data)
+                    if not success:
+                        storage_warning = f"存储指标数据失败: {message}"
+                        logger.error(storage_warning)
+                except SQLAlchemyError as e:
+                    db.session.rollback()
+                    storage_warning = f"指标数据落库失败: {str(e)}"
+                    logger.warning(storage_warning)
+                except Exception as e:
+                    db.session.rollback()
+                    storage_warning = f"指标数据落库异常: {str(e)}"
+                    logger.warning(storage_warning)
             
             cleaned_results = self._clean_results_for_json(results)
             
@@ -314,10 +397,15 @@ class RealtimeIndicatorEngine:
             return_dict = {
                 'success': True,
                 'data': cleaned_results,
+                'latest_values': self._clean_results_for_json(latest_values),
+                'indicator_summary': self._clean_results_for_json(indicator_summary),
+                'timeline': df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(),
                 'total_indicators': len(results),
                 'data_points': len(df),
                 'stored_records': len(cleaned_indicator_data)
             }
+            if storage_warning:
+                return_dict['storage_warning'] = storage_warning
             
             # 清理整个返回字典
             final_result = self._clean_results_for_json(return_dict)
@@ -617,6 +705,11 @@ class RealtimeIndicatorEngine:
             indicators = ['MA', 'EMA', 'MACD', 'RSI']
         
         results = {}
+        summary = {
+            'period_count': len(periods),
+            'available_periods': [],
+            'period_summaries': {}
+        }
         
         for period in periods:
             try:
@@ -627,14 +720,33 @@ class RealtimeIndicatorEngine:
                     lookback_days=7  # 多周期计算使用较短的回看期
                 )
                 results[period] = period_result
+                if period_result.get('success'):
+                    summary['available_periods'].append(period)
+                summary['period_summaries'][period] = {
+                    'success': period_result.get('success', False),
+                    'total_indicators': period_result.get('total_indicators', 0),
+                    'data_points': period_result.get('data_points', 0),
+                    'stored_records': period_result.get('stored_records', 0),
+                    'latest_values': period_result.get('latest_values', {}),
+                }
             except Exception as e:
                 logger.error(f"计算 {period} 周期指标失败: {str(e)}")
                 results[period] = {'success': False, 'message': str(e)}
-        
+                summary['period_summaries'][period] = {
+                    'success': False,
+                    'message': str(e)
+                }
+
         return {
             'success': True,
             'data': results,
             'ts_code': ts_code,
             'indicators': indicators,
-            'periods': periods
-        } 
+            'periods': periods,
+            'data_source': {
+                'type': 'parquet',
+                'data_dir': self.data_reader.data_dir,
+                'minute_root': f"{self.data_reader.data_dir}/stock_minute",
+            },
+            'summary': summary
+        }

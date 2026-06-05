@@ -171,6 +171,12 @@ def _minute_code_aliases(value: str) -> set[str]:
     lower_text = text.lower()
     aliases = {text, lower_text}
 
+    # 兼容前端直接传入的 6 位纯数字代码（例如 300502）
+    if lower_text.isdigit() and len(lower_text) == 6:
+        market = 'SH' if lower_text.startswith('6') else 'SZ'
+        aliases.add(f"{lower_text}.{market}")
+        aliases.add(f"{market.lower()}.{lower_text}")
+
     if lower_text.startswith(("sh.", "sz.")):
         market, symbol = lower_text.split(".", 1)
         aliases.add(f"{symbol}.{market.upper()}")
