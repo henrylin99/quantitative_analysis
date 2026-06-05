@@ -3,6 +3,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from flask import Flask
+
+from app.api.realtime_indicators import realtime_indicators_bp
 
 
 class _BlockedQuery:
@@ -44,20 +47,27 @@ def _write_minute_parquet(root: Path) -> None:
     pd.DataFrame(rows).to_parquet(minute_dir / "data.parquet", index=False)
 
 
-def test_indicator_calculation_runs_without_orm_backed_mysql_path(app, tmp_path, monkeypatch):
+def _build_app() -> Flask:
+    app = Flask(__name__)
+    app.register_blueprint(realtime_indicators_bp, url_prefix="/api/realtime-analysis/indicators")
+    return app
+
+
+def test_indicator_calculation_runs_without_orm_backed_mysql_path(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     _write_minute_parquet(tmp_path)
 
     with patch("app.services.realtime_indicator_engine.RealtimeIndicator", _BlockedRealtimeIndicator):
-        response = app.test_client().post(
-            "/api/realtime-analysis/indicators/calculate",
-            json={
-                "ts_code": "000001.SZ",
-                "period_type": "1min",
-                "indicators": ["RSI"],
-                "lookback_days": 7,
-            },
-        )
+        with _build_app().test_client() as client:
+            response = client.post(
+                "/api/realtime-analysis/indicators/calculate",
+                json={
+                    "ts_code": "000001.SZ",
+                    "period_type": "1min",
+                    "indicators": ["RSI"],
+                    "lookback_days": 7,
+                },
+            )
 
     payload = response.get_json()
     assert response.status_code == 200

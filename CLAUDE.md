@@ -36,9 +36,11 @@ This is a **Flask + SQLAlchemy + SocketIO** quantitative stock analysis system (
 ### Request Flow
 
 ```
-HTTP → Blueprint (app/api/*.py) → Service (app/services/*.py) → ParquetDataReader / SQLAlchemy models (MySQL-compatible app state)
+HTTP → Blueprint (app/api/*.py) → Service (app/services/*.py) → ParquetDataReader / SQLAlchemy models (SQLite app state)
 WebSocket → app/websocket/websocket_events.py → app/services/websocket_push_service.py
 ```
+
+Do not treat MySQL as a normal runtime dependency. SQLite is the default ORM store and Parquet is the default market-data store.
 
 HTML page routes live in `app/routes/` (separate from API blueprints).
 
@@ -74,7 +76,7 @@ Controlled by `DATA_JOB_EXECUTION_MODE` env var:
 
 All config in `config.py` via env vars (`.env` file). Key vars:
 - `DATA_SOURCE` — defaults to `parquet`
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` — MySQL-compatible application state settings (default db: `stock_cursor`)
+- `SQLALCHEMY_DATABASE_URI` — defaults to SQLite (`stock_cursor.sqlite3`)
 - `REDIS_HOST`, `REDIS_PORT` — Redis for Celery and caching
 - `FLASK_ENV` — `development` or `production`
 - `DATA_JOB_EXECUTION_MODE` — `inline` or `celery`

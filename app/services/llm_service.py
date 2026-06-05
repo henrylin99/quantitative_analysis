@@ -157,14 +157,23 @@ class LLMService:
         try:
             # 构建提示词
             prompt = self._build_sql_prompt(user_query, context)
-            
+
             messages = [
                 {
                     "role": "system",
-                    "content": "你是一个专业的SQL生成助手，专门为股票分析系统生成准确的SQL查询语句。"
+                    "content": (
+                        "你是一个专业的SQL生成助手，专门为股票分析系统生成准确的SQL查询语句。\n"
+                        "重要：目标数据库是 SQLite，请使用 SQLite 兼容的语法：\n"
+                        "- 用 datetime('now') 代替 NOW() / CURDATE()\n"
+                        "- 用 date('now', '-N days') 代替 DATE_SUB()\n"
+                        "- 不支持 GROUP_CONCAT 的 SEPARATOR 子句\n"
+                        "- 不支持 IF()，用 CASE WHEN 代替\n"
+                        "- 字符串拼接用 || 而非 CONCAT()\n"
+                        "- 只返回 SQL 语句，不要包含注释"
+                    )
                 },
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": prompt
                 }
             ]
@@ -190,6 +199,7 @@ class LLMService:
         
         prompt = f"""
 请根据用户的自然语言查询生成对应的SQL语句。
+目标数据库：SQLite
 
 用户查询: {user_query}
 
@@ -200,8 +210,8 @@ class LLMService:
 {self._format_tables_info(tables_info)}
 
 要求:
-1. 生成标准的SQL语句，默认兼容 MySQL 语法，便于遗留路径使用
-2. 只返回SQL语句，不要其他解释
+1. 生成 SQLite 兼容的 SQL 语句
+2. 只返回 SQL 语句，不要其他解释
 3. 确保SQL语法正确
 4. 使用适当的WHERE条件和ORDER BY子句
 5. 添加合理的LIMIT限制
