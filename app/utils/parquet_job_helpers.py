@@ -2,6 +2,8 @@ import os
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+import pandas as pd
+
 from app.services.data_reader import ParquetDataReader
 
 
@@ -42,7 +44,20 @@ def resolve_trade_dates(default_latest_only: bool = True) -> Tuple[List[str], bo
         return [trade_date], full_refresh
 
     reader = ParquetDataReader()
-    available = [d.replace("-", "") for d in reader.get_trade_dates()]
+    calendar_df = reader.get_trade_calendar()
+    available: List[str] = []
+    if not calendar_df.empty and {"cal_date", "is_open"}.issubset(calendar_df.columns):
+        work_df = calendar_df.copy()
+        work_df["cal_date"] = pd.to_datetime(work_df["cal_date"], errors="coerce")
+        work_df = work_df.dropna(subset=["cal_date"])
+        work_df["is_open"] = pd.to_numeric(work_df["is_open"], errors="coerce").fillna(0).astype(int)
+        available = (
+            work_df.loc[work_df["is_open"] == 1, "cal_date"]
+            .dt.strftime("%Y%m%d")
+            .drop_duplicates()
+            .sort_values()
+            .tolist()
+        )
 
     if not available:
         if start_date and end_date and start_date <= end_date:

@@ -15,7 +15,7 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">当前页面展示日线历史、技术因子、资金流向、筹码分布和财务数据，均按已入库接口结果加载。</p>
+                    <p class="text-muted mb-3">当前页面展示日线历史、技术因子、资金流向、筹码分布、财务数据和公司信息，均按已入库接口结果加载。</p>
                     <div id="stock-info" class="row">
                         <div class="col-12 text-center py-3">
                             <div class="spinner-border text-primary" role="status">
@@ -56,6 +56,11 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials" type="button" role="tab">
                         📊 财务数据
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="company-tab" data-bs-toggle="tab" data-bs-target="#company" type="button" role="tab">
+                        🏢 公司信息
                     </button>
                 </li>
             </ul>
@@ -147,6 +152,22 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 公司信息 -->
+                <div class="tab-pane fade" id="company" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">公司信息</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="company-content">
+                                <div class="text-center py-4">
+                                    <p class="text-muted">切换标签页后按当前接口返回加载</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -180,6 +201,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case '#financials':
                     loadFinancialsData();
+                    break;
+                case '#company':
+                    loadCompanyData();
                     break;
             }
         });
@@ -1499,6 +1523,99 @@ function formatFinancialValue(value, type) {
     return `${formatNumber(num / 10000, 2)} 万`;
 }
 
+// 加载公司信息
+async function loadCompanyData() {
+    if (document.getElementById('company-content').innerHTML.includes('加载中')) return;
+
+    showLoading('company-content');
+
+    try {
+        const response = await apiRequest(`/stocks/${tsCode}/company`);
+        if (response.code === 200) {
+            renderCompanyData(response.data);
+        } else {
+            showError('company-content', '公司信息加载失败');
+        }
+    } catch (error) {
+        showError('company-content', '公司信息加载失败');
+        console.error('加载公司信息失败:', error);
+    }
+}
+
+function renderCompanyData(data) {
+    const container = document.getElementById('company-content');
+
+    if (!data || Object.keys(data).length === 0) {
+        container.innerHTML = '<div class="text-center py-4"><p class="text-muted">暂无公司信息</p></div>';
+        return;
+    }
+
+    const entries = Object.entries(data);
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 36%;">字段</th>
+                        <th style="width: 64%;">字段值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${entries.map(([key, value]) => `
+                        <tr>
+                            <th class="text-muted">${formatCompanyFieldLabel(key)}</th>
+                            <td>${formatCompanyFieldValue(value)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+const COMPANY_FIELD_LABELS = {
+    ts_code: 'TS代码',
+    com_name: '公司全称',
+    com_id: '统一社会信用代码',
+    exchange: '交易所',
+    chairman: '法人代表',
+    manager: '总经理',
+    secretary: '董秘',
+    reg_capital: '注册资本',
+    setup_date: '注册日期',
+    province: '所在省份',
+    city: '所在城市',
+    introduction: '公司介绍',
+    website: '公司主页',
+    email: '电子邮件',
+    office: '办公室',
+    employees: '员工人数',
+    main_business: '主要业务及产品',
+    business_scope: '经营范围',
+};
+
+function formatCompanyFieldLabel(key) {
+    if (COMPANY_FIELD_LABELS[key]) {
+        return COMPANY_FIELD_LABELS[key];
+    }
+    return key
+        .split('_')
+        .filter(Boolean)
+        .map(part => {
+            if (part.toLowerCase() === 'ts') return 'TS';
+            return part.charAt(0).toUpperCase() + part.slice(1);
+        })
+        .join(' ');
+}
+
+function formatCompanyFieldValue(value) {
+    if (value === null || value === undefined || value === '') return '--';
+    if (typeof value === 'number') {
+        return Number.isInteger(value) ? value.toLocaleString('zh-CN') : formatNumber(value, 2);
+    }
+    return escapeHtml(String(value));
+}
+
 // 快速操作函数
 function addToWatchlist() {
     alert(`已将 ${stockInfo?.name || tsCode} 加入自选股`);
@@ -1525,6 +1642,12 @@ function formatPercent(num) {
     if (num === null || num === undefined || isNaN(num)) return '--';
     const sign = num >= 0 ? '+' : '';
     return sign + Number(num).toFixed(2) + '%';
+}
+
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value;
+    return div.innerHTML;
 }
 </script>
 {% endblock %} 

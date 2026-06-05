@@ -267,6 +267,31 @@ class StockService:
             }
 
     @staticmethod
+    @cached(expire=3600, key_prefix='stock_company')
+    def get_stock_company(ts_code: str):
+        """获取股票公司信息。"""
+        try:
+            df = _data_reader.get_stock_company([ts_code])
+            if df.empty:
+                return None
+
+            row = df.iloc[0].to_dict()
+            payload = {}
+            for key, value in row.items():
+                if pd.isna(value):
+                    payload[key] = None
+                elif hasattr(value, "item"):
+                    payload[key] = value.item()
+                elif hasattr(value, "strftime"):
+                    payload[key] = value.strftime("%Y-%m-%d")
+                else:
+                    payload[key] = value
+            return payload
+        except Exception as e:
+            logger.error(f"获取公司信息失败: {ts_code}, 错误: {e}")
+            return None
+
+    @staticmethod
     def _extract_latest_financial_row(df: pd.DataFrame, table_name: str):
         if df is None or df.empty:
             return None

@@ -301,6 +301,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 100);
 });
 
+// Obsidian 暗色图表基础配置
+const obsidianChartBase = {
+    backgroundColor: 'transparent',
+    title: { textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
+    tooltip: {
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        borderColor: '#334155',
+        textStyle: { color: '#e2e8f0', fontSize: 12 }
+    },
+    legend: { textStyle: { color: '#94a3b8', fontSize: 11 } },
+    xAxis: {
+        axisLabel: { color: '#64748b', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#334155' } },
+        axisTick: { lineStyle: { color: '#334155' } },
+        splitLine: { show: false }
+    },
+    yAxis: {
+        axisLabel: { color: '#64748b', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#334155' } },
+        splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } },
+        splitArea: { show: false }
+    },
+    dataZoom: [{
+        type: 'inside'
+    }, {
+        show: true,
+        type: 'slider',
+        top: '90%',
+        borderColor: '#334155',
+        fillerColor: 'rgba(99,102,241,0.15)',
+        handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
+        textStyle: { color: '#64748b' },
+        dataBackground: {
+            lineStyle: { color: '#475569' },
+            areaStyle: { color: 'rgba(71,85,105,0.3)' }
+        }
+    }]
+};
+
 // 初始化图表容器
 function initCharts() {
     console.log('开始初始化图表...');
@@ -555,7 +594,7 @@ function showAnalysisError() {
                 left: 'center',
                 top: 'center',
                 textStyle: {
-                    color: '#999'
+                    color: '#64748b'
                 }
             }
         });
@@ -689,15 +728,18 @@ function renderPriceChart() {
     });
     
     const option = {
+        ...obsidianChartBase,
         title: {
             text: `${currentStock} 价格走势`,
-            left: 'left'
+            left: 'left',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
-            axisPointer: {
-                type: 'cross'
-            },
+            axisPointer: { type: 'cross' },
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 const data = params[0];
                 if (chartType === 'candlestick') {
@@ -714,42 +756,34 @@ function renderPriceChart() {
         },
         legend: {
             data: [chartType === 'candlestick' ? 'K线' : '收盘价'],
-            top: 30
+            top: 30,
+            textStyle: { color: '#94a3b8' }
         },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '15%',
-            containLabel: true
-        },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
         xAxis: {
             type: 'category',
             data: dates,
             scale: true,
             boundaryGap: false,
-            axisLine: { onZero: false },
+            axisLine: { onZero: false, lineStyle: { color: '#334155' } },
+            axisLabel: { color: '#64748b', fontSize: 10 },
             splitLine: { show: false },
             min: 'dataMin',
             max: 'dataMax'
         },
         yAxis: {
             scale: true,
-            splitArea: {
-                show: true
-            }
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } },
+            splitArea: { show: false }
         },
         dataZoom: [
+            { type: 'inside', start: 50, end: 100 },
             {
-                type: 'inside',
-                start: 50,
-                end: 100
-            },
-            {
-                show: true,
-                type: 'slider',
-                top: '90%',
-                start: 50,
-                end: 100
+                show: true, type: 'slider', top: '90%', start: 50, end: 100,
+                borderColor: '#334155', fillerColor: 'rgba(99,102,241,0.15)',
+                handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
+                textStyle: { color: '#64748b' }
             }
         ],
         series: [{
@@ -757,13 +791,15 @@ function renderPriceChart() {
             type: chartType === 'candlestick' ? 'candlestick' : 'line',
             data: chartType === 'candlestick' ? klineData : lineData,
             itemStyle: chartType === 'candlestick' ? {
-                color: '#ef232a',
-                color0: '#14b143',
-                borderColor: '#ef232a',
-                borderColor0: '#14b143'
+                color: '#f87171',
+                color0: '#4ade80',
+                borderColor: '#f87171',
+                borderColor0: '#4ade80'
             } : {
-                color: '#5470c6'
+                color: '#818cf8'
             },
+            lineStyle: chartType === 'candlestick' ? {} : { width: 2, color: '#818cf8' },
+            showSymbol: false,
             markPoint: {
                 label: {
                     formatter: function (param) {
@@ -771,16 +807,8 @@ function renderPriceChart() {
                     }
                 },
                 data: [
-                    {
-                        name: '最高值',
-                        type: 'max',
-                        valueDim: chartType === 'candlestick' ? 'highest' : 'y'
-                    },
-                    {
-                        name: '最低值',
-                        type: 'min',
-                        valueDim: chartType === 'candlestick' ? 'lowest' : 'y'
-                    }
+                    { name: '最高值', type: 'max', valueDim: chartType === 'candlestick' ? 'highest' : 'y' },
+                    { name: '最低值', type: 'min', valueDim: chartType === 'candlestick' ? 'lowest' : 'y' }
                 ]
             }
         }]
@@ -804,60 +832,48 @@ function renderVolumeChart() {
     const volumeData = orderedHistoryData.map(item => item.vol);
     
     const option = {
+        ...obsidianChartBase,
         title: {
             text: `${currentStock} 成交量`,
-            left: 'left'
+            left: 'left',
+            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
         },
         tooltip: {
             trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
             formatter: function(params) {
                 const data = params[0];
                 return `${data.name}<br/>成交量: ${formatNumber(data.value / 10000, 1)}万`;
             }
         },
-        legend: {
-            data: ['成交量'],
-            top: 30
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '15%',
-            containLabel: true
-        },
+        legend: { data: ['成交量'], top: 30, textStyle: { color: '#94a3b8' } },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
         xAxis: {
-            type: 'category',
-            data: dates
+            type: 'category', data: dates,
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } }
         },
         yAxis: {
             type: 'value',
-            axisLabel: {
-                formatter: function(value) {
-                    return formatNumber(value / 10000, 1) + '万';
-                }
-            }
+            axisLabel: { color: '#64748b', fontSize: 10, formatter: function(value) { return formatNumber(value / 10000, 1) + '万'; } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         dataZoom: [
+            { type: 'inside', start: 50, end: 100 },
             {
-                type: 'inside',
-                start: 50,
-                end: 100
-            },
-            {
-                show: true,
-                type: 'slider',
-                top: '90%',
-                start: 50,
-                end: 100
+                show: true, type: 'slider', top: '90%', start: 50, end: 100,
+                borderColor: '#334155', fillerColor: 'rgba(99,102,241,0.15)',
+                handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
+                textStyle: { color: '#64748b' }
             }
         ],
         series: [{
             name: '成交量',
             type: 'bar',
             data: volumeData,
-            itemStyle: {
-                color: '#91cc75'
-            }
+            itemStyle: { color: 'rgba(129, 140, 248, 0.6)', borderRadius: [2, 2, 0, 0] }
         }]
     };
     
@@ -921,59 +937,20 @@ function renderMACDChart() {
     });
     
     const option = {
-        title: {
-            text: 'MACD指标',
-            left: 'left'
-        },
-        tooltip: {
-            trigger: 'axis'
-        },
-        legend: {
-            data: ['MACD', 'DEA', 'DIF'],
-            top: 30
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
-        xAxis: {
-            type: 'category',
-            data: dates
-        },
-        yAxis: {
-            type: 'value'
-        },
+        ...obsidianChartBase,
+        title: { text: 'MACD指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
+        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+        legend: { data: ['MACD', 'DEA', 'DIF'], top: 30, textStyle: { color: '#94a3b8' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
+        yAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } } },
         series: [
             {
-                name: 'MACD',
-                type: 'bar',
-                data: macdData,
-                itemStyle: {
-                    color: function(params) {
-                        return params.value >= 0 ? '#ef232a' : '#14b143';
-                    }
-                }
+                name: 'MACD', type: 'bar', data: macdData,
+                itemStyle: { color: function(params) { return params.value >= 0 ? 'rgba(248,113,113,0.6)' : 'rgba(74,222,128,0.6)'; }, borderRadius: [2, 2, 0, 0] }
             },
-            {
-                name: 'DEA',
-                type: 'line',
-                data: deaData,
-                smooth: true,
-                itemStyle: {
-                    color: '#fac858'
-                }
-            },
-            {
-                name: 'DIF',
-                type: 'line',
-                data: difData,
-                smooth: true,
-                itemStyle: {
-                    color: '#5470c6'
-                }
-            }
+            { name: 'DEA', type: 'line', data: deaData, smooth: true, showSymbol: false, itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' } },
+            { name: 'DIF', type: 'line', data: difData, smooth: true, showSymbol: false, itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' } }
         ]
     };
     
@@ -993,75 +970,27 @@ function renderKDJChart() {
     const jData = orderedFactorsData.map(item => item.kdj_j || 0);
     
     const option = {
-        title: {
-            text: 'KDJ指标',
-            left: 'left'
-        },
-        tooltip: {
-            trigger: 'axis'
-        },
-        legend: {
-            data: ['K', 'D', 'J'],
-            top: 30
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
-        xAxis: {
-            type: 'category',
-            data: dates
-        },
+        ...obsidianChartBase,
+        title: { text: 'KDJ指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
+        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+        legend: { data: ['K', 'D', 'J'], top: 30, textStyle: { color: '#94a3b8' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
         yAxis: {
-            type: 'value',
-            min: 0,
-            max: 100,
-            axisLine: {
-                lineStyle: {
-                    color: '#999'
-                }
-            },
-            splitLine: {
-                lineStyle: {
-                    color: ['#eee']
-                }
-            }
+            type: 'value', min: 0, max: 100,
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [
-            {
-                name: 'K',
-                type: 'line',
-                data: kData,
-                smooth: true,
-                itemStyle: {
-                    color: '#5470c6'
-                }
-            },
-            {
-                name: 'D',
-                type: 'line',
-                data: dData,
-                smooth: true,
-                itemStyle: {
-                    color: '#91cc75'
-                }
-            },
-            {
-                name: 'J',
-                type: 'line',
-                data: jData,
-                smooth: true,
-                itemStyle: {
-                    color: '#fac858'
-                }
-            }
+            { name: 'K', type: 'line', data: kData, smooth: true, showSymbol: false, itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' } },
+            { name: 'D', type: 'line', data: dData, smooth: true, showSymbol: false, itemStyle: { color: '#34d399' }, lineStyle: { width: 1.5, color: '#34d399' } },
+            { name: 'J', type: 'line', data: jData, smooth: true, showSymbol: false, itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' } }
         ],
         markLine: {
             data: [
-                { yAxis: 80, lineStyle: { color: '#ef232a', type: 'dashed' } },
-                { yAxis: 20, lineStyle: { color: '#14b143', type: 'dashed' } }
+                { yAxis: 80, lineStyle: { color: '#f87171', type: 'dashed' }, label: { color: '#f87171', fontSize: 10 } },
+                { yAxis: 20, lineStyle: { color: '#4ade80', type: 'dashed' }, label: { color: '#4ade80', fontSize: 10 } }
             ]
         }
     };
@@ -1082,65 +1011,36 @@ function renderRSIChart() {
     const rsi24Data = orderedFactorsData.map(item => item.rsi_24 || 0);
     
     const option = {
-        title: {
-            text: 'RSI指标',
-            left: 'left'
-        },
-        tooltip: {
-            trigger: 'axis'
-        },
-        legend: {
-            data: ['RSI6', 'RSI12', 'RSI24'],
-            top: 30
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
-        xAxis: {
-            type: 'category',
-            data: dates
-        },
+        ...obsidianChartBase,
+        title: { text: 'RSI指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
+        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+        legend: { data: ['RSI6', 'RSI12', 'RSI24'], top: 30, textStyle: { color: '#94a3b8' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
         yAxis: {
-            type: 'value',
-            min: 0,
-            max: 100
+            type: 'value', min: 0, max: 100,
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [
             {
-                name: 'RSI6',
-                type: 'line',
-                data: rsi6Data,
-                smooth: true,
-                itemStyle: {
-                    color: '#5470c6'
-                }
+                name: 'RSI6', type: 'line', data: rsi6Data, smooth: true, showSymbol: false,
+                itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' }
             },
             {
-                name: 'RSI12',
-                type: 'line',
-                data: rsi12Data,
-                smooth: true,
-                itemStyle: {
-                    color: '#91cc75'
-                }
+                name: 'RSI12', type: 'line', data: rsi12Data, smooth: true, showSymbol: false,
+                itemStyle: { color: '#a78bfa' }, lineStyle: { width: 1.5, color: '#a78bfa' }
             },
             {
-                name: 'RSI24',
-                type: 'line',
-                data: rsi24Data,
-                smooth: true,
-                itemStyle: {
-                    color: '#fac858'
-                }
+                name: 'RSI24', type: 'line', data: rsi24Data, smooth: true, showSymbol: false,
+                itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' }
             }
         ],
         markLine: {
             data: [
-                { yAxis: 70, lineStyle: { color: '#ef232a', type: 'dashed' } },
-                { yAxis: 30, lineStyle: { color: '#14b143', type: 'dashed' } }
+                { yAxis: 70, lineStyle: { color: '#f87171', type: 'dashed' }, label: { color: '#f87171', fontSize: 10 } },
+                { yAxis: 30, lineStyle: { color: '#4ade80', type: 'dashed' }, label: { color: '#4ade80', fontSize: 10 } }
             ]
         }
     };
@@ -1172,75 +1072,34 @@ function renderBollChart() {
     });
     
     const option = {
-        title: {
-            text: '布林带指标',
-            left: 'left'
-        },
-        tooltip: {
-            trigger: 'axis'
-        },
-        legend: {
-            data: ['收盘价', '上轨', '中轨', '下轨'],
-            top: 30
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
-        xAxis: {
-            type: 'category',
-            data: dates
-        },
+        ...obsidianChartBase,
+        title: { text: '布林带指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
+        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+        legend: { data: ['收盘价', '上轨', '中轨', '下轨'], top: 30, textStyle: { color: '#94a3b8' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
         yAxis: {
-            type: 'value'
+            type: 'value', scale: true,
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
         },
         series: [
             {
-                name: '收盘价',
-                type: 'line',
-                data: closeData,
-                smooth: true,
-                itemStyle: {
-                    color: '#5470c6'
-                },
-                lineStyle: {
-                    width: 2
-                }
+                name: '收盘价', type: 'line', data: closeData, smooth: true, showSymbol: false,
+                itemStyle: { color: '#818cf8' }, lineStyle: { width: 2, color: '#818cf8' }
             },
             {
-                name: '上轨',
-                type: 'line',
-                data: bollUpper,
-                smooth: true,
-                itemStyle: {
-                    color: '#ef232a'
-                },
-                lineStyle: {
-                    type: 'dashed'
-                }
+                name: '上轨', type: 'line', data: bollUpper, smooth: true, showSymbol: false,
+                itemStyle: { color: '#f87171' }, lineStyle: { width: 1.5, color: '#f87171', type: 'dashed' }
             },
             {
-                name: '中轨',
-                type: 'line',
-                data: bollMid,
-                smooth: true,
-                itemStyle: {
-                    color: '#fac858'
-                }
+                name: '中轨', type: 'line', data: bollMid, smooth: true, showSymbol: false,
+                itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' }
             },
             {
-                name: '下轨',
-                type: 'line',
-                data: bollLower,
-                smooth: true,
-                itemStyle: {
-                    color: '#14b143'
-                },
-                lineStyle: {
-                    type: 'dashed'
-                }
+                name: '下轨', type: 'line', data: bollLower, smooth: true, showSymbol: false,
+                itemStyle: { color: '#4ade80' }, lineStyle: { width: 1.5, color: '#4ade80', type: 'dashed' }
             }
         ]
     };

@@ -193,6 +193,25 @@ def get_stock_financials(ts_code):
             'data': None
         }), 500
 
+@api_bp.route('/stocks/<ts_code>/company', methods=['GET'])
+def get_stock_company(ts_code):
+    """获取股票公司信息"""
+    try:
+        result = StockService.get_stock_company(ts_code)
+
+        return jsonify({
+            'code': 200,
+            'message': '成功',
+            'data': result
+        })
+    except Exception as e:
+        logger.error(f"获取股票公司信息API错误: {ts_code}, {e}")
+        return jsonify({
+            'code': 500,
+            'message': f'服务器错误: {str(e)}',
+            'data': None
+        }), 500
+
 @api_bp.route('/industries', methods=['GET'])
 def get_industries():
     """获取行业列表"""

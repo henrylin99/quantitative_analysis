@@ -24,3 +24,25 @@ def test_stock_financials_endpoint_returns_three_statements():
     data = resp.get_json()
     assert data["code"] == 200
     assert set(data["data"].keys()) == {"balance_sheet", "income_statement", "cash_flow"}
+
+
+def test_stock_company_endpoint_returns_full_company_payload():
+    app = Flask(__name__)
+    app.register_blueprint(api_bp, url_prefix="/api")
+    client = app.test_client()
+
+    fake_payload = {
+        "ts_code": "000001.SZ",
+        "exchange": "SZSE",
+        "chairman": "示例董事长",
+        "employees": 12345,
+    }
+    fake_service = SimpleNamespace(get_stock_company=lambda ts_code: fake_payload)
+
+    with patch("app.api.stock_api.StockService", fake_service):
+        resp = client.get("/api/stocks/000001.SZ/company")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["code"] == 200
+    assert data["data"] == fake_payload
