@@ -6,6 +6,20 @@
 from datetime import datetime, timedelta
 from sqlalchemy import Column, String, Float, DateTime, Integer, Index, func
 from app import db
+from app.services.parquet_event_store import ParquetEventStore
+
+
+class _RealtimeIndicatorEvent:
+    def __init__(self, data):
+        self.__dict__.update(data)
+
+    def to_dict(self):
+        result = dict(self.__dict__)
+        for key in ['datetime', 'created_at', 'updated_at']:
+            value = result.get(key)
+            if hasattr(value, 'isoformat'):
+                result[key] = value.isoformat()
+        return result
 
 
 class RealtimeIndicator(db.Model):
@@ -37,6 +51,10 @@ class RealtimeIndicator(db.Model):
         Index('idx_indicator_name_period', 'indicator_name', 'period_type'),
         Index('idx_indicator_datetime', 'datetime'),
     )
+
+    @staticmethod
+    def _store() -> ParquetEventStore:
+        return ParquetEventStore()
     
     def __repr__(self):
         return f'<RealtimeIndicator {self.ts_code} {self.indicator_name} {self.datetime}>'
@@ -60,76 +78,35 @@ class RealtimeIndicator(db.Model):
     @classmethod
     def get_latest_indicators(cls, ts_code, period_type, indicator_names=None, limit=100):
         """获取最新的技术指标数据"""
-        query = cls.query.filter_by(ts_code=ts_code, period_type=period_type)
-        
-        if indicator_names:
-            query = query.filter(cls.indicator_name.in_(indicator_names))
-        
-        return query.order_by(cls.datetime.desc()).limit(limit).all()
+        frame = cls._store().get_latest_indicators(ts_code, period_type, indicator_names=indicator_names, limit=limit)
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def get_indicator_history(cls, ts_code, period_type, indicator_name, start_time=None, end_time=None):
         """获取指标历史数据"""
-        query = cls.query.filter_by(
-            ts_code=ts_code, 
+        frame = cls._store().get_indicator_history(
+            ts_code=ts_code,
             period_type=period_type,
-            indicator_name=indicator_name
+            indicator_name=indicator_name,
+            start_time=start_time,
+            end_time=end_time,
         )
-        
-        if start_time:
-            query = query.filter(cls.datetime >= start_time)
-        if end_time:
-            query = query.filter(cls.datetime <= end_time)
-        
-        return query.order_by(cls.datetime.asc()).all()
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def batch_insert(cls, indicators_data):
         """批量插入指标数据"""
         try:
-            db.session.bulk_insert_mappings(cls, indicators_data)
-            db.session.commit()
+            cls._store().append_indicators(indicators_data)
             return True, f"成功插入 {len(indicators_data)} 条指标数据"
         except Exception as e:
-            db.session.rollback()
             return False, f"批量插入失败: {str(e)}"
     
     @classmethod
     def get_indicator_stats(cls):
         """获取指标统计信息"""
         try:
-            # 总记录数
-            total_records = cls.query.count()
-            
-            # 指标类型统计
-            indicator_stats = db.session.query(
-                cls.indicator_name,
-                func.count(cls.id).label('count')
-            ).group_by(cls.indicator_name).all()
-            
-            # 周期统计
-            period_stats = db.session.query(
-                cls.period_type,
-                func.count(cls.id).label('count')
-            ).group_by(cls.period_type).all()
-            
-            # 股票统计
-            stock_count = db.session.query(func.count(func.distinct(cls.ts_code))).scalar()
-            
-            # 时间范围
-            time_range = db.session.query(
-                func.min(cls.datetime).label('earliest'),
-                func.max(cls.datetime).label('latest')
-            ).first()
-            
-            return {
-                'total_records': total_records,
-                'total_stocks': stock_count,
-                'indicator_stats': {stat.indicator_name: stat.count for stat in indicator_stats},
-                'period_stats': {stat.period_type: stat.count for stat in period_stats},
-                'earliest_time': time_range.earliest.isoformat() if time_range.earliest else None,
-                'latest_time': time_range.latest.isoformat() if time_range.latest else None
-            }
+            return cls._store().get_indicator_stats()
         except Exception as e:
             return {'error': str(e)}
     
@@ -137,10 +114,12 @@ class RealtimeIndicator(db.Model):
     def cleanup_old_data(cls, days_to_keep=30):
         """清理旧数据"""
         try:
-            cutoff_date = datetime.now() - timedelta(days=days_to_keep)
-            deleted_count = cls.query.filter(cls.datetime < cutoff_date).delete()
-            db.session.commit()
+            deleted_count = cls._store().cleanup_old_indicators(days_to_keep=days_to_keep)
             return True, f"清理了 {deleted_count} 条旧数据"
         except Exception as e:
-            db.session.rollback()
-            return False, f"清理失败: {str(e)}" 
+            return False, f"清理失败: {str(e)}"
+
+    @staticmethod
+    def _row_to_event(row):
+        data = row.to_dict()
+        return _RealtimeIndicatorEvent(data)

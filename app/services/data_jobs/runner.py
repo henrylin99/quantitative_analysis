@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 class ScriptRunner:
-    """Adapter to execute legacy app/utils scripts in a managed way."""
+    """Adapter to execute app/utils scripts in a managed way."""
 
     def __init__(self, project_root: Optional[Path] = None):
         self.project_root = project_root or Path(__file__).resolve().parents[3]

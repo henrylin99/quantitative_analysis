@@ -71,9 +71,15 @@ class _FakeSignal:
 
     def to_dict(self):
         return {
+            "datetime": self.created_at,
             "signal_type": self.signal_type,
             "strategy_name": self.strategy_name,
             "signal_strength": self.signal_strength,
+            "period_type": "5min",
+            "ts_code": "000001.SZ",
+            "confidence": 0.8,
+            "trigger_price": 10.0,
+            "status": "ACTIVE",
         }
 
 
@@ -116,6 +122,25 @@ class _FakeDBSession:
         return _FakeStatsQuery(self.indicator_rows)
 
 
+class _FakeEventStore:
+    def __init__(self, indicator_rows=None, signal_rows=None, minute_frame=None):
+        self.indicator_rows = indicator_rows or []
+        self.signal_rows = signal_rows or []
+        self.minute_frame = minute_frame or pd.DataFrame()
+
+    def get_indicators_by_time_range(self, **kwargs):
+        return pd.DataFrame(self.indicator_rows)
+
+    def get_signals_by_time_range(self, **kwargs):
+        rows = []
+        for row in self.signal_rows:
+            if hasattr(row, "to_dict"):
+                rows.append(row.to_dict())
+            else:
+                rows.append(row)
+        return pd.DataFrame(rows)
+
+
 def _write_minute_assets(tmp_path: Path):
     minute_dir = tmp_path / "stock_minute" / "5min" / "year=2026" / "month=06" / "day=05"
     minute_dir.mkdir(parents=True)
@@ -153,22 +178,18 @@ def test_daily_summary_and_market_overview_use_5min_parquet(tmp_path, monkeypatc
 
     generator = RealtimeReportGenerator()
 
-    indicator_rows = [type("Row", (), {"indicator_name": "RSI", "count": 3})(), type("Row", (), {"indicator_name": "MACD", "count": 2})()]
-    fake_indicator_model = type(
-        "FakeIndicatorModel",
-        (),
-        {
-            "id": _ComparableField("id"),
-            "datetime": _ComparableField("datetime"),
-            "period_type": _ComparableField("period_type"),
-            "indicator_name": _ComparableField("indicator_name"),
-            "query": _ReportQuery(rows=[object(), object()]),
-        },
+    fake_store = _FakeEventStore(
+        indicator_rows=[
+            {"indicator_name": "RSI"},
+            {"indicator_name": "RSI"},
+            {"indicator_name": "RSI"},
+            {"indicator_name": "MACD"},
+            {"indicator_name": "MACD"},
+        ],
+        signal_rows=[_FakeSignal(signal_type="BUY", strategy_name="trend_following", signal_strength=0.7)],
     )
 
-    with patch("app.services.realtime_report_generator.RealtimeIndicator", fake_indicator_model), patch(
-        "app.services.realtime_report_generator.TradingSignal", _FakeSignalModel
-    ), patch("app.services.realtime_report_generator.db.session", _FakeDBSession(indicator_rows)), patch(
+    with patch.object(generator, "event_store", fake_store), patch(
         "app.services.realtime_report_generator.datetime", FixedDateTime
     ):
         daily = generator._collect_daily_summary_data()
@@ -176,7 +197,7 @@ def test_daily_summary_and_market_overview_use_5min_parquet(tmp_path, monkeypatc
 
     assert daily["market_data"]["minute_data_points"] == 2
     assert daily["market_data"]["active_stocks"] == 2
-    assert daily["market_data"]["technical_indicators"] == 2
+    assert daily["market_data"]["technical_indicators"] == 5
     assert daily["market_data"]["trading_signals"] == 1
     assert market["market_overview"]["active_stocks"] == 2
     assert market["market_overview"]["total_volume"] == 3000
@@ -188,30 +209,19 @@ def test_signal_analysis_filters_by_five_minute_period(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     generator = RealtimeReportGenerator()
-    query = _ReportQuery(rows=[_FakeSignal(signal_type="BUY", strategy_name="trend_following", signal_strength=0.7)])
+    signal_rows = [
+        _FakeSignal(signal_type="BUY", strategy_name="trend_following", signal_strength=0.7),
+        _FakeSignal(signal_type="SELL", strategy_name="trend_following", signal_strength=-0.5),
+    ]
+    fake_store = _FakeEventStore(signal_rows=signal_rows)
 
-    fake_signal_model = type(
-        "FakeSignalModel",
-        (),
-        {
-            "created_at": _ComparableField("created_at"),
-            "period_type": _ComparableField("period_type"),
-            "signal_type": _ComparableField("signal_type"),
-            "strategy_name": _ComparableField("strategy_name"),
-            "query": query,
-        },
-    )
-
-    with patch("app.services.realtime_report_generator.TradingSignal", fake_signal_model), patch(
+    with patch.object(generator, "event_store", fake_store), patch(
         "app.services.realtime_report_generator.datetime", FixedDateTime
     ):
         signal_data = generator._collect_signal_data()
 
-    assert query.filters, "expected report generator to query trading signals"
-    assert any(
-        isinstance(item, tuple) and item[:3] == ("eq", "period_type", "5min") for item in query.filters
-    ), query.filters
-    assert signal_data["signal_summary"]["total_signals"] == 1
+    assert signal_data["signal_summary"]["total_signals"] == 2
+    assert signal_data["signal_summary"]["period_type"] == "5min"
 
 
 def test_generate_report_keeps_market_overview_payload_shape(tmp_path, monkeypatch):
@@ -231,13 +241,14 @@ def test_generate_report_keeps_market_overview_payload_shape(tmp_path, monkeypat
         report.id = 1
         report.report_name = "mock"
         report.report_type = "market_overview"
-        report.update_status.return_value = None
+        report.update_generation_result.return_value = None
 
         result = generator.generate_report("market_overview", parameters={})
 
     assert result["success"] is True
     assert "content" in result["data"]
     assert "data" in result["data"]
+    report.update_generation_result.assert_called()
 
 
 def test_daily_summary_and_market_overview_count_today_five_minute_data_only(tmp_path, monkeypatch):
@@ -245,32 +256,12 @@ def test_daily_summary_and_market_overview_count_today_five_minute_data_only(tmp
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     generator = RealtimeReportGenerator()
-    indicator_rows = [type("Row", (), {"indicator_name": "RSI", "count": 2})()]
-
-    fake_indicator_model = type(
-        "FakeIndicatorModel",
-        (),
-        {
-            "id": _ComparableField("id"),
-            "datetime": _ComparableField("datetime"),
-            "period_type": _ComparableField("period_type"),
-            "indicator_name": _ComparableField("indicator_name"),
-            "query": _ReportQuery(rows=[object(), object()]),
-        },
-    )
-    fake_signal_model = type(
-        "FakeSignalModel",
-        (),
-        {
-            "created_at": _ComparableField("created_at"),
-            "period_type": _ComparableField("period_type"),
-            "query": _ReportQuery(rows=[_FakeSignal(signal_type="BUY", strategy_name="trend_following", signal_strength=0.7)]),
-        },
+    fake_store = _FakeEventStore(
+        indicator_rows=[{"indicator_name": "RSI"}, {"indicator_name": "RSI"}],
+        signal_rows=[_FakeSignal(signal_type="BUY", strategy_name="trend_following", signal_strength=0.7)],
     )
 
-    with patch("app.services.realtime_report_generator.RealtimeIndicator", fake_indicator_model), patch(
-        "app.services.realtime_report_generator.TradingSignal", fake_signal_model
-    ), patch("app.services.realtime_report_generator.db.session", _FakeDBSession(indicator_rows)), patch(
+    with patch.object(generator, "event_store", fake_store), patch(
         "app.services.realtime_report_generator.datetime", FixedDateTime
     ):
         daily = generator._collect_daily_summary_data()

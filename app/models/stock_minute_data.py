@@ -3,9 +3,14 @@
 支持1分钟、5分钟、15分钟、30分钟、60分钟等多种周期的K线数据
 """
 
-from app.extensions import db
 from datetime import datetime
+
+import pandas as pd
 from sqlalchemy import Index, func
+
+from app.extensions import db
+from app.services.minute_parquet_reader import MinuteParquetReader
+from app.services.minute_parquet_store import MinuteParquetStore
 
 
 class StockMinuteData(db.Model):
@@ -67,20 +72,19 @@ class StockMinuteData(db.Model):
     @classmethod
     def get_latest_data(cls, ts_code, period_type='1min', limit=100):
         """获取最新的K线数据"""
-        return cls.query.filter_by(
-            ts_code=ts_code,
-            period_type=period_type
-        ).order_by(cls.datetime.desc()).limit(limit).all()
+        frame = cls._reader().get_latest_data(ts_code, period_type=period_type, limit=limit)
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def get_data_by_time_range(cls, ts_code, start_time, end_time, period_type='1min'):
         """根据时间范围获取K线数据"""
-        return cls.query.filter(
-            cls.ts_code == ts_code,
-            cls.period_type == period_type,
-            cls.datetime >= start_time,
-            cls.datetime <= end_time
-        ).order_by(cls.datetime.asc()).all()
+        frame = cls._reader().get_data(
+            ts_code=ts_code,
+            period_type=period_type,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def get_data_range(cls, ts_code, period_type, start_time, end_time):
@@ -90,21 +94,28 @@ class StockMinuteData(db.Model):
     @classmethod
     def get_latest_price(cls, ts_code):
         """获取最新价格"""
-        latest = cls.query.filter_by(
-            ts_code=ts_code,
-            period_type='1min'
-        ).order_by(cls.datetime.desc()).first()
-        return latest.close if latest else None
+        latest = cls._reader().get_latest_data(ts_code, period_type='1min', limit=1)
+        if latest.empty:
+            return None
+        return latest.iloc[0].get("close")
     
     @classmethod
     def bulk_insert(cls, data_list):
         """批量插入数据"""
         try:
-            db.session.bulk_insert_mappings(cls, data_list)
-            db.session.commit()
+            frame = pd.DataFrame(data_list)
+            if frame.empty:
+                return True
+
+            store = cls._store()
+            if "period_type" not in frame.columns:
+                store.write_frame(frame, period_type='1min')
+                return True
+
+            for period_type, period_frame in frame.groupby("period_type"):
+                store.write_frame(period_frame, period_type=str(period_type))
             return True
         except Exception as e:
-            db.session.rollback()
             raise e
     
     @classmethod
@@ -158,4 +169,20 @@ class StockMinuteData(db.Model):
             'completeness': completeness,
             'latest_time': data[-1].datetime.isoformat() if data else None,
             'earliest_time': data[0].datetime.isoformat() if data else None
-        } 
+        }
+
+    @staticmethod
+    def _reader() -> MinuteParquetReader:
+        return MinuteParquetReader()
+
+    @staticmethod
+    def _store() -> MinuteParquetStore:
+        return MinuteParquetStore()
+
+    @staticmethod
+    def _row_to_event(row):
+        data = row.to_dict()
+        event = StockMinuteData()
+        for key, value in data.items():
+            setattr(event, key, value)
+        return event

@@ -1,15 +1,13 @@
-from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.models.data_job_cursor import DataJobCursor
-from app.models.data_job_run import DataJobRun
+from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
 
 
 class DataJobStateStore:
-    """Persistence wrapper for data job run state."""
+    """Compatibility wrapper for data job state backed by Parquet."""
 
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, state_store: Optional[Any] = None):
+        self.state_store = state_store or ParquetDataJobStateStore()
 
     def create_run(
         self,
@@ -19,71 +17,43 @@ class DataJobStateStore:
         source_mode: Optional[str] = None,
         snapshot_tag: Optional[str] = None,
         progress_message: Optional[str] = None,
-    ) -> DataJobRun:
-        run = DataJobRun(
+    ):
+        return self.state_store.create_run(
             job_type=job_type,
-            params_json=params or {},
-            status="pending",
+            params=params,
             source_name=source_name,
             source_mode=source_mode,
             snapshot_tag=snapshot_tag,
             progress_message=progress_message,
         )
-        self.session.add(run)
-        self.session.commit()
-        return run
 
-    def find_active_duplicate(self, job_type: str, params: Dict[str, Any]) -> Optional[DataJobRun]:
-        return (
-            self.session.query(DataJobRun)
-            .filter(
-                DataJobRun.job_type == job_type,
-                DataJobRun.status.in_(["pending", "queued", "running"]),
-                DataJobRun.params_json == (params or {}),
-            )
-            .first()
-        )
+    def find_active_duplicate(self, job_type: str, params: Dict[str, Any]):
+        return self.state_store.find_active_duplicate(job_type, params)
 
-    def get_run(self, run_id: int) -> Optional[DataJobRun]:
-        return self.session.query(DataJobRun).filter_by(id=run_id).first()
+    def get_run(self, run_id: int):
+        return self.state_store.get_run(run_id)
 
     def update_run_status(
         self,
-        run: DataJobRun,
+        run,
         status: str,
         progress: Optional[float] = None,
         error_message: Optional[str] = None,
         progress_message: Optional[str] = None,
-    ) -> DataJobRun:
-        run.status = status
-        if progress is not None:
-            run.progress = progress
-        if error_message is not None:
-            run.error_message = error_message
-        if progress_message is not None:
-            run.progress_message = progress_message
-        if status == "running" and run.started_at is None:
-            run.started_at = datetime.utcnow()
-        if status in {"success", "failed", "cancelled"}:
-            run.finished_at = datetime.utcnow()
-        self.session.commit()
-        return run
-
-    def save_run(self, run: DataJobRun) -> DataJobRun:
-        self.session.add(run)
-        self.session.commit()
-        return run
-
-    def upsert_cursor(self, job_type: str, cursor_key: str, cursor_value: str) -> DataJobCursor:
-        cursor = (
-            self.session.query(DataJobCursor)
-            .filter_by(job_type=job_type, cursor_key=cursor_key)
-            .first()
+    ):
+        return self.state_store.update_run_status(
+            run,
+            status,
+            progress=progress,
+            error_message=error_message,
+            progress_message=progress_message,
         )
-        if cursor is None:
-            cursor = DataJobCursor(job_type=job_type, cursor_key=cursor_key, cursor_value=cursor_value)
-            self.session.add(cursor)
-        else:
-            cursor.cursor_value = cursor_value
-        self.session.commit()
-        return cursor
+
+    def save_run(self, run):
+        return self.state_store.save_run(run)
+
+    def upsert_cursor(self, job_type: str, cursor_key: str, cursor_value: str):
+        return self.state_store.upsert_cursor(job_type, cursor_key, cursor_value)
+
+    def list_runs(self, limit: int = 50, status: Optional[str] = None):
+        return self.state_store.list_runs(limit=limit, status=status)

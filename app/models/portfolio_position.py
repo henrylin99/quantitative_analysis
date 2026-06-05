@@ -6,6 +6,7 @@
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index
+from app.services.persistence import persist_changes, persist_new
 
 
 class PortfolioPosition(db.Model):
@@ -72,7 +73,21 @@ class PortfolioPosition(db.Model):
         self.market_value = self.position_size * current_price
         self.unrealized_pnl = (current_price - self.avg_cost) * self.position_size
         self.updated_at = datetime.utcnow()
-        db.session.commit()
+        persist_changes(self)
+
+    def update_risk_limits(self, stop_loss_price=None, take_profit_price=None):
+        """更新止损止盈价格并持久化。"""
+        if stop_loss_price is not None:
+            self.stop_loss_price = stop_loss_price
+        if take_profit_price is not None:
+            self.take_profit_price = take_profit_price
+        self.updated_at = datetime.utcnow()
+        persist_changes(self)
+
+    @classmethod
+    def create_position(cls, **fields):
+        position = cls(**fields)
+        return persist_new(position)
     
     def calculate_pnl_percentage(self):
         """计算盈亏百分比"""
@@ -108,6 +123,59 @@ class PortfolioPosition(db.Model):
             ts_code=ts_code,
             is_active=True
         ).first()
+
+    @classmethod
+    def get_by_id(cls, position_id):
+        return cls.query.get(position_id)
+
+    @classmethod
+    def list_positions(cls, portfolio_id=None, active_only=True):
+        query = cls.query
+        if portfolio_id:
+            query = query.filter_by(portfolio_id=portfolio_id)
+        if active_only:
+            query = query.filter_by(is_active=True)
+        return query.all()
+
+    @classmethod
+    def get_by_portfolio_and_id(cls, portfolio_id, position_id):
+        return cls.query.filter_by(
+            id=position_id,
+            portfolio_id=portfolio_id,
+        ).first()
+
+    @classmethod
+    def update_position_by_id(cls, portfolio_id, position_id, **fields):
+        position = cls.get_by_portfolio_and_id(portfolio_id, position_id)
+        if not position:
+            return None
+
+        for key in ['position_size', 'avg_cost', 'current_price', 'sector', 'stop_loss_price', 'take_profit_price', 'is_active']:
+            if key in fields:
+                setattr(position, key, fields[key])
+
+        if position.current_price:
+            position.market_value = position.position_size * position.current_price
+            position.unrealized_pnl = (position.current_price - position.avg_cost) * position.position_size
+
+        position.updated_at = datetime.utcnow()
+        persist_changes(position)
+        return position
+
+    @classmethod
+    def delete_position_by_id(cls, portfolio_id, position_id):
+        position = cls.get_by_portfolio_and_id(portfolio_id, position_id)
+        if not position:
+            return False
+        position.is_active = False
+        position.updated_at = datetime.utcnow()
+        persist_changes(position)
+        return True
+
+    @classmethod
+    def list_active_portfolio_ids(cls):
+        rows = cls.query.filter_by(is_active=True).with_entities(cls.portfolio_id).distinct().all()
+        return [row[0] for row in rows if row and row[0]]
     
     @classmethod
     def calculate_portfolio_metrics(cls, portfolio_id):

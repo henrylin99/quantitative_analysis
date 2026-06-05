@@ -16,9 +16,9 @@ def test_create_portfolio_position_endpoint_creates_first_position(app):
         "sector": "银行",
     }
 
-    with patch("app.api.realtime_risk.PortfolioPosition") as portfolio_model, patch("app.api.realtime_risk.db") as db:
+    with patch("app.api.realtime_risk.PortfolioPosition") as portfolio_model:
         portfolio_model.get_position_by_stock.return_value = None
-        portfolio_model.return_value.to_dict.return_value = {
+        portfolio_model.create_position.return_value.to_dict.return_value = {
             "portfolio_id": "growth_a",
             "ts_code": "000001.SZ",
         }
@@ -29,8 +29,7 @@ def test_create_portfolio_position_endpoint_creates_first_position(app):
     data = response.get_json()
     assert data["success"] is True
     assert data["data"]["portfolio_id"] == "growth_a"
-    db.session.add.assert_called_once()
-    db.session.commit.assert_called_once()
+    portfolio_model.create_position.assert_called_once()
 
 
 def test_create_portfolio_position_endpoint_rejects_duplicate_stock(app):

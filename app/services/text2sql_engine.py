@@ -3,9 +3,12 @@ Text2SQL核心引擎
 整合自然语言处理、SQL生成和查询执行功能
 """
 
+import logging
 import time
 import traceback
 from typing import Dict, List, Any, Optional
+
+logger = logging.getLogger(__name__)
 from flask import request
 from sqlalchemy import text
 from app.extensions import db
@@ -160,9 +163,7 @@ class Text2SQLEngine:
     def get_query_history(self, limit: int = 10) -> List[Dict[str, Any]]:
         """获取查询历史"""
         try:
-            histories = QueryHistory.query.order_by(
-                QueryHistory.created_at.desc()
-            ).limit(limit).all()
+            histories = QueryHistory.list_recent(limit=limit)
             
             return [history.to_dict() for history in histories]
             
@@ -197,7 +198,7 @@ class Text2SQLEngine:
             user_ip = request.remote_addr if request else None
             user_agent = request.headers.get('User-Agent') if request else None
             
-            history = QueryHistory(
+            QueryHistory.create_history(
                 user_query=user_query,
                 intent=intent_result.get('intent', {}).get('name'),
                 entities=intent_result.get('entities'),
@@ -210,13 +211,9 @@ class Text2SQLEngine:
                 user_ip=user_ip,
                 user_agent=user_agent
             )
-            
-            db.session.add(history)
-            db.session.commit()
-            
         except Exception as e:
             # 记录历史失败不应该影响主流程
-            db.session.rollback()
+            logger.warning(f"保存查询历史失败: {e}")
     
     def _try_llm_enhancement(self, user_query: str, intent_result: Dict[str, Any]) -> Optional[str]:
         """尝试使用大模型增强SQL生成"""

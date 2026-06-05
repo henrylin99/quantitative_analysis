@@ -7,7 +7,6 @@ import logging
 from flask import Blueprint, request, jsonify, render_template
 from app.services.text2sql_engine import get_text2sql_engine
 from app.models.text2sql_metadata import QueryHistory, QueryTemplate, BusinessDictionary
-from app.extensions import db
 
 # 创建蓝图
 text2sql_bp = Blueprint('text2sql', __name__, url_prefix='/api/text2sql')
@@ -115,7 +114,7 @@ def get_query_history():
 def get_query_templates():
     """获取查询模板"""
     try:
-        templates = QueryTemplate.query.filter_by(is_active=True).all()
+        templates = QueryTemplate.list_active()
         
         template_list = []
         for template in templates:
@@ -154,12 +153,11 @@ def create_query_template():
                 return jsonify({'error': f'缺少必要字段: {field}'}), 400
         
         # 检查模板ID是否已存在
-        existing_template = QueryTemplate.query.get(data['template_id'])
+        existing_template = QueryTemplate.get_by_id(data['template_id'])
         if existing_template:
             return jsonify({'error': '模板ID已存在'}), 400
         
-        # 创建新模板
-        template = QueryTemplate(
+        template = QueryTemplate.create_template(
             template_id=data['template_id'],
             template_name=data['template_name'],
             intent_pattern=data.get('intent_pattern'),
@@ -168,9 +166,6 @@ def create_query_template():
             is_active=data.get('is_active', True)
         )
         
-        db.session.add(template)
-        db.session.commit()
-        
         return jsonify({
             'success': True,
             'message': '模板创建成功',
@@ -178,7 +173,6 @@ def create_query_template():
         })
         
     except Exception as e:
-        db.session.rollback()
         logger.error(f"创建查询模板失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -187,7 +181,7 @@ def create_query_template():
 def update_query_template(template_id):
     """更新查询模板"""
     try:
-        template = QueryTemplate.query.get(template_id)
+        template = QueryTemplate.get_by_id(template_id)
         if not template:
             return jsonify({'error': '模板不存在'}), 404
         
@@ -195,19 +189,14 @@ def update_query_template(template_id):
         if not data:
             return jsonify({'error': '请求数据为空'}), 400
         
-        # 更新模板字段
-        if 'template_name' in data:
-            template.template_name = data['template_name']
-        if 'intent_pattern' in data:
-            template.intent_pattern = data['intent_pattern']
-        if 'sql_template' in data:
-            template.sql_template = data['sql_template']
-        if 'parameters' in data:
-            template.parameters = data['parameters']
-        if 'is_active' in data:
-            template.is_active = data['is_active']
-        
-        db.session.commit()
+        template = QueryTemplate.update_template_by_id(
+            template_id,
+            template_name=data.get('template_name', template.template_name),
+            intent_pattern=data.get('intent_pattern', template.intent_pattern),
+            sql_template=data.get('sql_template', template.sql_template),
+            parameters=data.get('parameters', template.parameters),
+            is_active=data.get('is_active', template.is_active),
+        )
         
         return jsonify({
             'success': True,
@@ -216,7 +205,6 @@ def update_query_template(template_id):
         })
         
     except Exception as e:
-        db.session.rollback()
         logger.error(f"更新查询模板失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -225,13 +213,10 @@ def update_query_template(template_id):
 def delete_query_template(template_id):
     """删除查询模板"""
     try:
-        template = QueryTemplate.query.get(template_id)
-        if not template:
+        if not QueryTemplate.get_by_id(template_id):
             return jsonify({'error': '模板不存在'}), 404
-        
-        # 软删除：设置为非激活状态
-        template.is_active = False
-        db.session.commit()
+
+        QueryTemplate.delete_template_by_id(template_id)
         
         return jsonify({
             'success': True,
@@ -239,7 +224,6 @@ def delete_query_template(template_id):
         })
         
     except Exception as e:
-        db.session.rollback()
         logger.error(f"删除查询模板失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -250,11 +234,7 @@ def get_business_dictionary():
     try:
         category = request.args.get('category')
         
-        query = BusinessDictionary.query.filter_by(is_active=True)
-        if category:
-            query = query.filter_by(category=category)
-        
-        dictionaries = query.all()
+        dictionaries = BusinessDictionary.list_active(category=category)
         
         dict_list = []
         for dictionary in dictionaries:
@@ -285,8 +265,7 @@ def create_business_dictionary():
             if not data.get(field):
                 return jsonify({'error': f'缺少必要字段: {field}'}), 400
         
-        # 创建新词典条目
-        dictionary = BusinessDictionary(
+        dictionary = BusinessDictionary.create_dictionary(
             category=data['category'],
             standard_term=data['standard_term'],
             synonyms=data.get('synonyms', []),
@@ -296,9 +275,6 @@ def create_business_dictionary():
             is_active=data.get('is_active', True)
         )
         
-        db.session.add(dictionary)
-        db.session.commit()
-        
         return jsonify({
             'success': True,
             'message': '词典条目创建成功',
@@ -306,7 +282,6 @@ def create_business_dictionary():
         })
         
     except Exception as e:
-        db.session.rollback()
         logger.error(f"创建业务词典失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -316,38 +291,22 @@ def get_query_statistics():
     """获取查询统计信息"""
     try:
         # 总查询次数
-        total_queries = QueryHistory.query.count()
+        total_queries = QueryHistory.count_total()
         
         # 成功查询次数
-        successful_queries = QueryHistory.query.filter_by(is_successful=True).count()
+        successful_queries = QueryHistory.count_successful()
         
         # 成功率
         success_rate = (successful_queries / total_queries * 100) if total_queries > 0 else 0
         
         # 平均执行时间
-        avg_execution_time = db.session.query(
-            db.func.avg(QueryHistory.execution_time)
-        ).filter_by(is_successful=True).scalar() or 0
+        avg_execution_time = QueryHistory.get_average_execution_time()
         
         # 最常用的意图
-        intent_stats = db.session.query(
-            QueryHistory.intent,
-            db.func.count(QueryHistory.intent).label('count')
-        ).filter(
-            QueryHistory.intent.isnot(None)
-        ).group_by(QueryHistory.intent).order_by(
-            db.func.count(QueryHistory.intent).desc()
-        ).limit(5).all()
+        intent_stats = QueryHistory.get_top_intents()
         
         # 最常用的模板
-        template_stats = db.session.query(
-            QueryHistory.template_used,
-            db.func.count(QueryHistory.template_used).label('count')
-        ).filter(
-            QueryHistory.template_used.isnot(None)
-        ).group_by(QueryHistory.template_used).order_by(
-            db.func.count(QueryHistory.template_used).desc()
-        ).limit(5).all()
+        template_stats = QueryHistory.get_top_templates()
         
         return jsonify({
             'success': True,

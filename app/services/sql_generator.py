@@ -307,7 +307,7 @@ class TemplateManager:
         """加载查询模板"""
         try:
             # 从数据库加载模板
-            db_templates = QueryTemplate.query.filter_by(is_active=True).all()
+            db_templates = QueryTemplate.list_active()
             templates = {}
             
             for template in db_templates:
@@ -503,7 +503,7 @@ class TemplateManager:
     def _update_template_usage(self, template_id: str):
         """更新模板使用次数"""
         try:
-            template = QueryTemplate.query.get(template_id)
+            template = QueryTemplate.get_by_id(template_id)
             if template:
                 template.increment_usage()
         except Exception:

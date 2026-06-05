@@ -1,5 +1,5 @@
 """
-ParquetDataReader — 从本地 Parquet 文件加载日行情数据，替代 MySQL 查询。
+ParquetDataReader — 从本地 Parquet 文件加载日行情数据，替代传统数据库查询。
 
 存储布局（Hive 分区格式）：
     {data_dir}/daily_history/daily/year=YYYY/month=MM/day=DD/data.parquet

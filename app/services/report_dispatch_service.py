@@ -1,9 +1,7 @@
-import json
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from app.extensions import db
 from app.models.realtime_report import ReportSubscription, RealtimeReport
 from app.services.realtime_report_generator import RealtimeReportGenerator
 
@@ -46,7 +44,7 @@ class ReportDispatchService:
             return {"success": False, "subscription_id": subscription.id, "message": "模板不存在"}
 
         parameters = {}
-        schedule_config = json.loads(subscription.schedule_config) if subscription.schedule_config else {}
+        schedule_config = subscription.schedule_config if isinstance(subscription.schedule_config, dict) else {}
         if isinstance(schedule_config, dict):
             parameters.update(schedule_config.get("parameters") or {})
 
@@ -65,20 +63,17 @@ class ReportDispatchService:
             }
 
         report_id = result.get("data", {}).get("report_id")
-        report = RealtimeReport.query.get(report_id) if report_id else None
+        report = RealtimeReport.get_by_id(report_id) if report_id else None
         if report is not None:
-            report.report_data = json.dumps({
-                **(json.loads(report.report_data) if report.report_data else {}),
-                "dispatch": {
-                    "subscription_id": subscription.id,
-                    "channels": json.loads(subscription.notification_channels) if subscription.notification_channels else ["log"],
-                    "subscriber_email": subscription.subscriber_email,
-                    "subscriber_phone": subscription.subscriber_phone,
-                },
-            })
+            channels = subscription.notification_channels if isinstance(subscription.notification_channels, list) else ["log"]
+            report.attach_dispatch_metadata(
+                subscription_id=subscription.id,
+                channels=channels,
+                subscriber_email=subscription.subscriber_email,
+                subscriber_phone=subscription.subscriber_phone,
+            )
 
         subscription.update_send_time()
-        db.session.commit()
 
         logger.info(f"订阅 {subscription.id} 分发完成")
         return {

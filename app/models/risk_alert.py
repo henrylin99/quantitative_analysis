@@ -6,6 +6,7 @@
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index
+from app.services.persistence import persist_changes, persist_new, remove_instance
 
 
 class RiskAlert(db.Model):
@@ -69,16 +70,33 @@ class RiskAlert(db.Model):
             position_size=position_size,
             portfolio_weight=portfolio_weight
         )
-        db.session.add(alert)
-        db.session.commit()
-        return alert
+        return persist_new(alert)
     
     def resolve_alert(self):
         """解决预警"""
         self.is_resolved = True
         self.is_active = False
         self.resolved_at = datetime.utcnow()
-        db.session.commit()
+        persist_changes(self)
+
+    def update_alert(self, **fields):
+        """更新预警字段并持久化。"""
+        for key in [
+            'ts_code', 'alert_type', 'alert_level', 'alert_message', 'risk_value',
+            'threshold_value', 'current_price', 'position_size', 'portfolio_weight',
+            'is_active', 'is_resolved', 'resolved_at'
+        ]:
+            if key in fields:
+                setattr(self, key, fields[key])
+        persist_changes(self)
+
+    @classmethod
+    def resolve_by_id(cls, alert_id):
+        alert = cls.get_by_id(alert_id)
+        if not alert:
+            return None
+        alert.update_alert(is_active=False, is_resolved=True, resolved_at=datetime.utcnow())
+        return alert
     
     @classmethod
     def get_active_alerts(cls, ts_code=None, alert_type=None, alert_level=None):
@@ -104,4 +122,40 @@ class RiskAlert(db.Model):
             func.count(cls.id).label('count')
         ).filter_by(is_active=True, is_resolved=False).group_by(cls.alert_level).all()
         
-        return {level: count for level, count in stats} 
+        return {level: count for level, count in stats}
+
+    @classmethod
+    def get_by_id(cls, alert_id):
+        return cls.query.get(alert_id)
+
+    @classmethod
+    def list_all(cls):
+        return cls.query.order_by(cls.created_at.desc()).all()
+
+    @classmethod
+    def get_active_alerts_for_portfolio(cls, portfolio_codes=None, alert_level=None):
+        query = cls.query.filter_by(is_active=True, is_resolved=False)
+        if portfolio_codes:
+            query = query.filter(cls.ts_code.in_(portfolio_codes))
+        if alert_level:
+            query = query.filter_by(alert_level=alert_level)
+        return query.order_by(cls.created_at.desc()).all()
+
+    @classmethod
+    def get_existing_active_alert(cls, ts_code, alert_type):
+        return cls.query.filter_by(
+            ts_code=ts_code,
+            alert_type=alert_type,
+            is_active=True,
+            is_resolved=False,
+        ).first()
+
+    @classmethod
+    def get_recent_alerts(cls, minutes=10, active_only=True, limit=10):
+        from datetime import timedelta
+
+        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        query = cls.query.filter(cls.created_at >= cutoff)
+        if active_only:
+            query = query.filter_by(is_active=True)
+        return query.order_by(cls.created_at.desc()).limit(limit).all()

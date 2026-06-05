@@ -21,6 +21,7 @@ from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.services.realtime_trading_signal_engine import RealtimeTradingSignalEngine
 from app.services.realtime_monitor_service import RealtimeMonitorService
 from app.services.realtime_risk_manager import RealtimeRiskManager
+from app.services.parquet_event_store import ParquetEventStore
 from app.websocket.websocket_events import (
     broadcast_market_data, broadcast_indicators, broadcast_signals,
     broadcast_monitor_data, broadcast_risk_alert, broadcast_portfolio_update,
@@ -40,6 +41,7 @@ class WebSocketPushService:
         self.signal_engine = RealtimeTradingSignalEngine()
         self.monitor_service = RealtimeMonitorService()
         self.risk_manager = RealtimeRiskManager()
+        self.event_store = ParquetEventStore()
         
         self.is_running = False
         self.push_thread = None
@@ -159,22 +161,28 @@ class WebSocketPushService:
         """推送技术指标数据"""
         try:
             # 获取最新指标数据
-            latest_indicators = RealtimeIndicator.query.filter(
-                RealtimeIndicator.datetime >= datetime.now() - timedelta(minutes=5)
-            ).limit(50).all()
+            latest_indicators = self.event_store.get_latest_indicators(
+                ts_code=None,
+                period_type=None,
+                indicator_names=None,
+                limit=50,
+            )
             
             # 按股票分组
             indicators_by_stock = {}
-            for indicator in latest_indicators:
-                ts_code = indicator.ts_code
+            for _, indicator in latest_indicators.iterrows():
+                ts_code = indicator.get('ts_code')
                 if ts_code not in indicators_by_stock:
                     indicators_by_stock[ts_code] = []
                 
                 indicators_by_stock[ts_code].append({
-                    'indicator_name': indicator.indicator_name,
-                    'period_type': indicator.period_type,
-                    'value': indicator.value,
-                    'datetime': indicator.datetime.isoformat()
+                    'indicator_name': indicator.get('indicator_name'),
+                    'period_type': indicator.get('period_type'),
+                    'value1': indicator.get('value1'),
+                    'value2': indicator.get('value2'),
+                    'value3': indicator.get('value3'),
+                    'value4': indicator.get('value4'),
+                    'datetime': indicator.get('datetime').isoformat() if hasattr(indicator.get('datetime'), 'isoformat') else indicator.get('datetime')
                 })
             
             # 推送指标数据
@@ -194,25 +202,26 @@ class WebSocketPushService:
         """推送交易信号"""
         try:
             # 获取最新信号
-            latest_signals = TradingSignal.query.filter(
-                TradingSignal.created_at >= datetime.now() - timedelta(minutes=10),
-                TradingSignal.status == 'active'
-            ).limit(20).all()
+            latest_signals = self.event_store.get_recent_signals(
+                since=datetime.now() - timedelta(minutes=10),
+                limit=20,
+                status='ACTIVE',
+            )
             
             # 按股票分组
             signals_by_stock = {}
-            for signal in latest_signals:
-                ts_code = signal.ts_code
+            for _, signal in latest_signals.iterrows():
+                ts_code = signal.get('ts_code')
                 if ts_code not in signals_by_stock:
                     signals_by_stock[ts_code] = []
                 
                 signals_by_stock[ts_code].append({
-                    'strategy_name': signal.strategy_name,
-                    'signal_type': signal.signal_type,
-                    'signal_strength': signal.signal_strength,
-                    'confidence': signal.confidence,
-                    'created_at': signal.created_at.isoformat(),
-                    'parameters': signal.parameters
+                    'strategy_name': signal.get('strategy_name'),
+                    'signal_type': signal.get('signal_type'),
+                    'signal_strength': signal.get('signal_strength'),
+                    'confidence': signal.get('confidence'),
+                    'created_at': signal.get('datetime').isoformat() if hasattr(signal.get('datetime'), 'isoformat') else signal.get('datetime'),
+                    'parameters': signal.get('strategy_params')
                 })
             
             # 推送信号数据
@@ -251,10 +260,7 @@ class WebSocketPushService:
         """推送风险预警"""
         try:
             # 获取最新风险预警
-            latest_alerts = RiskAlert.query.filter(
-                RiskAlert.created_at >= datetime.now() - timedelta(minutes=10),
-                RiskAlert.status == 'active'
-            ).limit(10).all()
+            latest_alerts = RiskAlert.get_recent_alerts(minutes=10, active_only=True, limit=10)
             
             for alert in latest_alerts:
                 alert_data = {
@@ -303,10 +309,7 @@ class WebSocketPushService:
     def _get_active_portfolio_ids(self) -> List[str]:
         """获取存在真实持仓的活跃投资组合ID。"""
         try:
-            rows = db.session.query(PortfolioPosition.portfolio_id).filter(
-                PortfolioPosition.is_active.is_(True)
-            ).distinct().all()
-            return [row[0] for row in rows if row and row[0]]
+            return PortfolioPosition.list_active_portfolio_ids()
         except Exception as e:
             logger.error(f"获取活跃投资组合失败: {e}")
             return []

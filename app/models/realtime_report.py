@@ -7,6 +7,7 @@ from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index, Text
 import json
+from app.services.persistence import persist_changes, persist_new, remove_instance
 
 
 class ReportTemplate(db.Model):
@@ -60,9 +61,66 @@ class ReportTemplate(db.Model):
             components=json.dumps(components) if components else None,
             created_by=created_by
         )
-        db.session.add(template)
-        db.session.commit()
-        return template
+        return persist_new(template)
+
+    @classmethod
+    def create_or_update_default_template(cls, template_name, template_type, description=None,
+                                          template_config=None, components=None, created_by=None):
+        template = cls.get_default_template(template_type)
+        if template:
+            return cls.update_template_by_id(
+                template.id,
+                template_name=template_name,
+                template_type=template_type,
+                description=description,
+                template_config=template_config,
+                components=components,
+                created_by=created_by,
+                is_default=True,
+            )
+        template = cls.create_template(
+            template_name=template_name,
+            template_type=template_type,
+            description=description,
+            template_config=template_config,
+            components=components,
+            created_by=created_by,
+        )
+        template.is_default = True
+        return persist_changes(template)
+
+    @classmethod
+    def update_template_by_id(cls, template_id, **fields):
+        template = cls.get_by_id(template_id)
+        if not template:
+            return None
+
+        if 'template_name' in fields:
+            template.template_name = fields['template_name']
+        if 'template_type' in fields:
+            template.template_type = fields['template_type']
+        if 'description' in fields:
+            template.description = fields['description']
+        if 'template_config' in fields:
+            template.template_config = json.dumps(fields['template_config']) if fields['template_config'] else None
+        if 'components' in fields:
+            template.components = json.dumps(fields['components']) if fields['components'] else None
+        if 'is_active' in fields:
+            template.is_active = fields['is_active']
+        if 'is_default' in fields:
+            template.is_default = fields['is_default']
+        if 'created_by' in fields:
+            template.created_by = fields['created_by']
+
+        template.updated_at = datetime.utcnow()
+        return persist_changes(template)
+
+    @classmethod
+    def delete_template_by_id(cls, template_id):
+        template = cls.get_by_id(template_id)
+        if not template:
+            return False
+        return remove_instance(template)
     
     @classmethod
     def get_templates_by_type(cls, template_type, active_only=True):
@@ -71,7 +129,7 @@ class ReportTemplate(db.Model):
         if active_only:
             query = query.filter_by(is_active=True)
         return query.order_by(cls.created_at.desc()).all()
-    
+
     @classmethod
     def get_default_template(cls, template_type):
         """获取默认模板"""
@@ -80,6 +138,33 @@ class ReportTemplate(db.Model):
             is_default=True,
             is_active=True
         ).first()
+
+    @classmethod
+    def get_by_id(cls, template_id):
+        return cls.query.get(template_id)
+
+    @classmethod
+    def count_templates(cls, active_only=None):
+        query = cls.query
+        if active_only is True:
+            query = query.filter_by(is_active=True)
+        elif active_only is False:
+            query = query.filter_by(is_active=False)
+        return query.count()
+
+    @classmethod
+    def list_templates(cls, active_only=None, template_type=None, limit=None):
+        query = cls.query
+        if active_only is True:
+            query = query.filter_by(is_active=True)
+        elif active_only is False:
+            query = query.filter_by(is_active=False)
+        if template_type:
+            query = query.filter_by(template_type=template_type)
+        query = query.order_by(cls.created_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
 
 class RealtimeReport(db.Model):
@@ -146,10 +231,45 @@ class RealtimeReport(db.Model):
             report_data=json.dumps(report_data) if report_data else None,
             generated_by=generated_by
         )
-        db.session.add(report)
-        db.session.commit()
+        return persist_new(report)
+
+    @classmethod
+    def create_generated_report(
+        cls,
+        report_name,
+        report_type,
+        template_id=None,
+        report_content=None,
+        report_data=None,
+        generated_by=None,
+        status="generating",
+        generation_time=None,
+        error_message=None,
+    ):
+        report = cls.create_report(
+            report_name=report_name,
+            report_type=report_type,
+            template_id=template_id,
+            report_content=report_content,
+            report_data=report_data,
+            generated_by=generated_by,
+        )
+        report.update_generation_result(
+            report_content=report_content,
+            report_data=report_data,
+            status=status,
+            error_message=error_message,
+            generation_time=generation_time,
+        )
         return report
-    
+
+    @classmethod
+    def delete_report_by_id(cls, report_id):
+        report = cls.get_by_id(report_id)
+        if not report:
+            return False
+        return remove_instance(report)
+
     def update_status(self, status, error_message=None, file_path=None, 
                      file_format=None, file_size=None, generation_time=None):
         """更新报告状态"""
@@ -164,7 +284,68 @@ class RealtimeReport(db.Model):
             self.file_size = file_size
         if generation_time:
             self.generation_time = generation_time
-        db.session.commit()
+        persist_changes(self)
+
+    def update_generation_result(self, report_content=None, report_data=None, status=None,
+                                 error_message=None, generation_time=None):
+        """一次性更新生成结果，避免服务层反复拆字段写入。"""
+        if report_content is not None:
+            self.report_content = json.dumps(report_content) if not isinstance(report_content, str) else report_content
+        if report_data is not None:
+            self.report_data = json.dumps(report_data) if not isinstance(report_data, str) else report_data
+        if status is not None:
+            self.report_status = status
+        if error_message is not None:
+            self.error_message = error_message
+        if generation_time is not None:
+            self.generation_time = generation_time
+        persist_changes(self)
+
+    def attach_dispatch_metadata(self, subscription_id, channels=None, subscriber_email=None, subscriber_phone=None):
+        """附加分发元数据到报告数据。"""
+        payload = json.loads(self.report_data) if self.report_data else {}
+        payload["dispatch"] = {
+            "subscription_id": subscription_id,
+            "channels": channels or ["log"],
+            "subscriber_email": subscriber_email,
+            "subscriber_phone": subscriber_phone,
+        }
+        self.report_data = json.dumps(payload)
+        persist_changes(self)
+
+    @classmethod
+    def update_report_by_id(cls, report_id, **fields):
+        report = cls.get_by_id(report_id)
+        if not report:
+            return None
+
+        for key in [
+            'report_name', 'report_type', 'template_id', 'report_content', 'report_data',
+            'report_status', 'file_path', 'file_format', 'file_size', 'generation_time',
+            'error_message', 'generated_by', 'expires_at'
+        ]:
+            if key in fields:
+                value = fields[key]
+                if key in {'report_content', 'report_data'} and value is not None and not isinstance(value, str):
+                    value = json.dumps(value)
+                setattr(report, key, value)
+
+        return persist_changes(report)
+
+    @classmethod
+    def create_or_update_report(cls, report_id=None, **fields):
+        if report_id is None:
+            report = cls(**{
+                key: json.dumps(value) if key in {'report_content', 'report_data'} and value is not None and not isinstance(value, str) else value
+                for key, value in fields.items()
+                if key in {
+                    'report_name', 'report_type', 'template_id', 'report_content', 'report_data',
+                    'report_status', 'file_path', 'file_format', 'file_size', 'generation_time',
+                    'error_message', 'generated_by', 'expires_at'
+                }
+            })
+            return persist_new(report)
+        return cls.update_report_by_id(report_id, **fields)
     
     @classmethod
     def get_reports_by_type(cls, report_type, limit=50):
@@ -172,7 +353,7 @@ class RealtimeReport(db.Model):
         return cls.query.filter_by(report_type=report_type)\
                        .order_by(cls.generated_at.desc())\
                        .limit(limit).all()
-    
+
     @classmethod
     def get_recent_reports(cls, days=7, limit=20):
         """获取最近的报告"""
@@ -181,6 +362,41 @@ class RealtimeReport(db.Model):
         return cls.query.filter(cls.generated_at >= cutoff_date)\
                        .order_by(cls.generated_at.desc())\
                        .limit(limit).all()
+
+    @classmethod
+    def get_by_id(cls, report_id):
+        return cls.query.get(report_id)
+
+    @classmethod
+    def count_reports(cls, status=None):
+        query = cls.query
+        if status:
+            query = query.filter_by(report_status=status)
+        return query.count()
+
+    @classmethod
+    def count_reports_by_template(cls, template_id):
+        return cls.query.filter_by(template_id=template_id).count()
+
+    @classmethod
+    def get_report_type_stats(cls):
+        from sqlalchemy import func
+
+        stats = db.session.query(
+            cls.report_type,
+            func.count(cls.id).label('count')
+        ).group_by(cls.report_type).all()
+        return {stat.report_type: stat.count for stat in stats}
+
+    @classmethod
+    def list_reports(cls, report_type=None, limit=None):
+        query = cls.query
+        if report_type:
+            query = query.filter_by(report_type=report_type)
+        query = query.order_by(cls.generated_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
 
 class ReportSubscription(db.Model):
@@ -247,9 +463,53 @@ class ReportSubscription(db.Model):
             notification_channels=json.dumps(notification_channels) if notification_channels else None,
             created_by=created_by
         )
-        db.session.add(subscription)
-        db.session.commit()
-        return subscription
+        return persist_new(subscription)
+
+    @classmethod
+    def create_or_replace_subscription(cls, **fields):
+        subscription_id = fields.pop("subscription_id", None)
+        if subscription_id is None:
+            return cls.create_subscription(**fields)
+        return cls.update_subscription_by_id(subscription_id, **fields)
+
+    @classmethod
+    def update_subscription_by_id(cls, subscription_id, **fields):
+        subscription = cls.get_by_id(subscription_id)
+        if not subscription:
+            return None
+
+        if 'subscription_name' in fields:
+            subscription.subscription_name = fields['subscription_name']
+        if 'template_id' in fields:
+            subscription.template_id = fields['template_id']
+        if 'subscriber_email' in fields:
+            subscription.subscriber_email = fields['subscriber_email']
+        if 'subscriber_phone' in fields:
+            subscription.subscriber_phone = fields['subscriber_phone']
+        if 'schedule_type' in fields:
+            subscription.schedule_type = fields['schedule_type']
+        if 'schedule_config' in fields:
+            subscription.schedule_config = json.dumps(fields['schedule_config']) if fields['schedule_config'] else None
+        if 'notification_channels' in fields:
+            subscription.notification_channels = json.dumps(fields['notification_channels']) if fields['notification_channels'] else None
+        if 'is_active' in fields:
+            subscription.is_active = fields['is_active']
+        if 'created_by' in fields:
+            subscription.created_by = fields['created_by']
+        if 'last_sent_at' in fields:
+            subscription.last_sent_at = fields['last_sent_at']
+        if 'next_send_at' in fields:
+            subscription.next_send_at = fields['next_send_at']
+
+        subscription.updated_at = datetime.utcnow()
+        return persist_changes(subscription)
+
+    @classmethod
+    def delete_subscription_by_id(cls, subscription_id):
+        subscription = cls.get_by_id(subscription_id)
+        if not subscription:
+            return False
+        return remove_instance(subscription)
     
     @classmethod
     def get_pending_subscriptions(cls):
@@ -259,7 +519,43 @@ class ReportSubscription(db.Model):
             cls.is_active == True,
             cls.next_send_at <= now
         ).all()
-    
+
+    @classmethod
+    def get_by_id(cls, subscription_id):
+        return cls.query.get(subscription_id)
+
+    @classmethod
+    def list_subscriptions(cls, active_only=False):
+        query = cls.query
+        if active_only:
+            query = query.filter_by(is_active=True)
+        return query.order_by(cls.created_at.desc()).all()
+
+    @classmethod
+    def count_subscriptions(cls, active_only=None):
+        query = cls.query
+        if active_only is True:
+            query = query.filter_by(is_active=True)
+        elif active_only is False:
+            query = query.filter_by(is_active=False)
+        return query.count()
+
+    @classmethod
+    def list_pending(cls):
+        return cls.get_pending_subscriptions()
+
+    @classmethod
+    def list_subscriptions(cls, active_only=None, limit=None):
+        query = cls.query
+        if active_only is True:
+            query = query.filter_by(is_active=True)
+        elif active_only is False:
+            query = query.filter_by(is_active=False)
+        query = query.order_by(cls.created_at.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
     def update_send_time(self):
         """更新发送时间"""
         self.last_sent_at = datetime.utcnow()
@@ -274,4 +570,7 @@ class ReportSubscription(db.Model):
             from datetime import timedelta
             self.next_send_at = self.last_sent_at + timedelta(days=30)
         
-        db.session.commit() 
+        persist_changes(self)
+
+    def mark_sent(self):
+        self.update_send_time()

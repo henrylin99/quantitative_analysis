@@ -6,6 +6,7 @@ Text2SQL元数据模型
 from app.extensions import db
 from datetime import datetime
 import json
+from app.services.persistence import persist_changes, persist_new, remove_instance
 
 
 class TableMetadata(db.Model):
@@ -98,14 +99,53 @@ class QueryTemplate(db.Model):
     def increment_usage(self):
         """增加使用次数"""
         self.usage_count += 1
-        db.session.commit()
+        persist_changes(self)
+
+    @classmethod
+    def create_template(cls, template_id, template_name, intent_pattern=None, sql_template=None, parameters=None, is_active=True):
+        template = cls(
+            template_id=template_id,
+            template_name=template_name,
+            intent_pattern=intent_pattern,
+            sql_template=sql_template,
+            parameters=parameters,
+            is_active=is_active,
+        )
+        return persist_new(template)
+
+    @classmethod
+    def update_template_by_id(cls, template_id, **fields):
+        template = cls.get_by_id(template_id)
+        if not template:
+            return None
+
+        for key in ['template_name', 'intent_pattern', 'sql_template', 'parameters', 'is_active']:
+            if key in fields:
+                setattr(template, key, fields[key])
+
+        return persist_changes(template)
+
+    @classmethod
+    def delete_template_by_id(cls, template_id):
+        template = cls.get_by_id(template_id)
+        if not template:
+            return False
+        return remove_instance(template)
+
+    @classmethod
+    def get_by_id(cls, template_id):
+        return cls.query.get(template_id)
+
+    @classmethod
+    def list_active(cls):
+        return cls.query.filter_by(is_active=True).all()
 
 
 class QueryHistory(db.Model):
     """查询历史"""
     __tablename__ = 'query_history'
     
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment='主键ID')
     user_query = db.Column(db.Text, nullable=False, comment='用户查询')
     intent = db.Column(db.String(50), comment='识别意图')
     entities = db.Column(db.JSON, comment='提取的实体')
@@ -137,6 +177,49 @@ class QueryHistory(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+    @classmethod
+    def list_recent(cls, limit=10):
+        return cls.query.order_by(cls.created_at.desc()).limit(limit).all()
+
+    @classmethod
+    def create_history(cls, **fields):
+        history = cls(**fields)
+        return persist_new(history)
+
+    @classmethod
+    def count_total(cls):
+        return cls.query.count()
+
+    @classmethod
+    def count_successful(cls):
+        return cls.query.filter_by(is_successful=True).count()
+
+    @classmethod
+    def get_average_execution_time(cls):
+        return db.session.query(db.func.avg(cls.execution_time)).filter_by(is_successful=True).scalar() or 0
+
+    @classmethod
+    def get_top_intents(cls, limit=5):
+        return db.session.query(
+            cls.intent,
+            db.func.count(cls.intent).label('count')
+        ).filter(
+            cls.intent.isnot(None)
+        ).group_by(cls.intent).order_by(
+            db.func.count(cls.intent).desc()
+        ).limit(limit).all()
+
+    @classmethod
+    def get_top_templates(cls, limit=5):
+        return db.session.query(
+            cls.template_used,
+            db.func.count(cls.template_used).label('count')
+        ).filter(
+            cls.template_used.isnot(None)
+        ).group_by(cls.template_used).order_by(
+            db.func.count(cls.template_used).desc()
+        ).limit(limit).all()
+
 
 class BusinessDictionary(db.Model):
     """业务词典"""
@@ -167,3 +250,46 @@ class BusinessDictionary(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         } 
+
+    @classmethod
+    def list_active(cls, category=None):
+        query = cls.query.filter_by(is_active=True)
+        if category:
+            query = query.filter_by(category=category)
+        return query.all()
+
+    @classmethod
+    def create_dictionary(cls, category, standard_term, synonyms=None, description=None, mapping_field=None, mapping_table=None, is_active=True):
+        item = cls(
+            category=category,
+            standard_term=standard_term,
+            synonyms=synonyms,
+            description=description,
+            mapping_field=mapping_field,
+            mapping_table=mapping_table,
+            is_active=is_active,
+        )
+        return persist_new(item)
+
+    @classmethod
+    def get_by_id(cls, dictionary_id):
+        return cls.query.get(dictionary_id)
+
+    @classmethod
+    def update_dictionary_by_id(cls, dictionary_id, **fields):
+        dictionary = cls.get_by_id(dictionary_id)
+        if not dictionary:
+            return None
+
+        for key in ['category', 'standard_term', 'synonyms', 'description', 'mapping_field', 'mapping_table', 'is_active']:
+            if key in fields:
+                setattr(dictionary, key, fields[key])
+
+        return persist_changes(dictionary)
+
+    @classmethod
+    def delete_dictionary_by_id(cls, dictionary_id):
+        dictionary = cls.get_by_id(dictionary_id)
+        if not dictionary:
+            return False
+        return remove_instance(dictionary)
