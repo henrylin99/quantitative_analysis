@@ -1,9 +1,8 @@
 from app import create_app
 from app.celery_app import celery
-from app.extensions import db
+from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
 from app.services.data_jobs.registry import JobRegistry
 from app.services.data_jobs.runner import ScriptRunner
-from app.services.data_jobs.state_store import DataJobStateStore
 
 
 def _build_app():
@@ -15,7 +14,7 @@ def _build_registry():
 
 
 def _build_state_store():
-    return DataJobStateStore(db.session)
+    return ParquetDataJobStateStore()
 
 
 def _build_runner():

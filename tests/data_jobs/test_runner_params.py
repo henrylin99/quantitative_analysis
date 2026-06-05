@@ -44,3 +44,16 @@ def test_runner_injects_audit_params_into_env(tmp_path):
     assert env["DATA_JOB_SOURCE_NAME"] == "tushare"
     assert env["DATA_JOB_SOURCE_MODE"] == "incremental"
     assert env["DATA_JOB_SNAPSHOT_TAG"] == "2026-04-04"
+
+
+def test_runner_injects_project_root_into_pythonpath(tmp_path):
+    script = tmp_path / "task.py"
+    script.write_text("print('ok')", encoding="utf-8")
+
+    runner = ScriptRunner(project_root=tmp_path)
+
+    with patch("subprocess.run") as mock_run:
+        runner.run_script("task.py", params={})
+
+    env = mock_run.call_args.kwargs["env"]
+    assert str(tmp_path) in env["PYTHONPATH"].split(":")

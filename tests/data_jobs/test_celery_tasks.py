@@ -4,8 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import app.tasks.data_jobs_tasks as data_jobs_tasks
 from app.tasks.data_jobs_tasks import run_data_job
 from app.celery_app import celery
+from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
 
 pytestmark = pytest.mark.module_data_jobs
 
@@ -61,3 +63,11 @@ def test_run_data_job_marks_success():
     }
     assert fake_store.update_run_status.call_args_list[0].args[1] == "running"
     assert fake_store.update_run_status.call_args_list[-1].args[1] == "success"
+
+
+def test_task_builds_parquet_state_store_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    store = data_jobs_tasks._build_state_store()
+
+    assert isinstance(store, ParquetDataJobStateStore)
