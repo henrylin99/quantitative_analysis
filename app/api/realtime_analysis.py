@@ -31,6 +31,7 @@ def sync_minute_data():
         end_date = data.get('end_date')
         period_type = data.get('period_type', '1min')
         use_baostock = data.get('use_baostock', True)
+        data_source = data.get('data_source', 'tongdaxin')
         
         if not ts_code:
             return jsonify({
@@ -40,7 +41,12 @@ def sync_minute_data():
         
         # 执行数据同步
         result = data_manager.sync_minute_data(
-            ts_code, start_date, end_date, period_type, use_baostock
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            period_type=period_type,
+            use_baostock=use_baostock,
+            data_source=data_source,
         )
         
         return jsonify(result)
@@ -64,6 +70,7 @@ def sync_multiple_stocks():
         end_date = data.get('end_date')
         batch_size = data.get('batch_size', 10)
         use_baostock = data.get('use_baostock', True)
+        data_source = data.get('data_source', 'tongdaxin')
         
         if not stock_list:
             return jsonify({
@@ -73,7 +80,13 @@ def sync_multiple_stocks():
         
         # 执行批量同步
         result = data_manager.sync_multiple_stocks_data(
-            stock_list, period_type, start_date, end_date, batch_size, use_baostock
+            stock_list=stock_list,
+            period_type=period_type,
+            start_date=start_date,
+            end_date=end_date,
+            batch_size=batch_size,
+            use_baostock=use_baostock,
+            data_source=data_source,
         )
         
         return jsonify(result)
@@ -95,6 +108,7 @@ def sync_all_periods():
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         use_baostock = data.get('use_baostock', True)
+        data_source = data.get('data_source', 'tongdaxin')
         
         if not ts_code:
             return jsonify({
@@ -104,7 +118,11 @@ def sync_all_periods():
         
         # 执行所有周期同步
         result = data_manager.sync_all_periods_for_stock(
-            ts_code, start_date, end_date, use_baostock
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            use_baostock=use_baostock,
+            data_source=data_source,
         )
         
         return jsonify({
