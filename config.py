@@ -5,10 +5,43 @@ from datetime import timedelta
 # 加载环境变量
 load_dotenv()
 
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+
+def _build_sqlalchemy_engine_options(database_uri: str) -> dict:
+    if database_uri.startswith("sqlite"):
+        return {
+            "connect_args": {
+                "check_same_thread": False,
+            }
+        }
+    return {
+        "pool_size": 10,
+        "pool_recycle": 3600,
+        "pool_pre_ping": True,
+    }
+
 class Config:
     """基础配置类"""
-    
-    # 兼容层：MySQL 仅用于遗留 ORM / 手工维护场景
+
+    # ORM 默认使用 SQLite；MySQL 仅保留给显式 legacy/compatibility 路径
+    SQLITE_DATABASE_PATH = os.getenv(
+        "SQLITE_DATABASE_PATH",
+        os.path.join(BASE_DIR, "stock_cursor.sqlite3"),
+    )
+    SQLITE_DATABASE_URI = os.getenv(
+        "SQLALCHEMY_DATABASE_URI",
+        f"sqlite:///{SQLITE_DATABASE_PATH}",
+    )
+    SQLALCHEMY_DATABASE_URI = SQLITE_DATABASE_URI
+    SQLALCHEMY_ENGINE_OPTIONS = _build_sqlalchemy_engine_options(SQLALCHEMY_DATABASE_URI)
+
+    MYSQL_COMPAT_ENABLED = os.getenv(
+        "MYSQL_COMPAT_ENABLED",
+        "false",
+    ).strip().lower() in {"1", "true", "yes", "y", "on"}
+
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_USER = os.getenv('DB_USER', 'root')
     DB_PASSWORD = os.getenv('DB_PASSWORD', '')
@@ -19,13 +52,7 @@ class Config:
         'MYSQL_DATABASE_URI',
         f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}?charset={DB_CHARSET}",
     )
-    SQLALCHEMY_DATABASE_URI = MYSQL_DATABASE_URI
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 3600,
-        'pool_pre_ping': True
-    }
     
     # Flask配置
     SECRET_KEY = os.getenv('SECRET_KEY', '')

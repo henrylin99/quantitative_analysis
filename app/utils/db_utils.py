@@ -13,7 +13,7 @@ class DatabaseUtils:
     _password = os.getenv('DB_PASSWORD', '')
     _database = os.getenv('DB_NAME', '').strip()
     _charset = os.getenv('DB_CHARSET', 'utf8mb4').strip() or 'utf8mb4'
-    _mysql_compat_enabled = os.getenv('MYSQL_COMPAT_ENABLED', 'true').strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+    _mysql_compat_enabled = os.getenv('MYSQL_COMPAT_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
 
     # Tushare API token
     _tushare_token = os.getenv('TUSHARE_TOKEN') or os.getenv('tushare_token')
