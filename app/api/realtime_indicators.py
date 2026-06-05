@@ -30,7 +30,7 @@ def calculate_indicators():
     try:
         data = request.get_json()
         ts_code = data.get('ts_code')
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         indicators = data.get('indicators')  # 可选，None表示计算所有指标
         lookback_days = data.get('lookback_days', 30)
         
@@ -151,7 +151,7 @@ def get_latest_indicators():
     """获取最新指标数据"""
     try:
         ts_code = request.args.get('ts_code')
-        period_type = request.args.get('period_type', '1min')
+        period_type = request.args.get('period_type', '5min')
         indicator_names = request.args.getlist('indicators')
         limit = int(request.args.get('limit', 100))
         
@@ -187,7 +187,7 @@ def get_indicator_history():
     """获取指标历史数据"""
     try:
         ts_code = request.args.get('ts_code')
-        period_type = request.args.get('period_type', '1min')
+        period_type = request.args.get('period_type', '5min')
         indicator_name = request.args.get('indicator_name')
         start_time = request.args.get('start_time')
         end_time = request.args.get('end_time')
@@ -269,7 +269,7 @@ def batch_calculate_indicators():
     try:
         data = request.get_json()
         stock_codes = data.get('stock_codes', [])
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         indicators = data.get('indicators')
         lookback_days = data.get('lookback_days', 7)
         
@@ -321,7 +321,7 @@ def compare_indicators():
     try:
         data = request.get_json()
         stock_codes = data.get('stock_codes', [])
-        period_type = data.get('period_type', '1min')
+        period_type = data.get('period_type', '5min')
         indicator_name = data.get('indicator_name')
         limit = data.get('limit', 50)
         

@@ -22,13 +22,13 @@ def _write_parquet_assets(tmp_path: Path):
         ]
     ).to_parquet(tmp_path / "stock_basic.parquet", index=False)
 
-    minute_dir = tmp_path / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
+    minute_dir = tmp_path / "stock_minute" / "5min" / "year=2026" / "month=06" / "day=04"
     minute_dir.mkdir(parents=True)
     pd.DataFrame(
         [
             {
                 "ts_code": "000001.SZ",
-                "period_type": "1min",
+                "period_type": "5min",
                 "datetime": FixedDateTime(2026, 6, 4, 9, 31),
                 "open": 10.0,
                 "high": 10.2,
@@ -39,7 +39,7 @@ def _write_parquet_assets(tmp_path: Path):
             },
             {
                 "ts_code": "000001.SZ",
-                "period_type": "1min",
+                "period_type": "5min",
                 "datetime": FixedDateTime(2026, 6, 4, 9, 59),
                 "open": 10.1,
                 "high": 10.4,
@@ -50,7 +50,7 @@ def _write_parquet_assets(tmp_path: Path):
             },
             {
                 "ts_code": "000002.SZ",
-                "period_type": "1min",
+                "period_type": "5min",
                 "datetime": FixedDateTime(2026, 6, 4, 9, 58),
                 "open": 20.0,
                 "high": 20.1,
@@ -80,3 +80,43 @@ def test_monitor_service_reads_quotes_and_overview_from_parquet(tmp_path, monkey
     assert overview["success"] is True
     assert overview["data"]["total_stocks"] == 2
     assert overview["data"]["active_stocks"] == 2
+
+
+def test_monitor_service_defaults_to_5min_for_quotes_and_overview(tmp_path, monkeypatch):
+    _write_parquet_assets(tmp_path)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    ParquetDataReader._stock_basic_cache = None
+
+    service = RealtimeMonitorService()
+    minute_frame_calls = []
+
+    def fake_minute_frame(*args, **kwargs):
+        minute_frame_calls.append(kwargs.get("period_type"))
+        return pd.DataFrame(
+            [
+                {
+                    "ts_code": "000001.SZ",
+                    "period_type": kwargs.get("period_type", "5min"),
+                    "datetime": FixedDateTime(2026, 6, 4, 9, 59),
+                    "open": 10.1,
+                    "high": 10.4,
+                    "low": 10.0,
+                    "close": 10.3,
+                    "volume": 1500,
+                    "amount": 15450.0,
+                }
+            ]
+        )
+
+    with patch.object(service, "_minute_frame", side_effect=fake_minute_frame), patch.object(
+        service, "_get_previous_close", return_value=10.0
+    ), patch.object(service, "_calculate_volume_ratio", return_value=1.0), patch.object(
+        service, "_calculate_turnover_rate", return_value=1.5
+    ), patch.object(service, "_get_stock_name", return_value="平安银行"):
+        quotes = service.get_realtime_quotes(stock_codes=["000001.SZ"], limit=10)
+        overview = service.get_monitor_overview()
+
+    assert quotes["success"] is True
+    assert overview["success"] is True
+    assert minute_frame_calls[0] == "5min"
+    assert "1min" not in minute_frame_calls
