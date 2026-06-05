@@ -327,8 +327,9 @@ def compare_indicators():
         
         if not stock_codes or not indicator_name:
             return jsonify({'success': False, 'message': '股票代码列表和指标名称不能为空'})
-        
+
         results = {}
+        empty_stock_codes = []
         
         for ts_code in stock_codes:
             try:
@@ -339,18 +340,36 @@ def compare_indicators():
                     limit=limit
                 )
                 
-                results[ts_code] = [indicator.to_dict() for indicator in indicators]
+                serialized = sorted(
+                    [indicator.to_dict() for indicator in indicators],
+                    key=lambda item: item.get('datetime') or ''
+                )
+                results[ts_code] = serialized
+                if not serialized:
+                    empty_stock_codes.append(ts_code)
                 
             except Exception as e:
                 logger.error(f"获取 {ts_code} 指标数据失败: {str(e)}")
                 results[ts_code] = []
-        
+                empty_stock_codes.append(ts_code)
+
+        empty_state = None
+        if empty_stock_codes:
+            empty_state = {
+                'has_data': False,
+                'message': '未找到可用于对比的指标数据',
+                'empty_stock_codes': empty_stock_codes,
+                'indicator_name': indicator_name,
+                'period_type': period_type,
+            }
+
         return jsonify({
             'success': True,
             'data': results,
             'indicator_name': indicator_name,
             'period_type': period_type,
-            'stock_codes': stock_codes
+            'stock_codes': stock_codes,
+            'empty_state': empty_state
         })
         
     except Exception as e:

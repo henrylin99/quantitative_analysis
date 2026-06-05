@@ -4,40 +4,297 @@
 
 {% block extra_css %}
     <style>
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 5px;
+        /* ===== 页面头部 ===== */
+        .page-hero {
+            background: linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(6,182,212,0.04) 100%);
+            border: 1px solid var(--obs-border-light);
+            border-radius: var(--border-radius-lg);
+            padding: 1.25rem 1.5rem;
+            position: relative;
+            overflow: hidden;
         }
-        .status-success { background-color: var(--obs-success); }
-        .status-warning { background-color: var(--obs-warning); }
-        .status-danger { background-color: var(--obs-danger); }
-        .chart-container {
-            height: 400px;
-            margin: 20px 0;
+        .page-hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(99,102,241,0.35), transparent);
         }
-        .indicator-card {
-            transition: var(--transition-fast);
-            cursor: pointer;
+        .page-hero h4 {
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: var(--obs-text);
+            margin: 0;
         }
-        .indicator-card:hover {
-            border-color: var(--obs-border-hover);
+        .page-hero p {
+            color: var(--obs-text-muted);
+            font-size: 0.8rem;
+            margin: 0.25rem 0 0;
         }
-        .progress-container {
-            display: none;
-        }
-        .log-container {
-            max-height: 300px;
-            overflow-y: auto;
-            background-color: var(--obs-surface);
+
+        /* ===== Tab 导航增强 ===== */
+        .indicator-tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--obs-surface-alt);
             border: 1px solid var(--obs-border);
-            border-radius: 0.375rem;
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.875rem;
+            border-radius: var(--border-radius-lg);
+            padding: 4px;
+        }
+        .indicator-tabs .nav-link {
+            color: var(--obs-text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            border: none;
+            transition: var(--transition-fast);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .indicator-tabs .nav-link:hover {
             color: var(--obs-text-secondary);
+            background: rgba(99,102,241,0.05);
+        }
+        .indicator-tabs .nav-link.active {
+            background: var(--obs-primary);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+        }
+        .indicator-tabs .nav-link i {
+            font-size: 0.75rem;
+        }
+
+        /* ===== 图表容器 ===== */
+        .chart-container {
+            height: 420px;
+            margin: 0;
+        }
+
+        /* ===== 指标结果卡片 ===== */
+        .indicator-result-card {
+            background: var(--obs-surface);
+            border: 1px solid var(--obs-border);
+            border-radius: var(--border-radius-lg);
+            overflow: hidden;
+            transition: var(--transition-normal);
+        }
+        .indicator-result-card:hover {
+            border-color: var(--obs-border-hover);
+            box-shadow: 0 0 24px rgba(99,102,241,0.06);
+        }
+        .indicator-result-header {
+            padding: 0.6rem 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--obs-border);
+            background: var(--obs-surface-alt);
+        }
+        .indicator-result-header h6 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--obs-text);
+        }
+        .indicator-badge {
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        .indicator-badge-success {
+            background: var(--obs-success-bg);
+            color: var(--obs-success-light);
+        }
+        .indicator-badge-error {
+            background: var(--obs-danger-bg);
+            color: var(--obs-danger-light);
+        }
+        .indicator-result-body {
+            padding: 0.75rem 0.9rem;
+        }
+
+        /* ===== 值列表 ===== */
+        .value-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 3px 0;
+            font-size: 0.8rem;
+        }
+        .value-row .label { color: var(--obs-text-muted); }
+        .value-row .value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--obs-text);
+        }
+
+        /* ===== 图表卡片 ===== */
+        .chart-card {
+            background: var(--obs-surface);
+            border: 1px solid var(--obs-border);
+            border-radius: var(--border-radius-lg);
+            overflow: hidden;
+        }
+        .chart-card-header {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--obs-border);
+            background: var(--obs-surface-alt);
+        }
+        .chart-card-header h6 {
+            margin: 0;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--obs-text-secondary);
+        }
+        .chart-card-body {
+            padding: 0.5rem;
+        }
+
+        /* ===== 统计面板 ===== */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .stat-block {
+            text-align: center;
+            padding: 1rem 0.5rem;
+            background: var(--obs-surface-alt);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--obs-border);
+        }
+        .stat-block .stat-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-block .stat-label {
+            font-size: 0.72rem;
+            color: var(--obs-text-muted);
+            margin-top: 2px;
+        }
+
+        /* ===== 指标分布条 ===== */
+        .distribution-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 0.8rem;
+        }
+        .distribution-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--obs-border);
+            border-radius: 2px;
+            margin: 0 10px;
+            overflow: hidden;
+        }
+        .distribution-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: var(--obs-primary);
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ===== 支持的指标标签 ===== */
+        .indicator-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--obs-surface-alt);
+            border: 1px solid var(--obs-border);
+            border-radius: var(--border-radius);
+            padding: 6px 12px;
+            margin: 3px;
+            font-size: 0.78rem;
+            transition: var(--transition-fast);
+        }
+        .indicator-tag:hover {
+            border-color: var(--obs-border-hover);
+            background: var(--obs-primary-bg);
+        }
+        .indicator-tag .tag-code {
+            color: var(--obs-primary-light);
+            font-weight: 600;
+        }
+        .indicator-tag .tag-name {
+            color: var(--obs-text-secondary);
+        }
+
+        /* ===== 空状态 ===== */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--obs-text-muted);
+        }
+        .empty-state i {
+            font-size: 2.5rem;
+            opacity: 0.3;
+            margin-bottom: 1rem;
+        }
+        .empty-state p {
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        /* ===== 进度条 ===== */
+        .progress-container { display: none; }
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--obs-surface-alt);
+            border: 1px solid var(--obs-border);
+            border-radius: var(--border-radius);
+            padding: 8px 10px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 0.75rem;
+            color: var(--obs-text-muted);
+            line-height: 1.6;
+        }
+        .progress { height: 6px; border-radius: 3px; background: var(--obs-border); }
+        .progress-bar { background: var(--obs-primary); border-radius: 3px; transition: width 0.3s ease; }
+
+        /* ===== 摘要条 ===== */
+        .summary-bar {
+            background: var(--obs-surface-alt);
+            border: 1px solid var(--obs-border);
+            border-radius: var(--border-radius);
+            padding: 0.65rem 1rem;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .summary-item {
+            font-size: 0.78rem;
+            color: var(--obs-text-secondary);
+        }
+        .summary-item strong {
+            color: var(--obs-text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ===== 对比信息栏 ===== */
+        .compare-info {
+            background: var(--obs-info-bg);
+            border: 1px solid rgba(6,182,212,0.15);
+            border-radius: var(--border-radius);
+            padding: 0.6rem 1rem;
+            font-size: 0.8rem;
+            color: var(--obs-info-light);
+        }
+
+        /* ===== 动画 ===== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in-up {
+            animation: fadeInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
     </style>
 {% endblock %}
@@ -45,69 +302,58 @@
 {% block content %}
     <div class="container-fluid">
         <!-- 页面标题 -->
-        <div class="row mb-4">
+        <div class="row mb-3">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h4 class="mb-0">
-                            <i class="fas fa-chart-bar me-2"></i>实时技术指标分析
-                        </h4>
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-0">当前页面基于已入库的 Baostock 分钟数据计算指标。</p>
-                    </div>
+                <div class="page-hero">
+                    <h4><i class="fas fa-chart-bar me-2" style="color:var(--obs-primary-light)"></i>实时技术指标分析</h4>
+                    <p>基于已入库的分钟数据计算技术指标，支持多周期对比与多股票分析</p>
                 </div>
             </div>
         </div>
 
-        <!-- 功能导航 -->
-        <div class="row mb-4">
+        <!-- Tab 导航 -->
+        <div class="row mb-3">
             <div class="col-12">
-                <ul class="nav nav-pills" id="indicatorTabs" role="tablist">
+                <ul class="nav indicator-tabs" id="indicatorTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="calculate-tab" data-bs-toggle="pill" data-bs-target="#calculate" type="button" role="tab">
-                            <i class="fas fa-calculator me-2"></i>指标计算
+                            <i class="fas fa-calculator"></i>指标计算
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="multi-period-tab" data-bs-toggle="pill" data-bs-target="#multi-period" type="button" role="tab">
-                            <i class="fas fa-layer-group me-2"></i>多周期分析
+                            <i class="fas fa-layer-group"></i>多周期分析
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="compare-tab" data-bs-toggle="pill" data-bs-target="#compare" type="button" role="tab">
-                            <i class="fas fa-balance-scale me-2"></i>指标对比
+                            <i class="fas fa-code-branch"></i>指标对比
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="stats-tab" data-bs-toggle="pill" data-bs-target="#stats" type="button" role="tab">
-                            <i class="fas fa-chart-pie me-2"></i>统计信息
+                            <i class="fas fa-th-large"></i>统计信息
                         </button>
                     </li>
                 </ul>
             </div>
         </div>
 
-        <!-- 功能面板 -->
+        <!-- Tab 内容 -->
         <div class="tab-content" id="indicatorTabsContent">
             <!-- 指标计算面板 -->
             <div class="tab-pane fade show active" id="calculate" role="tabpanel">
                 <div class="row">
-                    <!-- 计算配置 -->
                     <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">计算配置</h5>
-                            </div>
+                        <div class="card mb-3">
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">计算配置</h5></div>
                             <div class="card-body">
                                 <form id="calculateForm">
                                     <div class="mb-3">
                                         <label for="stockCode" class="form-label">股票代码</label>
-                                        <select class="form-select" id="stockCode" required>
-                                            <option value="">请选择股票</option>
-                                        </select>
+                                        <input type="text" class="form-control" id="stockCode" placeholder="如 300502" required>
+                                        <small class="form-text">支持 300502、300502.SZ、sz.300502，输入 6 位数字会自动识别沪深</small>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label for="periodType" class="form-label">周期类型</label>
                                         <select class="form-select" id="periodType">
@@ -117,31 +363,26 @@
                                             <option value="60min">60分钟</option>
                                         </select>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label for="lookbackDays" class="form-label">回看天数</label>
                                         <input type="number" class="form-control" id="lookbackDays" value="30" min="1" max="90">
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label class="form-label">选择指标</label>
-                                        <div id="indicatorCheckboxes">
-                                            <!-- 动态加载指标选项 -->
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <small class="form-text">已选 <span id="indicatorCount">0</span> 项</small>
+                                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:0.72rem;border-radius:4px" onclick="toggleAll('indicatorCheckboxes','indicatorCount')">全选/取消</button>
                                         </div>
+                                        <div id="indicatorCheckboxes"></div>
                                     </div>
-                                    
-                                    <button type="submit" class="btn btn-primary w-100">
+                                    <button type="submit" class="btn btn-primary-financial btn-financial w-100">
                                         <i class="fas fa-play me-2"></i>开始计算
                                     </button>
                                 </form>
                             </div>
                         </div>
-                        
-                        <!-- 进度显示 -->
-                        <div class="card mt-3 progress-container" id="progressContainer">
-                            <div class="card-header">
-                                <h6 class="mb-0">计算进度</h6>
-                            </div>
+                        <div class="card progress-container" id="progressContainer">
+                            <div class="card-header"><h6 class="mb-0" style="font-size:0.82rem">计算进度</h6></div>
                             <div class="card-body">
                                 <div class="progress mb-2">
                                     <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
@@ -150,17 +391,13 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- 计算结果 -->
                     <div class="col-md-8">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">计算结果</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">计算结果</h5></div>
                             <div class="card-body">
                                 <div id="calculateResults">
-                                    <div class="text-center text-muted py-5">
-                                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                                    <div class="empty-state">
+                                        <i class="fas fa-chart-line"></i>
                                         <p>请选择股票和指标开始计算</p>
                                     </div>
                                 </div>
@@ -169,24 +406,20 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 多周期分析面板 -->
             <div class="tab-pane fade" id="multi-period" role="tabpanel">
                 <div class="row">
                     <div class="col-md-4">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">多周期配置</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">多周期配置</h5></div>
                             <div class="card-body">
                                 <form id="multiPeriodForm">
                                     <div class="mb-3">
                                         <label for="multiStockCode" class="form-label">股票代码</label>
-                                        <select class="form-select" id="multiStockCode" required>
-                                            <option value="">请选择股票</option>
-                                        </select>
+                                        <input type="text" class="form-control" id="multiStockCode" placeholder="如 300502" required>
+                                        <small class="form-text">支持 300502、300502.SZ、sz.300502，输入 6 位数字会自动识别沪深</small>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label class="form-label">选择周期</label>
                                         <div class="form-check">
@@ -206,31 +439,28 @@
                                             <label class="form-check-label" for="period60min">60分钟</label>
                                         </div>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label class="form-label">选择指标</label>
-                                        <div id="multiIndicatorCheckboxes">
-                                            <!-- 动态加载指标选项 -->
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <small class="form-text">已选 <span id="multiIndicatorCount">0</span> 项</small>
+                                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:0.72rem;border-radius:4px" onclick="toggleAll('multiIndicatorCheckboxes','multiIndicatorCount')">全选/取消</button>
                                         </div>
+                                        <div id="multiIndicatorCheckboxes"></div>
                                     </div>
-                                    
-                                    <button type="submit" class="btn btn-success w-100">
+                                    <button type="submit" class="btn btn-success-financial btn-financial w-100">
                                         <i class="fas fa-layer-group me-2"></i>多周期分析
                                     </button>
                                 </form>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-8">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">多周期分析结果</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">多周期分析结果</h5></div>
                             <div class="card-body">
                                 <div id="multiPeriodResults">
-                                    <div class="text-center text-muted py-5">
-                                        <i class="fas fa-layer-group fa-3x mb-3"></i>
+                                    <div class="empty-state">
+                                        <i class="fas fa-layer-group"></i>
                                         <p>请选择股票和周期开始分析</p>
                                     </div>
                                 </div>
@@ -239,25 +469,20 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 指标对比面板 -->
             <div class="tab-pane fade" id="compare" role="tabpanel">
                 <div class="row">
                     <div class="col-md-4">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">对比配置</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">对比配置</h5></div>
                             <div class="card-body">
                                 <form id="compareForm">
                                     <div class="mb-3">
-                                        <label for="compareStocks" class="form-label">股票代码（多选）</label>
-                                        <select class="form-select" id="compareStocks" multiple size="5" required>
-                                            <!-- 动态加载股票选项 -->
-                                        </select>
-                                        <small class="form-text text-muted">按住Ctrl键可多选</small>
+                                        <label for="compareStocks" class="form-label">股票代码（多个用逗号分隔）</label>
+                                        <input type="text" class="form-control" id="compareStocks" placeholder="如 300502,600519" required>
+                                        <small class="form-text">支持 300502、300502.SZ、sz.300502，多个代码用逗号分隔</small>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label for="comparePeriod" class="form-label">周期类型</label>
                                         <select class="form-select" id="comparePeriod">
@@ -267,31 +492,26 @@
                                             <option value="60min">60分钟</option>
                                         </select>
                                     </div>
-                                    
                                     <div class="mb-3">
                                         <label for="compareIndicator" class="form-label">对比指标</label>
                                         <select class="form-select" id="compareIndicator" required>
-                                            <!-- 动态加载指标选项 -->
+                                            <option value="">请选择指标</option>
                                         </select>
                                     </div>
-                                    
-                                    <button type="submit" class="btn btn-warning w-100">
-                                        <i class="fas fa-balance-scale me-2"></i>开始对比
+                                    <button type="submit" class="btn btn-warning-financial btn-financial w-100">
+                                        <i class="fas fa-code-branch me-2"></i>开始对比
                                     </button>
                                 </form>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-8">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">指标对比结果</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">指标对比结果</h5></div>
                             <div class="card-body">
                                 <div id="compareResults">
-                                    <div class="text-center text-muted py-5">
-                                        <i class="fas fa-balance-scale fa-3x mb-3"></i>
+                                    <div class="empty-state">
+                                        <i class="fas fa-code-branch"></i>
                                         <p>请选择股票和指标开始对比</p>
                                     </div>
                                 </div>
@@ -300,52 +520,44 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 统计信息面板 -->
             <div class="tab-pane fade" id="stats" role="tabpanel">
-                <div class="row">
+                <div class="row mb-3">
                     <div class="col-md-6">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">指标统计概览</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">指标统计概览</h5></div>
                             <div class="card-body">
                                 <div id="indicatorStats">
-                                    <div class="text-center">
-                                        <div class="spinner-border" role="status">
-                                            <span class="visually-hidden">加载中...</span>
-                                        </div>
+                                    <div class="text-center py-4">
+                                        <div class="loading-spinner"></div>
+                                        <div class="loading-text mt-2">加载中...</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-6">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">支持的指标</h5>
-                            </div>
+                            <div class="card-header"><h5 class="mb-0" style="font-size:0.9rem">支持的指标</h5></div>
                             <div class="card-body">
                                 <div id="supportedIndicators">
-                                    <div class="text-center">
-                                        <div class="spinner-border" role="status">
-                                            <span class="visually-hidden">加载中...</span>
-                                        </div>
+                                    <div class="text-center py-4">
+                                        <div class="loading-spinner"></div>
+                                        <div class="loading-text mt-2">加载中...</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <div class="row mt-4">
+                <div class="row">
                     <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">指标分布图表</h5>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <h6><i class="fas fa-chart-pie me-2"></i>指标分布图表</h6>
                             </div>
-                            <div class="card-body">
+                            <div class="chart-card-body">
                                 <div id="indicatorChart" class="chart-container"></div>
                             </div>
                         </div>
@@ -356,116 +568,165 @@
     </div>
 
     <script>
-        // 全局变量
+        // ===== 全局变量 =====
         let supportedIndicators = [];
         let availableStocks = [];
-        
-        // 页面加载完成后初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('页面初始化开始...');
-            
-            try {
-                loadSupportedIndicators();
-                loadAvailableStocks();
-                loadIndicatorStats();
-                
-                // 绑定表单事件
-                const calculateForm = document.getElementById('calculateForm');
-                const multiPeriodForm = document.getElementById('multiPeriodForm');
-                const compareForm = document.getElementById('compareForm');
-                
-                if (calculateForm) {
-                    calculateForm.addEventListener('submit', handleCalculate);
-                    console.log('计算表单事件绑定成功');
-                } else {
-                    console.error('找不到calculateForm元素');
-                }
-                
-                if (multiPeriodForm) {
-                    multiPeriodForm.addEventListener('submit', handleMultiPeriod);
-                    console.log('多周期表单事件绑定成功');
-                } else {
-                    console.error('找不到multiPeriodForm元素');
-                }
-                
-                if (compareForm) {
-                    compareForm.addEventListener('submit', handleCompare);
-                    console.log('对比表单事件绑定成功');
-                } else {
-                    console.error('找不到compareForm元素');
-                }
-                
-                console.log('页面初始化完成');
-            } catch (error) {
-                console.error('页面初始化失败:', error);
+
+        // ===== 股票代码标准化：6位数字 → ts_code =====
+        function normalizeStockCode(input) {
+            if (!input) return '';
+            let code = input.trim().toUpperCase();
+            // 兼容 "SZ.300502" / "sz.300502" 这类输入，统一转成 "300502.SZ"
+            const prefixMatch = code.match(/^(SZ|SH)\.(\d{6})$/);
+            if (prefixMatch) {
+                return `${prefixMatch[2]}.${prefixMatch[1]}`;
             }
+            // 去掉已有的后缀
+            code = code.replace(/\.(SZ|SH|sz|sh)$/, '');
+            // 去掉空格和常见分隔符
+            code = code.replace(/[\s\-\/\\]+/g, '');
+            if (!/^\d{6}$/.test(code)) return code; // 非6位数字原样返回
+            // 6开头 → 上海，其余 → 深圳
+            const market = code.startsWith('6') ? 'SH' : 'SZ';
+            return `${code}.${market}`;
+        }
+
+        // ===== ECharts 金融主题配色 =====
+        const CHART_COLORS = ['#6366f1','#22d3ee','#4ade80','#fbbf24','#f87171','#a78bfa','#34d399','#fb923c'];
+        const AREA_COLORS = [
+            'rgba(99,102,241,0.12)','rgba(34,211,238,0.12)','rgba(74,222,128,0.12)',
+            'rgba(251,191,36,0.12)','rgba(248,113,113,0.12)','rgba(167,139,250,0.12)'
+        ];
+
+        // ===== 工具：创建金融风格 ECharts option 的公共部分 =====
+        function baseChartOption(title, categories) {
+            return {
+                backgroundColor: 'transparent',
+                title: {
+                    text: title || '',
+                    left: 12,
+                    top: 8,
+                    textStyle: {
+                        color: '#e2e8f0',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        fontFamily: "'DM Sans','PingFang SC',sans-serif"
+                    }
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(30,41,59,0.95)',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    textStyle: { color: '#e2e8f0', fontSize: 12 },
+                    axisPointer: {
+                        type: 'cross',
+                        crossStyle: { color: '#64748b' },
+                        lineStyle: { color: 'rgba(99,102,241,0.4)', type: 'dashed' }
+                    }
+                },
+                legend: {
+                    top: 32,
+                    textStyle: { color: '#94a3b8', fontSize: 11 },
+                    itemWidth: 14, itemHeight: 8, itemGap: 16
+                },
+                grid: {
+                    left: 12, right: 16, top: 72, bottom: 12,
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: categories || [],
+                    boundaryGap: false,
+                    axisLine: { lineStyle: { color: '#334155' } },
+                    axisTick: { show: false },
+                    axisLabel: {
+                        color: '#64748b', fontSize: 10,
+                        formatter: function(v) {
+                            if (!v) return '';
+                            // 只显示 HH:mm，每天第一个点显示 MM-DD
+                            var parts = v.split(' ');
+                            var time = parts.length > 1 ? parts[1].substring(0, 5) : v;
+                            return time;
+                        }
+                    },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    scale: true,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    axisLabel: { color: '#64748b', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(51,65,85,0.4)', type: 'dashed' } }
+                }
+            };
+        }
+
+        // ===== 页面初始化 =====
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSupportedIndicators();
+            loadAvailableStocks();
+            loadIndicatorStats();
+
+            document.getElementById('calculateForm').addEventListener('submit', handleCalculate);
+            document.getElementById('multiPeriodForm').addEventListener('submit', handleMultiPeriod);
+            document.getElementById('compareForm').addEventListener('submit', handleCompare);
         });
-        
-        // 加载支持的指标
+
+        // ===== 加载指标列表 =====
         async function loadSupportedIndicators() {
             try {
-                console.log('开始加载支持的指标...');
                 const response = await axios.get('/api/realtime-analysis/indicators/supported');
-                console.log('指标API响应:', response.data);
-                
                 if (response.data.success) {
                     supportedIndicators = response.data.data;
-                    console.log('支持的指标数量:', supportedIndicators.length);
                     renderIndicatorCheckboxes();
                     renderSupportedIndicators();
-                } else {
-                    console.error('加载指标失败:', response.data.message);
-                    showError('indicatorCheckboxes', '加载指标失败: ' + response.data.message);
                 }
             } catch (error) {
-                console.error('加载支持的指标失败:', error);
-                showError('indicatorCheckboxes', '加载指标失败: ' + error.message);
+                console.error('加载指标失败:', error);
+                showError('indicatorCheckboxes', '加载指标失败');
             }
         }
-        
-        // 加载可用股票
+
+        // ===== 加载股票列表 =====
         async function loadAvailableStocks() {
             try {
-                console.log('开始加载可用股票...');
                 const response = await axios.get('/api/realtime-analysis/data/stock-list');
-                console.log('股票API响应:', response.data);
-                
                 if (response.data.success) {
                     availableStocks = response.data.data;
-                    console.log('可用股票数量:', availableStocks.length);
                     renderStockOptions();
-                } else {
-                    console.error('加载股票失败:', response.data.message);
-                    showError('stockCode', '加载股票失败: ' + response.data.message);
                 }
             } catch (error) {
-                console.error('加载可用股票失败:', error);
-                showError('stockCode', '加载股票失败: ' + error.message);
+                console.error('加载股票失败:', error);
             }
         }
-        
-        // 渲染指标复选框
+
+        // ===== 渲染指标复选框 =====
         function renderIndicatorCheckboxes() {
-            const containers = ['indicatorCheckboxes', 'multiIndicatorCheckboxes'];
-            
-            containers.forEach(containerId => {
+            const countIds = { indicatorCheckboxes: 'indicatorCount', multiIndicatorCheckboxes: 'multiIndicatorCount' };
+
+            ['indicatorCheckboxes', 'multiIndicatorCheckboxes'].forEach(containerId => {
                 const container = document.getElementById(containerId);
+                if (!container) return;
                 container.innerHTML = '';
-                
                 supportedIndicators.forEach(indicator => {
                     const div = document.createElement('div');
                     div.className = 'form-check';
                     div.innerHTML = `
                         <input class="form-check-input" type="checkbox" value="${indicator.code}" id="${containerId}_${indicator.code}">
                         <label class="form-check-label" for="${containerId}_${indicator.code}" title="${indicator.description}">
-                            ${indicator.name} (${indicator.code})
-                        </label>
-                    `;
+                            ${indicator.name} <small class="text-muted">(${indicator.code})</small>
+                        </label>`;
+                    // 勾选变化时更新计数
+                    div.querySelector('input').addEventListener('change', () => {
+                        updateCheckCount(containerId, countIds[containerId]);
+                    });
                     container.appendChild(div);
                 });
+                updateCheckCount(containerId, countIds[containerId]);
             });
-            
-            // 渲染对比指标下拉框
+
             const compareSelect = document.getElementById('compareIndicator');
             compareSelect.innerHTML = '<option value="">请选择指标</option>';
             supportedIndicators.forEach(indicator => {
@@ -475,553 +736,585 @@
                 compareSelect.appendChild(option);
             });
         }
-        
-        // 渲染股票选项
-        function renderStockOptions() {
-            const selects = ['stockCode', 'multiStockCode', 'compareStocks'];
-            
-            selects.forEach(selectId => {
-                const select = document.getElementById(selectId);
-                if (selectId !== 'compareStocks') {
-                    select.innerHTML = '<option value="">请选择股票</option>';
-                } else {
-                    select.innerHTML = '';
-                }
-                
-                availableStocks.forEach(stock => {
-                    const option = document.createElement('option');
-                    option.value = stock;
-                    option.textContent = stock;
-                    select.appendChild(option);
-                });
-            });
+
+        function updateCheckCount(containerId, countId) {
+            const total = document.querySelectorAll(`#${containerId} input[type="checkbox"]`).length;
+            const checked = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`).length;
+            const el = document.getElementById(countId);
+            if (el) el.textContent = `${checked}/${total}`;
         }
-        
-        // 处理指标计算
+
+        function toggleAll(containerId, countId) {
+            const boxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]`);
+            const allChecked = Array.from(boxes).every(b => b.checked);
+            boxes.forEach(b => b.checked = !allChecked);
+            updateCheckCount(containerId, countId);
+        }
+
+        // ===== 股票列表已加载（用于校验，不再渲染下拉框） =====
+        function renderStockOptions() {}
+
+        // ===== 处理指标计算 =====
         async function handleCalculate(event) {
             event.preventDefault();
-            console.log('开始处理指标计算...');
-            
-            const formData = new FormData(event.target);
-            const stockCode = document.getElementById('stockCode').value;
+            const rawCode = document.getElementById('stockCode').value;
+            const stockCode = normalizeStockCode(rawCode);
             const periodType = document.getElementById('periodType').value;
             const lookbackDays = parseInt(document.getElementById('lookbackDays').value);
-            
-            // 获取选中的指标
             const selectedIndicators = [];
-            document.querySelectorAll('#indicatorCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedIndicators.push(checkbox.value);
-            });
-            
-            console.log('表单数据:', {
-                stockCode,
-                periodType,
-                lookbackDays,
-                selectedIndicators
-            });
-            
-            if (!stockCode) {
-                alert('请选择股票代码');
-                return;
-            }
-            
-            if (selectedIndicators.length === 0) {
-                alert('请至少选择一个指标');
-                return;
-            }
-            
+            document.querySelectorAll('#indicatorCheckboxes input[type="checkbox"]:checked').forEach(cb => selectedIndicators.push(cb.value));
+
+            if (!rawCode.trim()) { alert('请输入股票代码'); return; }
+            if (!selectedIndicators.length) { alert('请至少选择一个指标'); return; }
+
             showProgress('开始计算技术指标...');
-            
             try {
-                console.log('发送API请求...');
                 const response = await axios.post('/api/realtime-analysis/indicators/calculate', {
-                    ts_code: stockCode,
-                    period_type: periodType,
-                    indicators: selectedIndicators,
-                    lookback_days: lookbackDays
+                    ts_code: stockCode, period_type: periodType, indicators: selectedIndicators, lookback_days: lookbackDays
                 });
-                
-                console.log('API响应:', response.data);
                 updateProgress(100, '计算完成');
-                
                 if (response.data.success) {
                     renderCalculateResults(response.data);
                 } else {
                     showError('calculateResults', response.data.message);
                 }
-                
             } catch (error) {
-                console.error('计算指标失败:', error);
                 showError('calculateResults', '计算指标失败: ' + error.message);
             } finally {
                 hideProgress();
             }
         }
-        
-        // 处理多周期分析
+
+        // ===== 处理多周期分析 =====
         async function handleMultiPeriod(event) {
             event.preventDefault();
-            
-            const stockCode = document.getElementById('multiStockCode').value;
-            
-            // 获取选中的周期
+            const rawCode = document.getElementById('multiStockCode').value;
+            const stockCode = normalizeStockCode(rawCode);
             const selectedPeriods = [];
-            document.querySelectorAll('#multi-period input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedPeriods.push(checkbox.value);
-            });
-            
-            // 获取选中的指标
+            document.querySelectorAll('#multi-period input[type="checkbox"]:checked').forEach(cb => selectedPeriods.push(cb.value));
             const selectedIndicators = [];
-            document.querySelectorAll('#multiIndicatorCheckboxes input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedIndicators.push(checkbox.value);
-            });
-            
-            if (!stockCode) {
-                alert('请选择股票代码');
-                return;
-            }
-            
-            if (selectedPeriods.length === 0) {
-                alert('请至少选择一个周期');
-                return;
-            }
-            
-            if (selectedIndicators.length === 0) {
-                alert('请至少选择一个指标');
-                return;
-            }
-            
+            document.querySelectorAll('#multiIndicatorCheckboxes input[type="checkbox"]:checked').forEach(cb => selectedIndicators.push(cb.value));
+
+            if (!rawCode.trim()) { alert('请输入股票代码'); return; }
+            if (!selectedPeriods.length) { alert('请至少选择一个周期'); return; }
+            if (!selectedIndicators.length) { alert('请至少选择一个指标'); return; }
+
             try {
                 const response = await axios.post('/api/realtime-analysis/indicators/multi-period', {
-                    ts_code: stockCode,
-                    periods: selectedPeriods,
-                    indicators: selectedIndicators
+                    ts_code: stockCode, periods: selectedPeriods, indicators: selectedIndicators
                 });
-                
                 if (response.data.success) {
                     renderMultiPeriodResults(response.data);
                 } else {
                     showError('multiPeriodResults', response.data.message);
                 }
-                
             } catch (error) {
-                console.error('多周期分析失败:', error);
                 showError('multiPeriodResults', '多周期分析失败: ' + error.message);
             }
         }
-        
-        // 处理指标对比
+
+        // ===== 处理指标对比 =====
         async function handleCompare(event) {
             event.preventDefault();
-            
-            const stockCodes = Array.from(document.getElementById('compareStocks').selectedOptions).map(option => option.value);
+            const rawInput = document.getElementById('compareStocks').value;
+            const stockCodes = rawInput.split(/[,，\s]+/).map(s => normalizeStockCode(s)).filter(Boolean);
             const periodType = document.getElementById('comparePeriod').value;
             const indicatorName = document.getElementById('compareIndicator').value;
-            
-            if (stockCodes.length === 0) {
-                alert('请至少选择一个股票');
-                return;
-            }
-            
-            if (!indicatorName) {
-                alert('请选择对比指标');
-                return;
-            }
-            
+
+            if (!stockCodes.length) { alert('请输入至少一个股票代码'); return; }
+            if (!indicatorName) { alert('请选择对比指标'); return; }
+
             try {
                 const response = await axios.post('/api/realtime-analysis/indicators/compare', {
-                    stock_codes: stockCodes,
-                    period_type: periodType,
-                    indicator_name: indicatorName,
-                    limit: 50
+                    stock_codes: stockCodes, period_type: periodType, indicator_name: indicatorName, limit: 50
                 });
-                
                 if (response.data.success) {
                     renderCompareResults(response.data);
                 } else {
                     showError('compareResults', response.data.message);
                 }
-                
             } catch (error) {
-                console.error('指标对比失败:', error);
                 showError('compareResults', '指标对比失败: ' + error.message);
             }
         }
-        
-        // 加载指标统计信息
+
+        // ===== 加载统计 =====
         async function loadIndicatorStats() {
             try {
                 const response = await axios.get('/api/realtime-analysis/indicators/stats');
-                if (response.data.success) {
-                    renderIndicatorStats(response.data.data);
-                }
+                if (response.data.success) renderIndicatorStats(response.data.data);
             } catch (error) {
-                console.error('加载指标统计失败:', error);
                 document.getElementById('indicatorStats').innerHTML = '<div class="alert alert-danger">加载统计信息失败</div>';
             }
         }
-        
-        // 渲染计算结果
+
+        // ===== 渲染计算结果 =====
         function renderCalculateResults(data) {
             const container = document.getElementById('calculateResults');
-            
-            let html = `
-                <div class="alert alert-success">
-                    <h6>计算完成</h6>
-                    <p class="mb-0">
-                        总指标数: ${data.total_indicators} | 
-                        数据点数: ${data.data_points} | 
-                        存储记录: ${data.stored_records}
-                    </p>
-                </div>
-            `;
-            
-            // 显示各指标的计算结果摘要
-            if (data.data) {
-                html += '<div class="row">';
-                Object.keys(data.data).forEach(indicator => {
+            let html = `<div class="summary-bar mb-3 fade-in-up">
+                <span class="summary-item">总指标数 <strong>${data.total_indicators}</strong></span>
+                <span class="summary-item">数据点 <strong>${data.data_points}</strong></span>
+                <span class="summary-item">存储记录 <strong>${data.stored_records}</strong></span>
+            </div>`;
+
+            // 指标值卡片
+            if (data.latest_values) {
+                html += '<div class="row mb-3">';
+                Object.keys(data.latest_values).forEach((indicator, idx) => {
+                    const summary = data.indicator_summary ? data.indicator_summary[indicator] : null;
+                    const latestValues = data.latest_values[indicator] || {};
+                    const records = summary && summary.stored_records ? summary.stored_records : 0;
+                    html += `<div class="col-md-6 mb-2">
+                        <div class="indicator-result-card fade-in-up" style="animation-delay:${idx * 60}ms">
+                            <div class="indicator-result-header">
+                                <h6>${indicator}</h6>
+                                <span class="indicator-badge indicator-badge-success">${records} 条</span>
+                            </div>
+                            <div class="indicator-result-body">
+                                ${renderValueList(latestValues)}
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+            } else if (data.data) {
+                html += '<div class="row mb-3">';
+                Object.keys(data.data).forEach((indicator, idx) => {
                     const result = data.data[indicator];
-                    if (result.error) {
-                        html += `
-                            <div class="col-md-6 mb-3">
-                                <div class="card border-danger">
-                                    <div class="card-header bg-danger text-white">
-                                        <h6 class="mb-0">${indicator}</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <p class="text-danger mb-0">错误: ${result.error}</p>
-                                    </div>
-                                </div>
+                    const isError = result.error;
+                    html += `<div class="col-md-6 mb-2">
+                        <div class="indicator-result-card fade-in-up" style="animation-delay:${idx * 60}ms">
+                            <div class="indicator-result-header">
+                                <h6>${indicator}</h6>
+                                <span class="indicator-badge ${isError ? 'indicator-badge-error' : 'indicator-badge-success'}">${isError ? '失败' : '成功'}</span>
                             </div>
-                        `;
-                    } else {
-                        const subIndicators = Object.keys(result);
-                        html += `
-                            <div class="col-md-6 mb-3">
-                                <div class="card border-success">
-                                    <div class="card-header bg-success text-white">
-                                        <h6 class="mb-0">${indicator}</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <p class="mb-0">子指标: ${subIndicators.join(', ')}</p>
-                                        <small class="text-muted">计算成功</small>
-                                    </div>
-                                </div>
+                            <div class="indicator-result-body">
+                                ${isError
+                                    ? `<div style="color:var(--obs-danger-light);font-size:0.8rem">${result.error}</div>`
+                                    : `<div style="color:var(--obs-text-muted);font-size:0.8rem">子指标: ${Object.keys(result).join(', ')}</div>`
+                                }
                             </div>
-                        `;
-                    }
+                        </div>
+                    </div>`;
                 });
                 html += '</div>';
             }
-            
+
+            // 走势图
+            if (data.timeline && data.data) {
+                Object.keys(data.data).forEach(indicator => {
+                    const result = data.data[indicator];
+                    if (!result || result.error) return;
+                    const chartId = `indicatorChart_${indicator}`;
+                    html += `<div class="chart-card mb-3 fade-in-up">
+                        <div class="chart-card-header"><h6><i class="fas fa-chart-area me-2"></i>${indicator} 走势</h6></div>
+                        <div class="chart-card-body"><div id="${chartId}" class="chart-container"></div></div>
+                    </div>`;
+                });
+            }
+
             container.innerHTML = html;
+
+            // 渲染图表
+            if (data.timeline && data.data) {
+                Object.keys(data.data).forEach(indicator => {
+                    const result = data.data[indicator];
+                    if (!result || result.error) return;
+                    renderIndicatorSeriesChart(indicator, result, data.timeline);
+                });
+            }
         }
-        
-        // 渲染多周期结果
+
+        // ===== 渲染多周期结果 =====
         function renderMultiPeriodResults(data) {
             const container = document.getElementById('multiPeriodResults');
-            
-            let html = '<div class="row">';
-            
-            Object.keys(data.data).forEach(period => {
-                const result = data.data[period];
-                const statusClass = result.success ? 'border-success' : 'border-danger';
-                const statusIcon = result.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
-                
-                html += `
-                    <div class="col-md-6 mb-3">
-                        <div class="card ${statusClass}">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="fas ${statusIcon} me-2"></i>${period}
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                `;
-                
-                if (result.success) {
-                    html += `
-                        <p class="mb-1">指标数: ${result.total_indicators}</p>
-                        <p class="mb-1">数据点: ${result.data_points}</p>
-                        <p class="mb-0">存储记录: ${result.stored_records}</p>
-                    `;
-                } else {
-                    html += `<p class="text-danger mb-0">${result.message}</p>`;
+            let html = '';
+
+            if (data.summary) {
+                const s = data.summary;
+                html += `<div class="summary-bar mb-3 fade-in-up">
+                    <span class="summary-item">对比周期 <strong>${s.period_count || 0}</strong></span>
+                    <span class="summary-item">有数据周期 <strong>${(s.available_periods || []).length}</strong></span>
+                    <span class="summary-item">分析指标 <strong>${(data.indicators || []).length}</strong></span>
+                    <span class="summary-item">股票 <strong>${data.ts_code || '-'}</strong></span>
+                </div>`;
+                if (data.data_source) {
+                    html += `<div class="alert alert-secondary py-2 px-3 mb-3" style="font-size:0.8rem">
+                        数据来源: ${data.data_source.type || 'parquet'} · ${data.data_source.minute_root || data.data_source.data_dir || '-'}
+                    </div>`;
                 }
-                
-                html += `
-                            </div>
+            }
+
+            html += '<div class="row">';
+            Object.keys(data.data).forEach((period, idx) => {
+                const result = data.data[period];
+                const ok = result.success;
+                html += `<div class="col-md-6 mb-3">
+                    <div class="indicator-result-card fade-in-up" style="animation-delay:${idx * 60}ms">
+                        <div class="indicator-result-header">
+                            <h6><i class="fas ${ok ? 'fa-check-circle' : 'fa-times-circle'} me-2" style="color:${ok ? 'var(--obs-success)' : 'var(--obs-danger)'}"></i>${period}</h6>
+                            <span class="indicator-badge ${ok ? 'indicator-badge-success' : 'indicator-badge-error'}">${ok ? '成功' : '失败'}</span>
                         </div>
-                    </div>
-                `;
+                        <div class="indicator-result-body">`;
+                if (ok) {
+                    html += renderValueList({ '指标数': result.total_indicators, '数据点': result.data_points, '存储记录': result.stored_records });
+                    if (result.latest_values) {
+                        html += '<hr style="border-color:var(--obs-border);margin:8px 0">';
+                        html += renderValueList(result.latest_values);
+                    }
+                } else {
+                    html += `<div style="color:var(--obs-danger-light);font-size:0.8rem">${result.message}</div>`;
+                }
+                html += `</div></div></div>`;
             });
-            
             html += '</div>';
             container.innerHTML = html;
         }
-        
-        // 渲染对比结果
+
+        // ===== 渲染对比结果 =====
         function renderCompareResults(data) {
             const container = document.getElementById('compareResults');
-            
-            // 创建图表
-            const chartContainer = document.createElement('div');
-            chartContainer.style.height = '400px';
-            chartContainer.id = 'compareChart';
-            
-            let html = `
-                <div class="alert alert-info">
-                    <h6>对比指标: ${data.indicator_name}</h6>
-                    <p class="mb-0">周期: ${data.period_type} | 股票数: ${data.stock_codes.length}</p>
-                </div>
-            `;
-            
+            const hasSeries = Object.values(data.data).some(items => items && items.length > 0);
+
+            let html = `<div class="compare-info mb-3 fade-in-up">
+                <i class="fas fa-info-circle me-2"></i>
+                对比指标: <strong>${data.indicator_name}</strong> &nbsp;|&nbsp; 周期: ${data.period_type} &nbsp;|&nbsp; 股票数: ${data.stock_codes.length}
+            </div>`;
+
+            if (data.empty_state && !data.empty_state.has_data) {
+                html += `<div class="alert alert-warning fade-in-up">
+                    <strong>${data.empty_state.message}</strong>
+                    <div class="mt-1" style="font-size:0.8rem">无数据: ${data.empty_state.empty_stock_codes.join(', ')}</div>
+                </div>`;
+            }
+
             container.innerHTML = html;
-            container.appendChild(chartContainer);
-            
-            // 渲染图表
-            renderCompareChart(data);
+
+            if (hasSeries) {
+                const chartDiv = document.createElement('div');
+                chartDiv.className = 'chart-card fade-in-up';
+                chartDiv.innerHTML = '<div class="chart-card-body"><div id="compareChart" class="chart-container"></div></div>';
+                container.appendChild(chartDiv);
+                // 等DOM就绪
+                requestAnimationFrame(() => renderCompareChart(data));
+            }
         }
-        
-        // 渲染对比图表
+
+        // ===== 渲染对比图表 =====
         function renderCompareChart(data) {
-            const chart = echarts.init(document.getElementById('compareChart'));
-            
+            const dom = document.getElementById('compareChart');
+            if (!dom) return;
+            const chart = echarts.init(dom, 'financial');
+
+            const componentLabels = {
+                MACD: ['DIF','DEA','HIST'], KDJ: ['K','D','J'],
+                BOLL: ['UPPER','MIDDLE','LOWER'], BOLLINGER: ['UPPER','MIDDLE','LOWER']
+            };
+            const labels = componentLabels[data.indicator_name] || ['VALUE'];
             const series = [];
-            const legend = [];
-            
+
+            // 收集所有唯一时间点作为 category
+            const allTimes = new Set();
+            const stockSorted = {};
             Object.keys(data.data).forEach(stockCode => {
-                const stockData = data.data[stockCode];
-                if (stockData.length > 0) {
-                    legend.push(stockCode);
-                    
-                    const seriesData = stockData.map(item => [
-                        item.datetime,
-                        item.value1
-                    ]);
-                    
+                const sorted = (data.data[stockCode] || []).slice().sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+                stockSorted[stockCode] = sorted;
+                sorted.forEach(item => allTimes.add(item.datetime));
+            });
+            const categories = Array.from(allTimes).sort();
+
+            Object.keys(data.data).forEach(stockCode => {
+                const stockData = stockSorted[stockCode];
+                if (!stockData.length) return;
+
+                // 建立 datetime → index 的映射
+                const timeMap = {};
+                stockData.forEach(item => { timeMap[item.datetime] = item; });
+
+                labels.forEach((label, li) => {
+                    const seriesData = categories.map(dt => {
+                        const item = timeMap[dt];
+                        if (!item) return null;
+                        const v = [item.value1, item.value2, item.value3, item.value4][li];
+                        return (v === null || v === undefined) ? null : v;
+                    });
+                    if (!seriesData.some(v => v !== null)) return;
+
+                    const colorIdx = series.length % CHART_COLORS.length;
                     series.push({
-                        name: stockCode,
+                        name: `${stockCode} ${label}`,
                         type: 'line',
                         data: seriesData,
-                        smooth: true
+                        smooth: true,
+                        showSymbol: false,
+                        connectNulls: false,
+                        lineStyle: { width: 2, color: CHART_COLORS[colorIdx] },
+                        areaStyle: { color: AREA_COLORS[colorIdx % AREA_COLORS.length] }
                     });
-                }
+                });
             });
-            
-            const option = {
-                title: {
-                    text: `${data.indicator_name} 对比分析`,
-                    left: 'center'
-                },
-                tooltip: {
-                    trigger: 'axis',
-                    axisPointer: {
-                        type: 'cross'
-                    }
-                },
-                legend: {
-                    data: legend,
-                    top: 30
-                },
-                grid: {
-                    left: '3%',
-                    right: '4%',
-                    bottom: '3%',
-                    top: '15%',
-                    containLabel: true
-                },
-                xAxis: {
-                    type: 'time',
-                    boundaryGap: false
-                },
-                yAxis: {
-                    type: 'value'
-                },
-                series: series
-            };
-            
-            chart.setOption(option);
+
+            if (!series.length) {
+                document.getElementById('compareResults').insertAdjacentHTML('beforeend', '<div class="alert alert-secondary mt-3">暂无可绘制的数据</div>');
+                return;
+            }
+
+            chart.setOption({
+                ...baseChartOption(`${data.indicator_name} 对比分析`, categories),
+                legend: { ...baseChartOption('', []).legend, data: series.map(s => s.name) },
+                series
+            });
+            window.addEventListener('resize', () => chart.resize());
         }
-        
-        // 渲染指标统计信息
+
+        // ===== 渲染统计信息 =====
         function renderIndicatorStats(stats) {
             const container = document.getElementById('indicatorStats');
-            
             if (stats.error) {
                 container.innerHTML = `<div class="alert alert-danger">${stats.error}</div>`;
                 return;
             }
-            
-            let html = `
-                <div class="row text-center">
-                    <div class="col-6">
-                        <h3 class="text-primary">${stats.total_records || 0}</h3>
-                        <p class="mb-0">总记录数</p>
-                    </div>
-                    <div class="col-6">
-                        <h3 class="text-success">${stats.total_stocks || 0}</h3>
-                        <p class="mb-0">股票数量</p>
-                    </div>
+
+            let html = `<div class="stat-grid mb-3">
+                <div class="stat-block">
+                    <div class="stat-value" style="color:var(--obs-primary-light)">${stats.total_records || 0}</div>
+                    <div class="stat-label">总记录数</div>
                 </div>
-                <hr>
-            `;
-            
-            if (stats.indicator_stats) {
-                html += '<h6>指标分布</h6>';
-                Object.keys(stats.indicator_stats).forEach(indicator => {
-                    const count = stats.indicator_stats[indicator];
-                    html += `
-                        <div class="d-flex justify-content-between">
-                            <span>${indicator}</span>
-                            <span class="badge bg-primary">${count}</span>
-                        </div>
-                    `;
+                <div class="stat-block">
+                    <div class="stat-value" style="color:var(--obs-success-light)">${stats.total_stocks || 0}</div>
+                    <div class="stat-label">股票数量</div>
+                </div>
+            </div>`;
+
+            // 最活跃指标
+            const topIndicators = Object.entries(stats.indicator_stats || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const maxCount = topIndicators.length ? topIndicators[0][1] : 1;
+            if (topIndicators.length) {
+                html += '<div style="font-size:0.82rem;font-weight:600;color:var(--obs-text-secondary);margin-bottom:8px">指标分布</div>';
+                topIndicators.forEach(([indicator, count]) => {
+                    const pct = Math.round(count / maxCount * 100);
+                    html += `<div class="distribution-row">
+                        <span style="min-width:60px">${indicator}</span>
+                        <div class="distribution-bar"><div class="distribution-bar-fill" style="width:${pct}%"></div></div>
+                        <span style="color:var(--obs-text);font-weight:600;min-width:40px;text-align:right">${count}</span>
+                    </div>`;
                 });
             }
-            
+
+            // 周期分布
             if (stats.period_stats) {
-                html += '<hr><h6>周期分布</h6>';
-                Object.keys(stats.period_stats).forEach(period => {
-                    const count = stats.period_stats[period];
-                    html += `
-                        <div class="d-flex justify-content-between">
-                            <span>${period}</span>
-                            <span class="badge bg-secondary">${count}</span>
-                        </div>
-                    `;
+                html += '<hr style="border-color:var(--obs-border);margin:12px 0">';
+                html += '<div style="font-size:0.82rem;font-weight:600;color:var(--obs-text-secondary);margin-bottom:6px">周期分布</div>';
+                Object.entries(stats.period_stats).forEach(([period, count]) => {
+                    html += `<div class="distribution-row">
+                        <span style="min-width:60px">${period}</span>
+                        <div class="distribution-bar"><div class="distribution-bar-fill" style="width:100%;background:var(--obs-info)"></div></div>
+                        <span style="color:var(--obs-text);font-weight:600;min-width:40px;text-align:right">${count}</span>
+                    </div>`;
                 });
             }
-            
+
             if (stats.earliest_time && stats.latest_time) {
-                html += `
-                    <hr>
-                    <small class="text-muted">
-                        数据时间范围: ${new Date(stats.earliest_time).toLocaleString()} - ${new Date(stats.latest_time).toLocaleString()}
-                    </small>
-                `;
+                html += `<div style="margin-top:12px;font-size:0.72rem;color:var(--obs-text-muted)">
+                    数据范围: ${new Date(stats.earliest_time).toLocaleString()} — ${new Date(stats.latest_time).toLocaleString()}
+                </div>`;
             }
-            
+
             container.innerHTML = html;
-            
-            // 渲染指标分布图表
-            if (stats.indicator_stats) {
-                renderIndicatorChart(stats.indicator_stats);
-            }
+            if (stats.indicator_stats) renderIndicatorChart(stats.indicator_stats);
         }
-        
-        // 渲染支持的指标
+
+        // ===== 值列表渲染 =====
+        function renderValueList(values) {
+            if (!values || !Object.keys(values).length) {
+                return '<div style="color:var(--obs-text-muted);font-size:0.8rem">暂无数据</div>';
+            }
+            const compositeLabels = { MACD: ['DIF','DEA','HIST'], KDJ: ['K','D','J'], BOLL: ['UPPER','MIDDLE','LOWER'] };
+            let html = '';
+            Object.entries(values).forEach(([key, val]) => {
+                // 复合指标：值是数组，拆成带标签的多行
+                if (Array.isArray(val) && compositeLabels[key]) {
+                    const labels = compositeLabels[key];
+                    val.forEach((v, i) => {
+                        html += `<div class="value-row"><span class="label">${labels[i] || i}</span><span class="value">${formatDisplayValue(v)}</span></div>`;
+                    });
+                } else {
+                    html += `<div class="value-row"><span class="label">${key}</span><span class="value">${formatDisplayValue(val)}</span></div>`;
+                }
+            });
+            return html;
+        }
+
+        function formatDisplayValue(value) {
+            if (value === null || value === undefined) return '—';
+            if (typeof value === 'number') return Number.isFinite(value) ? value.toFixed(2) : '—';
+            if (typeof value === 'string') { const p = Number(value); return !Number.isNaN(p) && value.trim() ? p.toFixed(2) : value; }
+            if (Array.isArray(value)) return value.map(formatDisplayValue).join(' / ');
+            if (typeof value === 'object') return Object.entries(value).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(' | ');
+            return String(value);
+        }
+
+        // ===== 指标走势图（核心改进） =====
+        function renderIndicatorSeriesChart(indicator, result, timeline) {
+            const dom = document.getElementById(`indicatorChart_${indicator}`);
+            if (!dom) return;
+            const chart = echarts.init(dom, 'financial');
+
+            // 复合指标：值是 [v1,v2,v3] 数组，需要拆成多条 series
+            const compositeLabels = { MACD: ['DIF','DEA','HIST'], KDJ: ['K','D','J'], BOLL: ['UPPER','MIDDLE','LOWER'] };
+            const isComposite = indicator in compositeLabels;
+            const series = [];
+
+            // 所有 series 共用：null 断线，connectNulls: false
+            const lineBase = { showSymbol: false, connectNulls: false };
+
+            if (isComposite) {
+                const labels = compositeLabels[indicator];
+                const subKey = Object.keys(result)[0];
+                const rawValues = result[subKey];
+
+                labels.forEach((label, compIdx) => {
+                    // data: 纯值数组，null 表示断线
+                    const data = timeline.map((_, i) => {
+                        const item = rawValues[i];
+                        if (!item || !Array.isArray(item)) return null;
+                        const v = item[compIdx];
+                        return (v === null || v === undefined) ? null : v;
+                    });
+
+                    const colorIdx = compIdx % CHART_COLORS.length;
+                    const color = CHART_COLORS[colorIdx];
+                    const areaColor = AREA_COLORS[colorIdx % AREA_COLORS.length];
+                    const isHist = indicator === 'MACD' && label === 'HIST';
+
+                    series.push({
+                        name: label,
+                        type: isHist ? 'bar' : 'line',
+                        data: isHist ? data.map(v => ({
+                            value: v,
+                            itemStyle: { color: v !== null && v >= 0 ? 'rgba(74,222,128,0.7)' : 'rgba(248,113,113,0.7)' }
+                        })) : data,
+                        ...lineBase,
+                        smooth: !isHist,
+                        lineStyle: { width: 1.8, color },
+                        areaStyle: isHist ? undefined : { color: areaColor },
+                        barWidth: isHist ? '60%' : undefined,
+                        z: isHist ? 1 : 2
+                    });
+                });
+            } else {
+                const keys = Object.keys(result || {});
+                keys.forEach((subKey, index) => {
+                    const values = result[subKey];
+                    const data = timeline.map((_, i) => {
+                        const raw = Array.isArray(values) ? values[i] : null;
+                        return (raw === null || raw === undefined) ? null : raw;
+                    });
+
+                    const color = CHART_COLORS[index % CHART_COLORS.length];
+                    const areaColor = AREA_COLORS[index % AREA_COLORS.length];
+                    series.push({
+                        name: subKey,
+                        type: 'line',
+                        data,
+                        ...lineBase,
+                        smooth: true,
+                        lineStyle: { width: 1.8, color },
+                        areaStyle: { color: areaColor }
+                    });
+                });
+            }
+
+            chart.setOption({
+                ...baseChartOption(`${indicator} 走势图`, timeline),
+                legend: { ...baseChartOption('', []).legend, data: series.map(s => s.name) },
+                series
+            });
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        // ===== 支持的指标列表 =====
         function renderSupportedIndicators() {
             const container = document.getElementById('supportedIndicators');
-            
-            let html = '';
-            supportedIndicators.forEach(indicator => {
-                html += `
-                    <div class="card mb-2">
-                        <div class="card-body py-2">
-                            <h6 class="mb-1">${indicator.name} (${indicator.code})</h6>
-                            <small class="text-muted">${indicator.description}</small>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            container.innerHTML = html;
+            container.innerHTML = supportedIndicators.map(ind =>
+                `<span class="indicator-tag"><span class="tag-code">${ind.code}</span><span class="tag-name">${ind.name}</span></span>`
+            ).join('');
         }
-        
-        // 渲染指标分布图表
+
+        // ===== 指标分布饼图 =====
         function renderIndicatorChart(indicatorStats) {
-            const chart = echarts.init(document.getElementById('indicatorChart'));
-            
-            const data = Object.keys(indicatorStats).map(indicator => ({
-                name: indicator,
-                value: indicatorStats[indicator]
-            }));
-            
-            const option = {
+            const dom = document.getElementById('indicatorChart');
+            if (!dom) return;
+            const chart = echarts.init(dom, 'financial');
+
+            const data = Object.entries(indicatorStats).map(([name, value]) => ({ name, value }));
+
+            chart.setOption({
+                backgroundColor: 'transparent',
                 title: {
                     text: '指标数据分布',
-                    left: 'center'
+                    left: 12, top: 8,
+                    textStyle: { color: '#e2e8f0', fontWeight: 600, fontSize: 13 }
                 },
                 tooltip: {
                     trigger: 'item',
-                    formatter: '{a} <br/>{b}: {c} ({d}%)'
+                    backgroundColor: 'rgba(30,41,59,0.95)',
+                    borderColor: '#334155',
+                    textStyle: { color: '#e2e8f0' },
+                    formatter: '{b}: {c} ({d}%)'
                 },
                 legend: {
-                    orient: 'vertical',
-                    left: 'left'
+                    orient: 'vertical', right: 16, top: 'middle',
+                    textStyle: { color: '#94a3b8', fontSize: 11 },
+                    itemWidth: 10, itemHeight: 10
                 },
-                series: [
-                    {
-                        name: '指标数据',
-                        type: 'pie',
-                        radius: '50%',
-                        data: data,
-                        emphasis: {
-                            itemStyle: {
-                                shadowBlur: 10,
-                                shadowOffsetX: 0,
-                                shadowColor: 'rgba(0, 0, 0, 0.5)'
-                            }
-                        }
-                    }
-                ]
-            };
-            
-            chart.setOption(option);
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['35%', '55%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: { borderRadius: 6, borderColor: '#1e293b', borderWidth: 2 },
+                    label: { show: false },
+                    emphasis: {
+                        label: { show: true, fontSize: 12, fontWeight: 'bold', color: '#e2e8f0' },
+                        itemStyle: { shadowBlur: 20, shadowColor: 'rgba(99,102,241,0.3)' }
+                    },
+                    labelLine: { show: false },
+                    data,
+                    color: CHART_COLORS
+                }]
+            });
+            window.addEventListener('resize', () => chart.resize());
         }
-        
-        // 显示进度
+
+        // ===== 进度条 =====
         function showProgress(message) {
             document.getElementById('progressContainer').style.display = 'block';
             updateProgress(0, message);
         }
-        
-        // 更新进度
         function updateProgress(percent, message) {
-            const progressBar = document.getElementById('progressBar');
-            const logContainer = document.getElementById('logContainer');
-            
-            progressBar.style.width = percent + '%';
-            progressBar.textContent = percent + '%';
-            
-            const timestamp = new Date().toLocaleTimeString();
-            logContainer.innerHTML += `<div>[${timestamp}] ${message}</div>`;
-            logContainer.scrollTop = logContainer.scrollHeight;
+            const bar = document.getElementById('progressBar');
+            const log = document.getElementById('logContainer');
+            bar.style.width = percent + '%';
+            const ts = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${ts}] ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
         }
-        
-        // 隐藏进度
         function hideProgress() {
-            setTimeout(() => {
-                document.getElementById('progressContainer').style.display = 'none';
-            }, 2000);
+            setTimeout(() => { document.getElementById('progressContainer').style.display = 'none'; }, 2000);
         }
-        
-        // 显示错误信息
+
+        // ===== 错误提示 =====
         function showError(containerId, message) {
             const container = document.getElementById(containerId);
-            if (!container) {
-                console.error('找不到容器:', containerId);
-                return;
-            }
-            
-            // 如果是select元素，在其父容器中显示错误
+            if (!container) return;
             if (container.tagName === 'SELECT') {
-                const parentDiv = container.parentElement;
-                let errorDiv = parentDiv.querySelector('.error-message');
-                if (!errorDiv) {
-                    errorDiv = document.createElement('div');
-                    errorDiv.className = 'error-message alert alert-danger mt-2';
-                    parentDiv.appendChild(errorDiv);
-                }
-                errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
+                const parent = container.parentElement;
+                let err = parent.querySelector('.error-message');
+                if (!err) { err = document.createElement('div'); err.className = 'error-message alert alert-danger mt-2'; parent.appendChild(err); }
+                err.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
             } else {
-                container.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        ${message}
-                    </div>
-                `;
+                container.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${message}</div>`;
             }
         }
     </script>
