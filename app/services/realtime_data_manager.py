@@ -1,7 +1,7 @@
 """
 实时数据管理服务
 负责分钟级数据的接入、聚合、质量监控等功能
-集成Baostock数据源支持
+集成多分钟数据源支持
 """
 
 from datetime import datetime, timedelta
@@ -10,6 +10,7 @@ import logging
 import pandas as pd
 from app.extensions import db
 from app.services.minute_data_sync_service import MinuteDataSyncService
+from app.services.tongdaxin_minute_sync_service import TongdaxinMinuteSyncService
 from app.services.data_reader import ParquetDataReader
 from app.services.minute_parquet_reader import MinuteParquetReader
 from app.services.minute_parquet_store import MinuteParquetStore
@@ -53,12 +54,13 @@ class RealtimeDataManager:
         
         # 初始化分钟数据同步服务
         self.minute_sync_service = MinuteDataSyncService()
+        self.tongdaxin_minute_sync_service = TongdaxinMinuteSyncService()
         self.data_reader = ParquetDataReader()
         self.minute_reader = self.data_reader.get_minute_reader()
         self.minute_store = MinuteParquetStore()
     
     def sync_minute_data(self, ts_code: str, start_date: str = None, end_date: str = None, 
-                        period_type: str = '1min', use_baostock: bool = True) -> Dict:
+                        period_type: str = '1min', use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
         """
         同步分钟级数据
         
@@ -68,6 +70,7 @@ class RealtimeDataManager:
             end_date: 结束日期 (YYYY-MM-DD)
             period_type: 周期类型
             use_baostock: 是否使用Baostock数据源
+            data_source: 分钟数据源名称
             
         Returns:
             同步结果
@@ -81,15 +84,24 @@ class RealtimeDataManager:
             
             logger.info(f"开始同步 {ts_code} 从 {start_date} 到 {end_date} 的{period_type}数据")
             
-            if use_baostock:
+            source = self._resolve_minute_data_source(data_source, use_baostock)
+
+            if source == 'tongdaxin':
+                with self.tongdaxin_minute_sync_service as sync_service:
+                    result = sync_service.sync_single_stock_data(
+                        ts_code, period_type, start_date, end_date
+                    )
+                return result
+
+            if source == 'baostock':
                 # 使用Baostock数据源
                 with self.minute_sync_service as sync_service:
                     result = sync_service.sync_single_stock_data(
                         ts_code, period_type, start_date, end_date
                     )
                 return result
-            else:
-                return self._sync_minute_data_legacy(ts_code, start_date, end_date, period_type)
+
+            return self._sync_minute_data_legacy(ts_code, start_date, end_date, period_type)
             
         except Exception as e:
             logger.error(f"同步数据失败: {str(e)}")
@@ -101,7 +113,7 @@ class RealtimeDataManager:
     
     def sync_multiple_stocks_data(self, stock_list: List[str], period_type: str = '1min',
                                  start_date: str = None, end_date: str = None,
-                                 batch_size: int = 10, use_baostock: bool = True) -> Dict:
+                                 batch_size: int = 10, use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
         """
         批量同步多个股票的分钟数据
         
@@ -117,7 +129,9 @@ class RealtimeDataManager:
             同步结果字典
         """
         try:
-            if not use_baostock:
+            source = self._resolve_minute_data_source(data_source, use_baostock)
+
+            if source not in {'baostock', 'tongdaxin'}:
                 logger.warning("批量分钟数据legacy同步已禁用")
                 return {
                     'success': False,
@@ -129,7 +143,14 @@ class RealtimeDataManager:
                     'period_type': period_type
                 }
 
-            if use_baostock:
+            if source == 'tongdaxin':
+                with self.tongdaxin_minute_sync_service as sync_service:
+                    result = sync_service.sync_multiple_stocks_data(
+                        stock_list, period_type, start_date, end_date, batch_size
+                    )
+                return result
+
+            if source == 'baostock':
                 # 使用Baostock数据源
                 with self.minute_sync_service as sync_service:
                     result = sync_service.sync_multiple_stocks_data(
@@ -148,7 +169,7 @@ class RealtimeDataManager:
             }
     
     def sync_all_periods_for_stock(self, ts_code: str, start_date: str = None, 
-                                  end_date: str = None, use_baostock: bool = True) -> Dict:
+                                  end_date: str = None, use_baostock: bool = True, data_source: str = 'tongdaxin') -> Dict:
         """
         同步单个股票的所有周期数据
         
@@ -162,7 +183,9 @@ class RealtimeDataManager:
             同步结果字典
         """
         try:
-            if not use_baostock:
+            source = self._resolve_minute_data_source(data_source, use_baostock)
+
+            if source not in {'baostock', 'tongdaxin'}:
                 logger.warning("全周期分钟数据legacy同步已禁用")
                 return {
                     'success': False,
@@ -171,7 +194,12 @@ class RealtimeDataManager:
                     'period_types': ['1min', '5min', '15min', '30min', '60min']
                 }
 
-            if use_baostock:
+            if source == 'tongdaxin':
+                with self.tongdaxin_minute_sync_service as sync_service:
+                    result = sync_service.sync_all_periods_for_stock(ts_code, start_date, end_date)
+                return result
+
+            if source == 'baostock':
                 with self.minute_sync_service as sync_service:
                     result = sync_service.sync_all_periods_for_stock(ts_code, start_date, end_date)
                 return result
@@ -209,6 +237,11 @@ class RealtimeDataManager:
             'end_date': end_date,
             'period_type': period_type
         }
+
+    def _resolve_minute_data_source(self, data_source: Optional[str], use_baostock: bool) -> str:
+        if data_source:
+            return str(data_source).strip().lower()
+        return 'baostock' if use_baostock else 'tongdaxin'
     
     def _convert_to_model_format(self, df: pd.DataFrame, ts_code: str, period_type: str) -> List[Dict]:
         """
