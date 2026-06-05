@@ -23,19 +23,3 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  mysql:
-    image: mysql:8
-    command: --default-authentication-plugin=mysql_native_password
-    profiles:
-      - legacy-mysql
-    environment:
-      MYSQL_DATABASE: stock_cursor
-      MYSQL_ROOT_PASSWORD: root
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  mysql_data:

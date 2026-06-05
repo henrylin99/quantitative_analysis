@@ -25,33 +25,13 @@ def _build_sqlalchemy_engine_options(database_uri: str) -> dict:
 class Config:
     """基础配置类"""
 
-    # ORM 默认使用 SQLite；MySQL 仅保留给显式 legacy/compatibility 路径
     SQLITE_DATABASE_PATH = os.getenv(
         "SQLITE_DATABASE_PATH",
         os.path.join(BASE_DIR, "stock_cursor.sqlite3"),
     )
-    SQLITE_DATABASE_URI = os.getenv(
-        "SQLALCHEMY_DATABASE_URI",
-        f"sqlite:///{SQLITE_DATABASE_PATH}",
-    )
+    SQLITE_DATABASE_URI = f"sqlite:///{SQLITE_DATABASE_PATH}"
     SQLALCHEMY_DATABASE_URI = SQLITE_DATABASE_URI
     SQLALCHEMY_ENGINE_OPTIONS = _build_sqlalchemy_engine_options(SQLALCHEMY_DATABASE_URI)
-
-    MYSQL_COMPAT_ENABLED = os.getenv(
-        "MYSQL_COMPAT_ENABLED",
-        "false",
-    ).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
-    DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-    DB_NAME = os.getenv('DB_NAME', 'stock_cursor')
-    DB_CHARSET = os.getenv('DB_CHARSET', 'utf8mb4')
-    
-    MYSQL_DATABASE_URI = os.getenv(
-        'MYSQL_DATABASE_URI',
-        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}?charset={DB_CHARSET}",
-    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Flask配置
@@ -75,7 +55,7 @@ class Config:
     
     # 默认数据源：Parquet
     DATA_DIR = os.getenv('DATA_DIR', os.path.join(os.path.dirname(__file__), 'data'))
-    DATA_SOURCE = os.getenv('DATA_SOURCE', 'parquet')  # 'parquet' | 'mysql'
+    DATA_SOURCE = 'parquet'
 
     # 数据更新配置
     DATA_UPDATE_HOUR = int(os.getenv('DATA_UPDATE_HOUR', 18))  # 每日18点更新数据
@@ -93,18 +73,18 @@ class Config:
     
     # 大模型配置
     LLM_CONFIG = {
-        'provider': 'ollama',  # 支持 'ollama', 'openai', 'azure'
+        'provider': os.getenv('LLM_PROVIDER', 'ollama'),  # 'ollama' | 'openai'
         'ollama': {
-            'base_url': 'http://localhost:11434',
-            'model': 'qwen2.5-coder:latest',
+            'base_url': os.getenv('LLM_BASE_URL', 'http://localhost:11434'),
+            'model': os.getenv('LLM_MODEL', 'qwen2.5-coder:latest'),
             'timeout': 60,
             'temperature': 0.1,
             'max_tokens': 2048
         },
         'openai': {
-            'api_key': os.environ.get('OPENAI_API_KEY'),
-            'model': 'gpt-3.5-turbo',
-            'base_url': 'https://api.openai.com/v1',
+            'api_key': os.getenv('LLM_API_KEY'),
+            'model': os.getenv('LLM_MODEL', 'gpt-3.5-turbo'),
+            'base_url': os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1'),
             'timeout': 60,
             'temperature': 0.1,
             'max_tokens': 2048

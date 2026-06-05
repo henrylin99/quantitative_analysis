@@ -10,7 +10,6 @@ eventlet>=0.33.0
 
 # 数据库相关
 SQLAlchemy>=2.0.0
-PyMySQL>=1.1.0
 Flask-SQLAlchemy>=3.0.0
 Flask-Migrate>=4.0.0
 

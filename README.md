@@ -73,13 +73,13 @@
 - **前端**: Bootstrap 5 / JavaScript
 - **市场数据源**: Parquet 文件为主，市场数据统一落在 `data/`
 - **ML 因子状态层**: Parquet 文件，状态数据统一落在 `data/ml_factor_state/`
-- **应用状态层**: 部分遗留模块仍使用 MySQL-compatible 数据库
+- **应用状态层**: 低并发状态与元数据统一使用 SQLite
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
-- 如需使用遗留模块或 ORM 状态层，仍需 MySQL 5.7 或 8.x；纯 parquet 主链路可不依赖 MySQL
+- 运行系统不需要 MySQL；默认使用 SQLite + Parquet
 
 ### 2. 安装依赖
 ```bash
@@ -97,7 +97,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-默认会同时启动 Web、MySQL 和 Redis；其中市场数据和 ml-factor 状态仍以本地 parquet 文件为准。
+默认会同时启动 Web、SQLite 和 Redis；其中市场数据和 ml-factor 状态仍以本地 parquet 文件为准。
 
 ### 3. 启动系统
 ```bash
