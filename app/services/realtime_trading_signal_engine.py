@@ -127,6 +127,7 @@ class RealtimeTradingSignalEngine:
 
                 indicators_dict[indicator_name].append({
                     'datetime': indicator.get('datetime'),
+                    'sub_name': indicator.get('sub_name'),
                     'value1': indicator.get('value1'),
                     'value2': indicator.get('value2'),
                     'value3': indicator.get('value3'),
@@ -134,26 +135,56 @@ class RealtimeTradingSignalEngine:
                 })
         
         return indicators_dict
+
+    @staticmethod
+    def _pick_indicator_series(indicators: Dict, indicator_name: str, preferred_sub_names: List[str] | None = None) -> list[Dict]:
+        """按子指标名称挑选同一指标下的序列，优先返回指定子指标。"""
+        series = indicators.get(indicator_name, [])
+        if not series:
+            return []
+        if not preferred_sub_names:
+            return series
+
+        preferred = {name.upper() for name in preferred_sub_names}
+        matched = [
+            item for item in series
+            if str(item.get("sub_name", "")).upper() in preferred
+        ]
+        return matched if matched else series
     
     def _ma_crossover_strategy(self, df: pd.DataFrame, indicators: Dict, 
                               ts_code: str, period_type: str) -> List[Dict]:
         """移动平均线交叉策略"""
         signals = []
-        
-        if 'MA' not in indicators or len(indicators['MA']) < 2:
+
+        ma_series = self._pick_indicator_series(indicators, 'MA', ['MA5', 'MA10'])
+        if len(ma_series) < 2:
             return signals
-        
-        ma_data = pd.DataFrame(indicators['MA'])
+
+        ma_data = pd.DataFrame(ma_series)
         ma_data = ma_data.sort_values('datetime').reset_index(drop=True)
-        
-        # 假设value1是短期MA，value2是长期MA
-        if len(ma_data) < 2:
+
+        short_ma = ma_data[ma_data['sub_name'].str.upper() == 'MA5'] if 'sub_name' in ma_data.columns else pd.DataFrame()
+        long_ma = ma_data[ma_data['sub_name'].str.upper() == 'MA10'] if 'sub_name' in ma_data.columns else pd.DataFrame()
+        if short_ma.empty or long_ma.empty:
             return signals
-        
-        current_short_ma = ma_data.iloc[-1]['value1']
-        current_long_ma = ma_data.iloc[-1]['value2']
-        prev_short_ma = ma_data.iloc[-2]['value1']
-        prev_long_ma = ma_data.iloc[-2]['value2']
+
+        short_ma = short_ma.sort_values('datetime').reset_index(drop=True)
+        long_ma = long_ma.sort_values('datetime').reset_index(drop=True)
+        merged = pd.merge(
+            short_ma[['datetime', 'value1']],
+            long_ma[['datetime', 'value1']],
+            on='datetime',
+            how='inner',
+            suffixes=('_short', '_long')
+        )
+        if len(merged) < 2:
+            return signals
+
+        current_short_ma = merged.iloc[-1]['value1_short']
+        current_long_ma = merged.iloc[-1]['value1_long']
+        prev_short_ma = merged.iloc[-2]['value1_short']
+        prev_long_ma = merged.iloc[-2]['value1_long']
         
         current_price = df.iloc[-1]['close']
         current_time = df.iloc[-1]['datetime']
@@ -586,13 +617,25 @@ class RealtimeTradingSignalEngine:
         """趋势跟踪策略"""
         signals = []
         
-        if 'EMA' not in indicators or len(indicators['EMA']) < 1:
+        ema_series = self._pick_indicator_series(indicators, 'EMA', ['EMA12', 'EMA26'])
+        if len(ema_series) < 1:
             return signals
-        
-        ema_data = pd.DataFrame(indicators['EMA'])
+
+        ema_data = pd.DataFrame(ema_series)
         ema_data = ema_data.sort_values('datetime').reset_index(drop=True)
-        
-        current_ema = ema_data.iloc[-1]['value1']  # 短期EMA
+
+        if 'sub_name' in ema_data.columns:
+            short_ema_data = ema_data[ema_data['sub_name'].astype(str).str.upper().isin({'EMA12', 'EMA26'})].copy()
+            short_ema_data = short_ema_data.sort_values('datetime').reset_index(drop=True)
+            ema12_data = short_ema_data[short_ema_data['sub_name'].astype(str).str.upper() == 'EMA12']
+            if not ema12_data.empty:
+                current_ema = ema12_data.iloc[-1]['value1']
+            elif not short_ema_data.empty:
+                current_ema = short_ema_data.iloc[-1]['value1']
+            else:
+                current_ema = ema_data.iloc[-1]['value1']
+        else:
+            current_ema = ema_data.iloc[-1]['value1']  # 短期EMA
         current_price = df.iloc[-1]['close']
         current_time = df.iloc[-1]['datetime']
         

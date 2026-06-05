@@ -117,11 +117,34 @@ class ParquetEventStore:
                 combined = combined.copy()
                 combined["id"] = range(next_id, next_id + len(combined))
 
-            dedupe_cols = [col for col in ["id", "ts_code", "datetime", "period_type", "indicator_name", "strategy_name"] if col in combined.columns]
+            dedupe_cols = [
+                col
+                for col in [
+                    "id",
+                    "ts_code",
+                    "datetime",
+                    "period_type",
+                    "indicator_name",
+                    "sub_name",
+                    "strategy_name",
+                ]
+                if col in combined.columns
+            ]
             if dedupe_cols:
                 combined = combined.drop_duplicates(subset=dedupe_cols, keep="last")
 
-            sort_cols = [col for col in ["datetime", "ts_code", "indicator_name", "strategy_name", "id"] if col in combined.columns]
+            sort_cols = [
+                col
+                for col in [
+                    "datetime",
+                    "ts_code",
+                    "indicator_name",
+                    "sub_name",
+                    "strategy_name",
+                    "id",
+                ]
+                if col in combined.columns
+            ]
             if sort_cols:
                 combined = combined.sort_values(sort_cols).reset_index(drop=True)
 
@@ -154,7 +177,18 @@ class ParquetEventStore:
             frame = frame[frame["datetime"] <= end_time]
         if frame.empty:
             return frame
-        sort_cols = [col for col in ["datetime", "ts_code", "indicator_name", "strategy_name", "id"] if col in frame.columns]
+        sort_cols = [
+            col
+            for col in [
+                "datetime",
+                "ts_code",
+                "indicator_name",
+                "sub_name",
+                "strategy_name",
+                "id",
+            ]
+            if col in frame.columns
+        ]
         if sort_cols:
             frame = frame.sort_values(sort_cols).reset_index(drop=True)
         return frame

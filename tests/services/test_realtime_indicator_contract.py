@@ -59,3 +59,42 @@ def test_indicator_engine_reads_minute_history_from_parquet(tmp_path, monkeypatc
     assert result["success"] is True
     assert result["data_points"] == 20
     assert result["stored_records"] > 0
+
+
+def test_indicator_engine_persists_ma_rows_with_sub_names(tmp_path, monkeypatch):
+    minute_dir = Path(tmp_path) / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
+    minute_dir.mkdir(parents=True)
+    rows = []
+    base_time = pd.Timestamp("2026-06-04 09:31:00")
+    for idx in range(30):
+        dt = base_time + pd.Timedelta(minutes=idx)
+        close = 10.0 + idx * 0.2
+        rows.append(
+            {
+                "ts_code": "000001.SZ",
+                "period_type": "1min",
+                "datetime": dt,
+                "open": close - 0.1,
+                "high": close + 0.1,
+                "low": close - 0.2,
+                "close": close,
+                "volume": 1000 + idx * 100,
+                "amount": (1000 + idx * 100) * close,
+            }
+        )
+    pd.DataFrame(rows).to_parquet(minute_dir / "data.parquet", index=False)
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    engine = RealtimeIndicatorEngine()
+    engine.default_params["MA"]["periods"] = [5, 10]
+
+    with patch("app.services.realtime_indicator_engine.RealtimeIndicator", _FakeRealtimeIndicator), patch(
+        "app.services.realtime_indicator_engine.RealtimeIndicator.batch_insert", return_value=(True, "ok")
+    ) as batch_insert:
+        result = engine.calculate_indicators("000001.SZ", "1min", indicators=["MA"], lookback_days=7)
+
+    assert result["success"] is True
+    inserted = batch_insert.call_args.args[0]
+    assert any(row["indicator_name"] == "MA" and row["sub_name"] == "MA5" for row in inserted)
+    assert any(row["indicator_name"] == "MA" and row["sub_name"] == "MA10" for row in inserted)

@@ -151,6 +151,7 @@ class RealtimeIndicatorEngine:
                     'datetime': row['datetime'],
                     'period_type': period_type,
                     'indicator_name': indicator,
+                    'sub_name': sub_name,
                     'value1': value1,
                     'value2': value2,
                     'value3': value3,

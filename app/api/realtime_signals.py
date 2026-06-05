@@ -6,6 +6,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 import logging
+import os
 
 from app.services.realtime_trading_signal_engine import RealtimeTradingSignalEngine
 from app.models.trading_signal import TradingSignal
@@ -21,10 +22,8 @@ _signal_engine_data_dir = None
 
 def get_signal_engine():
     global signal_engine, _signal_engine_data_dir
-    current_data_dir = __import__("os").getenv("DATA_DIR")
-    if signal_engine is not None:
-        return signal_engine
-    if _signal_engine_data_dir != current_data_dir:
+    current_data_dir = os.getenv("DATA_DIR")
+    if signal_engine is None or _signal_engine_data_dir != current_data_dir:
         signal_engine = RealtimeTradingSignalEngine()
         _signal_engine_data_dir = current_data_dir
     return signal_engine
@@ -224,7 +223,7 @@ def backtest_strategy():
             })
         
         # 执行回测
-        result = signal_engine.backtest_strategy(
+        result = get_signal_engine().backtest_strategy(
             strategy_name=strategy_name,
             ts_code=ts_code,
             start_date=start_date,
