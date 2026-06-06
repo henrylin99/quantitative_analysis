@@ -1226,6 +1226,21 @@ def delete_portfolio(portfolio_id):
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/portfolio/<portfolio_id>/refresh-prices', methods=['POST'])
+def refresh_portfolio_prices(portfolio_id):
+    """从通达信获取实时报价并刷新组合持仓价格"""
+    try:
+        result = _portfolio_repo.refresh_prices(portfolio_id)
+        return jsonify({
+            'success': True,
+            'data': result,
+            'message': f"更新了 {result['updated']}/{result['total']} 个持仓价格",
+        })
+    except Exception as e:
+        logger.error(f"刷新组合价格失败: {portfolio_id}, 错误: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @ml_factor_bp.route('/portfolio/save-optimized', methods=['POST'])
 def save_optimized_portfolio():
     """将优化结果保存为真实组合持仓"""

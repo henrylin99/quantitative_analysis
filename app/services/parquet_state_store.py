@@ -452,6 +452,76 @@ class PortfolioRepository:
         self.store.write_frame(self.TABLE_POSITIONS, df)
         return record
 
+    def refresh_prices(self, portfolio_id: str) -> Dict[str, Any]:
+        """从通达信获取实时报价并更新所有持仓的当前价格。"""
+        positions = self.list_positions(portfolio_id, active_only=True)
+        if not positions:
+            return {"updated": 0, "total": 0}
+
+        # 构建 (market, code) 列表
+        from app.services.tongdaxin.code_mapping import any_style_code_to_tdx
+        stock_params = []
+        ts_code_list = []
+        for pos in positions:
+            ts_code = pos.get("ts_code", "")
+            try:
+                market, code = any_style_code_to_tdx(ts_code)
+                stock_params.append((market, code))
+                ts_code_list.append(ts_code)
+            except ValueError:
+                continue
+
+        if not stock_params:
+            return {"updated": 0, "total": len(positions)}
+
+        # 调用通达信批量获取实时报价
+        from app.services.tongdaxin.client import create_hq_api, connected_session
+        price_map: Dict[str, float] = {}
+        try:
+            api = create_hq_api()
+            with connected_session(api) as session:
+                quotes = api.get_security_quotes(stock_params)
+                if quotes:
+                    for quote in quotes:
+                        m = quote.get("market")
+                        c = quote.get("code", "")
+                        price = quote.get("price")
+                        if price and price > 0:
+                            # 反查 ts_code
+                            matched = [tc for tc in ts_code_list if tc.startswith(c[:6])]
+                            if matched:
+                                price_map[matched[0]] = float(price)
+        except Exception as exc:
+            logger.warning(f"通达信实时报价获取失败: {exc}")
+            return {"updated": 0, "total": len(positions), "error": str(exc)}
+
+        if not price_map:
+            return {"updated": 0, "total": len(positions)}
+
+        # 更新 Parquet
+        df = self.store.read_frame(self.TABLE_POSITIONS)
+        if df.empty or "portfolio_id" not in df.columns:
+            return {"updated": 0, "total": len(positions)}
+
+        now = _now_iso()
+        updated = 0
+        for ts_code, new_price in price_map.items():
+            mask = (df["portfolio_id"] == portfolio_id) & (df["ts_code"] == ts_code)
+            if "is_active" in df.columns:
+                mask &= df["is_active"].fillna(True).astype(bool)
+            if not mask.any():
+                continue
+            df.loc[mask, "current_price"] = new_price
+            pos_size = pd.to_numeric(df.loc[mask, "position_size"], errors="coerce").fillna(0)
+            avg_cost = pd.to_numeric(df.loc[mask, "avg_cost"], errors="coerce").fillna(0)
+            df.loc[mask, "market_value"] = pos_size * new_price
+            df.loc[mask, "unrealized_pnl"] = (new_price - avg_cost) * pos_size
+            df.loc[mask, "updated_at"] = now
+            updated += int(mask.sum())
+
+        self.store.write_frame(self.TABLE_POSITIONS, df)
+        return {"updated": updated, "total": len(positions)}
+
     def calculate_metrics(self, portfolio_id: str) -> Dict[str, Any]:
         positions = self.list_positions(portfolio_id, active_only=True)
         if not positions:

@@ -71,6 +71,43 @@ def test_get_daily_returns_rows_sorted_by_trade_date_and_respects_filters(tmp_pa
     assert set(frame["ts_code"].tolist()) == {"000001.SZ", "000002.SZ"}
 
 
+def test_get_daily_accepts_mixed_trade_date_formats(tmp_path, monkeypatch):
+    monkeypatch.setattr(ParquetDataReader, "_stock_basic_cache", None, raising=False)
+
+    data_dir = tmp_path / "data"
+    _write_partition(
+        data_dir,
+        "2024",
+        "01",
+        "01",
+        pd.DataFrame(
+            [
+                {"ts_code": "000001.SZ", "trade_date": "20240101", "close": 10.0},
+            ]
+        ),
+    )
+    _write_partition(
+        data_dir,
+        "2024",
+        "01",
+        "02",
+        pd.DataFrame(
+            [
+                {"ts_code": "000001.SZ", "trade_date": "2024-01-02", "close": 11.0},
+            ]
+        ),
+    )
+
+    reader = ParquetDataReader(data_dir=str(data_dir))
+    frame = reader.get_daily(ts_codes=["000001.SZ"])
+
+    assert frame["trade_date"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2024-01-01",
+        "2024-01-02",
+    ]
+    assert frame["close"].tolist() == [10.0, 11.0]
+
+
 def test_get_stock_basic_list_filters_by_industry_area_and_search(tmp_path, monkeypatch):
     monkeypatch.setattr(ParquetDataReader, "_stock_basic_cache", None, raising=False)
 
