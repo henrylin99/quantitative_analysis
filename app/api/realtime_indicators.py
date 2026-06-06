@@ -378,14 +378,27 @@ def compare_indicators():
                 'period_type': period_type,
             }
 
-        return jsonify({
+        # 清理 NaN 值，确保 JSON 合法
+        def clean_nan(obj):
+            import math
+            if isinstance(obj, dict):
+                return {k: clean_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_nan(v) for v in obj]
+            elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                return None
+            elif hasattr(obj, 'item') and (np.isnan(obj) or np.isinf(obj)):
+                return None
+            return obj
+
+        return jsonify(clean_nan({
             'success': True,
             'data': results,
             'indicator_name': indicator_name,
             'period_type': period_type,
             'stock_codes': stock_codes,
             'empty_state': empty_state
-        })
+        }))
         
     except Exception as e:
         logger.error(f"比较指标失败: {str(e)}")
