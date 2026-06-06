@@ -28,6 +28,11 @@ def get_indicator_engine():
     global indicator_engine, _indicator_engine_data_dir
     current_data_dir = os.getenv("DATA_DIR")
 
+    # Preserve injected test doubles and patched engines instead of replacing
+    # them during lazy initialization checks.
+    if indicator_engine is not None and not isinstance(indicator_engine, RealtimeIndicatorEngine):
+        return indicator_engine
+
     if indicator_engine is None:
         indicator_engine = RealtimeIndicatorEngine()
         _indicator_engine_data_dir = current_data_dir
