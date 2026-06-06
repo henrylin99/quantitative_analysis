@@ -34,13 +34,23 @@
                             <div class="col-md-3">
                                 <div class="mb-3">
                                     <label for="startDate" class="form-label">开始日期</label>
-                                    <input type="date" class="form-control" id="startDate" value="2023-01-01">
+                                    <input type="date" class="form-control" id="startDate">
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="mb-3">
                                     <label for="endDate" class="form-label">结束日期</label>
-                                    <input type="date" class="form-control" id="endDate" value="2024-05-28">
+                                    <input type="date" class="form-control" id="endDate">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">快捷选择</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setDateRange(3)">近3月</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setDateRange(6)">近6月</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setDateRange(12)">近1年</button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
@@ -332,7 +342,17 @@ document.addEventListener('DOMContentLoaded', function() {
     loadModels();
     loadFactors();
     initializeEventListeners();
+    setDateRange(3);  // 默认近3个月
 });
+
+// 设置日期范围快捷选择
+function setDateRange(months) {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(start.getMonth() - months);
+    document.getElementById('startDate').value = start.toISOString().split('T')[0];
+    document.getElementById('endDate').value = end.toISOString().split('T')[0];
+}
 
 // 初始化事件监听器
 function initializeEventListeners() {
@@ -457,9 +477,11 @@ async function startBacktest() {
     
     try {
         // 构造策略配置
+        const hasFactors = config.selected_factors.length > 0;
+        const hasModel = !!config.model_id;
         const strategyConfig = {
-            selection_method: config.model_id ? 'ml_based' : 'factor_based',
-            model_ids: config.model_id ? [config.model_id] : [],
+            selection_method: hasFactors ? 'factor_based' : (hasModel ? 'ml_based' : 'factor_based'),
+            model_ids: (!hasFactors && hasModel) ? [config.model_id] : [],
             factor_list: config.selected_factors,
             factor_weights: {},  // 简化处理，使用等权重
             model_weight: config.model_weight,

@@ -19,6 +19,9 @@ def any_style_code_to_tdx(value: str) -> tuple[int, str]:
         return 0, text.split(".", 1)[0]
     if lower_text.endswith(".sh"):
         return 1, text.split(".", 1)[0]
+    # 纯数字代码：0/3 开头 → 深市(0)，6 开头 → 沪市(1)
+    if text.isdigit():
+        return (0, text) if text[0] in ("0", "3") else (1, text)
     raise ValueError(f"unsupported stock code: {value}")
 
 

@@ -422,21 +422,23 @@
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">选择周期</label>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="5min" id="period5min" checked>
-                                            <label class="form-check-label" for="period5min">5分钟</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="15min" id="period15min" checked>
-                                            <label class="form-check-label" for="period15min">15分钟</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="30min" id="period30min">
-                                            <label class="form-check-label" for="period30min">30分钟</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="60min" id="period60min">
-                                            <label class="form-check-label" for="period60min">60分钟</label>
+                                        <div id="multiPeriodCheckboxes">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="5min" id="period5min" checked>
+                                                <label class="form-check-label" for="period5min">5分钟</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="15min" id="period15min" checked>
+                                                <label class="form-check-label" for="period15min">15分钟</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="30min" id="period30min">
+                                                <label class="form-check-label" for="period30min">30分钟</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="60min" id="period60min">
+                                                <label class="form-check-label" for="period60min">60分钟</label>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="mb-3">
@@ -791,7 +793,7 @@
             const rawCode = document.getElementById('multiStockCode').value;
             const stockCode = normalizeStockCode(rawCode);
             const selectedPeriods = [];
-            document.querySelectorAll('#multi-period input[type="checkbox"]:checked').forEach(cb => selectedPeriods.push(cb.value));
+            document.querySelectorAll('#multiPeriodCheckboxes input[type="checkbox"]:checked').forEach(cb => selectedPeriods.push(cb.value));
             const selectedIndicators = [];
             document.querySelectorAll('#multiIndicatorCheckboxes input[type="checkbox"]:checked').forEach(cb => selectedIndicators.push(cb.value));
 
