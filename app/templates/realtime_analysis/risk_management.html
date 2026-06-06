@@ -735,44 +735,55 @@
             if (!el) return;
             const chart = echarts.init(el);
 
-            const pm = riskData.portfolio_metrics || {};
             const positions = portfolioData.positions || [];
 
             if (positions.length < 2) {
                 chart.setOption({
                     title: { text: '相关性热力图', left: 'center' },
-                    graphic: { type: 'text', left: 'center', top: 'middle', style: { text: '需要至少2只股票', fill: '#999', fontSize: 14 } }
+                    graphic: { type: 'text', left: 'center', top: 'middle', style: { text: '需要至少2只股票才能计算相关性', fill: '#999', fontSize: 14 } }
                 });
                 return;
             }
 
-            // 从持仓列表构建简单的相关性矩阵展示
             const codes = positions.map(p => p.ts_code);
-            const n = codes.length;
 
-            // 生成模拟相关性数据（对角线=1，其余用随机值作为占位）
-            // 实际相关性数据应来自后端的风险计算
-            const heatData = [];
-            for (let i = 0; i < n; i++) {
-                for (let j = 0; j < n; j++) {
-                    heatData.push([i, j, i === j ? 1 : (0.3 + Math.random() * 0.5).toFixed(2)]);
+            // 尝试使用后端返回的相关性矩阵（来自 calculate_portfolio_risk）
+            const correlationMatrix = riskData.correlation_metrics?.correlation_matrix;
+            if (correlationMatrix) {
+                // 后端有真实相关性数据
+                const heatData = [];
+                for (let i = 0; i < codes.length; i++) {
+                    const row = correlationMatrix[codes[i]];
+                    if (!row) continue;
+                    for (let j = 0; j < codes.length; j++) {
+                        const val = row[codes[j]];
+                        heatData.push([i, j, val !== undefined ? parseFloat(val).toFixed(2) : 0]);
+                    }
+                }
+                if (heatData.length > 0) {
+                    chart.setOption({
+                        title: { text: '相关性热力图', left: 'center' },
+                        tooltip: {
+                            formatter: function(p) { return `${codes[p.data[0]]} × ${codes[p.data[1]]}<br/>相关系数: ${p.data[2]}`; }
+                        },
+                        xAxis: { type: 'category', data: codes, splitArea: { show: true } },
+                        yAxis: { type: 'category', data: codes, splitArea: { show: true } },
+                        visualMap: { min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, inRange: { color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'] } },
+                        series: [{
+                            type: 'heatmap',
+                            data: heatData,
+                            label: { show: true },
+                            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+                        }]
+                    });
+                    return;
                 }
             }
 
+            // 没有后端相关性数据时显示空状态
             chart.setOption({
                 title: { text: '相关性热力图', left: 'center' },
-                tooltip: {
-                    formatter: function(p) { return `${codes[p.data[0]]} × ${codes[p.data[1]]}<br/>相关系数: ${p.data[2]}`; }
-                },
-                xAxis: { type: 'category', data: codes, splitArea: { show: true } },
-                yAxis: { type: 'category', data: codes, splitArea: { show: true } },
-                visualMap: { min: 0, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: 0, inRange: { color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'] } },
-                series: [{
-                    type: 'heatmap',
-                    data: heatData,
-                    label: { show: true },
-                    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
-                }]
+                graphic: { type: 'text', left: 'center', top: 'middle', style: { text: '暂无相关性数据\n请通过「风险分析」Tab 的详细计算获取', fill: '#999', fontSize: 14 } }
             });
         }
 
