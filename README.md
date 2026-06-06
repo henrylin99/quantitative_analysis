@@ -39,7 +39,7 @@
 - **离线数据包**：提供预下载的历史数据，解压即用
 
 ## 数据下载
-
+- 视频讲解地址：https://youtu.be/SpHsZdlyii8
 - 为方便学习使用，数据已改为 Parquet 模式，下载后安装环境即可使用，不需要安装 MySQL
 - 数据更新到 2026 年 06 月 03 日，包含历史行情、基本面、技术面、资金流入、筹码分布，后续不定期更新
 - 百度网盘：https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
