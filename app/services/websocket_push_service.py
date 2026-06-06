@@ -44,7 +44,6 @@ class WebSocketPushService:
         self.event_store = ParquetEventStore()
         
         self.is_running = False
-        self.push_thread = None
         self.push_interval = 30  # 推送间隔（秒）
         
         # 推送配置
@@ -71,13 +70,10 @@ class WebSocketPushService:
         from app.extensions import socketio
         socketio.start_background_task(target=self._push_loop)
         logger.info("WebSocket推送服务已启动")
-        logger.info("WebSocket推送服务已启动")
-    
+
     def stop_push_service(self):
         """停止推送服务"""
         self.is_running = False
-        if self.push_thread:
-            self.push_thread.join(timeout=5)
         logger.info("WebSocket推送服务已停止")
     
     def _push_loop(self):
@@ -251,19 +247,22 @@ class WebSocketPushService:
         """推送监控数据"""
         try:
             # 获取监控数据
-            anomalies = self.monitor_service.detect_anomalies(
+            anomaly_result = self.monitor_service.detect_anomalies(
                 change_threshold=5.0, volume_threshold=3.0
             )
+            anomaly_list = anomaly_result.get('data', {}).get('anomalies', []) \
+                if isinstance(anomaly_result, dict) and anomaly_result.get('success') else []
+
             monitor_data = {
                 'market_overview': self.data_manager.get_market_overview(),
-                'top_movers': anomalies,
-                'anomalies': anomalies,
+                'top_movers': anomaly_list,
+                'anomalies': anomaly_list,
                 'sentiment': self.monitor_service.get_market_sentiment(period_hours=1)
             }
 
             broadcast_monitor_data(monitor_data)
             logger.info("推送监控数据完成")
-            
+
         except Exception as e:
             logger.error(f"推送监控数据失败: {e}")
     
