@@ -1,56 +1,49 @@
 # 多因子选股系统
 
-一个用于学习和二次开发的多因子选股系统原型，当前包含因子计算、机器学习建模、股票选择、组合优化和回测验证等模块的基础实现。
+一个面向 A 股市场的量化分析系统，涵盖实时行情分析、因子计算、机器学习建模、交易信号、组合管理、风险管理、回测验证等完整链路。v2.0 采用 Parquet + SQLite 架构，**零外部数据库依赖，克隆即可运行**。
 
 ## 项目定位
 
-本项目目前仍处于原型阶段，仅适合学习、研究和二次开发，不应视为完整交付版量化平台。
+本项目适合量化交易学习、策略研究和二次开发。
 
-- 适用场景：功能验证、学习交流、二次开发
-- 不适用场景：未经补齐前直接作为实盘、生产交付或完整商业系统
-- 当前原则：主路径只保留真实可用能力，演示/占位/模拟能力持续下线中
-- 实时行情分析当前仅做设计，不进入开发范围
+- 适用场景：量化入门学习、策略研究、二次开发
+- 不适用场景：直接用于实盘交易
+- 技术支持：如需定制化开发，可联系 39189996@qq.com
 
-如需定制化开发，可联系 39189996@qq.com。
+## 功能概览
 
-## 功能状态矩阵
+### 📊 实时行情分析（v2.0 新增）
 
-### 已实现
+- **技术指标**：通达信分钟数据接入，支持 MACD/KDJ/RSI/布林带等指标计算与展示
+- **交易信号**：多策略信号生成、信号融合、信号监控、策略回测
+- **风险管理**：投资组合持仓管理、实时价格刷新（通达信接口）、风险指标、预警管理、压力测试
+- **分析报告**：5 种报告类型（每日总结/组合分析/风险评估/信号分析/市场概览），支持指标卡片、表格、图表可视化
+- **实时监控**：板块表现、异动检测、市场情绪指标
 
-- 内置因子计算基础链路
-- 自定义因子表达式白名单校验
-- 机器学习模型创建与真实训练任务轮询
-- 模型删除前后端入口已打通
-- 基础选股评分
+### 🧮 因子与选股
+
+- 内置因子计算 + 自定义因子表达式（白名单校验）
+- 基础因子评分与 ML 选股
+- 机器学习模型创建、训练（XGBoost / LightGBM / RandomForest）、预测
+
+### 📈 组合与回测
+
 - 等权重、均值方差、风险平价、因子中性组合优化
-- 基础回测结果返回与前后端字段对齐
-- 投资组合页面已具备真实创建、详情、持仓增删改、组合删除和优化结果落库能力
+- 投资组合 CRUD：创建、持仓增删改、优化结果落库
+- 单策略与多策略回测
 
-### 部分实现
+### 💾 数据管理
 
-- 分析报告页已移除演示数据，但总结与管理能力仍较弱
-- 投资组合页面已下线演示数据，再平衡入口与更完整的批量运维能力仍待补齐
-- 实时分析已清理 demo/mock 主路径，但真实数据接入与推送能力仍需继续完善
+- **行情数据**：Parquet 格式存储，支持通达信和 Baostock 双数据源
+- **应用状态**：SQLite 管理持仓、报告、预警等
+- **离线数据包**：提供预下载的历史数据，解压即用
 
-### 未实现/未开放
+## 数据下载
 
-- Black-Litterman、行业约束等高级优化能力
-- 稳定的报告管理闭环，当前仅保留报告列表与生成功能入口
-- 统一的数据来源审计与功能状态标记机制
-
-### 后续开发
-- 完善因子构建
-- 完善基础策略开发
-- 完善投资组合真实管理闭环
-- 实时行情分析仅保留设计稿与接口预留，暂不进入开发实施
-
-
-### 数据库下载地址：
-- 为方便大家学习使用，已经将数据改成parquet模式，下载后安装环境即可使用，不需要再安装mysql
-- 数据更新到2026年06月03日，后面会不定期更新，包含历史行情、基本面、技术面、资金流入、筹码分布。
-链接: 通过网盘分享的文件：quantitative_analysis
-链接: https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
-- 如果有 tushare 接口，可以直接通过 `app/utils` 目录下的脚本生成或更新 parquet 数据，例如：
+- 为方便学习使用，数据已改为 Parquet 模式，下载后安装环境即可使用，不需要安装 MySQL
+- 数据更新到 2026 年 06 月 03 日，包含历史行情、基本面、技术面、资金流入、筹码分布，后续不定期更新
+- 百度网盘：https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
+- 如有 Tushare 接口，可通过数据管理页面更新数据
 
 ![系统主界面](./images/1-2.png)
 
@@ -213,106 +206,33 @@ Traceback (most recent call last):
 
 ![API接口文档](./images/1-20.png)
 
-#### 因子相关接口
-```python
-import requests
-
-# 获取因子列表
-response = requests.get('http://localhost:5000/api/ml-factor/factors/list')
-
-# 创建自定义因子
-factor_data = {
-    "factor_id": "custom_momentum",
-    "factor_name": "自定义动量因子",
-    "factor_type": "momentum",
-    "factor_formula": "close.pct_change(10)",
-    "description": "10日价格变化率"
-}
-response = requests.post('http://localhost:5000/api/ml-factor/factors/custom', json=factor_data)
-
-# 计算因子值
-calc_data = {
-    "trade_date": "2024-01-15",
-    "factor_ids": ["momentum_1d", "momentum_5d"]
-}
-response = requests.post('http://localhost:5000/api/ml-factor/factors/calculate', json=calc_data)
-```
-
-#### 模型相关接口
-```python
-# 创建模型
-model_data = {
-    "model_id": "my_xgb_model",
-    "model_name": "我的XGBoost模型",
-    "model_type": "xgboost",
-    "factor_list": ["momentum_1d", "momentum_5d", "volatility_20d"],
-    "target_type": "return_5d"
-}
-response = requests.post('http://localhost:5000/api/ml-factor/models/create', json=model_data)
-
-# 训练模型
-train_data = {
-    "model_id": "my_xgb_model",
-    "start_date": "2023-01-01",
-    "end_date": "2023-12-31"
-}
-response = requests.post('http://localhost:5000/api/ml-factor/models/train', json=train_data)
-```
-
-#### 选股相关接口
-```python
-# 基于因子选股
-selection_data = {
-    "trade_date": "2024-01-15",
-    "factor_list": ["momentum_1d", "momentum_5d"],
-    "method": "equal_weight",
-    "top_n": 50
-}
-response = requests.post('http://localhost:5000/api/ml-factor/scoring/factor-based', json=selection_data)
-
-# 基于ML模型选股
-ml_selection_data = {
-    "trade_date": "2024-01-15",
-    "model_ids": ["my_xgb_model"],
-    "top_n": 50
-}
-response = requests.post('http://localhost:5000/api/ml-factor/scoring/ml-based', json=ml_selection_data)
-```
-
-#### 组合优化接口
-```python
-# 组合优化
-optimization_data = {
-    "expected_returns": {"000001.SZ": 0.05, "000002.SZ": 0.03},
-    "method": "mean_variance",
-    "constraints": {
-        "max_weight": 0.1,
-        "risk_aversion": 1.0
-    }
-}
-response = requests.post('http://localhost:5000/api/ml-factor/portfolio/optimize', json=optimization_data)
-```
-
 ## 🏗️ 系统架构
 
 ![系统架构图](./images/1-21.png)
 
 ### 目录结构
 ```
-stock_analysis/
-├── app/                    # 应用主目录
-│   ├── api/               # API接口
-│   ├── models/            # 数据模型
-│   ├── services/          # 业务服务
-│   ├── routes/            # 路由
-│   └── utils/             # 工具函数
-├── templates/             # HTML模板
-├── static/               # 静态文件
-├── examples/             # 使用示例
-├── config.py             # 配置文件
-├── requirements.txt      # 依赖包
-├── run_system.py         # 初始化与诊断工具
-└── README.md            # 说明文档
+quantitative_analysis/
+├── app/                          # 应用主目录
+│   ├── api/                     # API 蓝图（ml_factor、realtime_*等）
+│   ├── models/                  # 数据模型（SQLAlchemy + Parquet事件）
+│   ├── services/                # 业务服务（因子引擎、信号引擎、风控等）
+│   ├── routes/                  # 页面路由
+│   ├── templates/               # Jinja2 HTML 模板
+│   ├── static/                  # CSS/JS/图片静态资源
+│   ├── utils/                   # 数据下载脚本（通达信/Baostock/Tushare）
+│   ├── websocket/               # WebSocket 推送服务
+│   └── services/tongdaxin/      # 通达信行情客户端
+├── data/                         # 数据目录（Parquet 行情 + SQLite 状态）
+│   ├── stock_minute/            # 分钟级行情 Parquet
+│   ├── ml_factor_state/         # ML因子状态 Parquet
+│   └── realtime_events/        # 实时事件 Parquet
+├── tests/                        # 测试用例
+├── config.py                     # 配置文件
+├── requirements.txt              # 依赖包
+├── run.py                        # Web 启动入口
+├── run_system.py                 # 初始化与诊断工具
+└── README.md                     # 说明文档
 ```
 
 ### 核心模块
@@ -376,30 +296,6 @@ stock_analysis/
 LOG_LEVEL = 'INFO'
 LOG_FILE = 'logs/app.log'
 ```
-
-## 🧪 运行演示
-
-系统提供当前已接通功能入口的演示：
-
-```bash
-# 运行当前演示入口
-python examples/complete_system_example.py
-
-# 或通过初始化/诊断工具运行
-python run_system.py
-# 选择 "5. 运行系统演示"
-```
-
-![系统演示](./images/1-22.png)
-
-演示内容包括：
-1. 因子管理演示
-2. 模型管理演示
-3. 股票选择演示
-4. 组合优化演示
-5. 集成选股和优化演示
-6. 回测验证演示
-7. 分析功能演示
 
 ## 📈 性能指标
 
@@ -473,12 +369,22 @@ pip install -r requirements_minimal.txt
 ## 📝 更新日志
 
 ### v1.0.0 (2025-06-01)
-- 多因子选股系统原型，适合继续补齐后再扩展使用
-- 支持因子管理和计算
-- 机器学习模型集成
-- 组合优化功能
-- 回测验证引擎
-- Web界面和API接口
+- 多因子选股系统初始版本
+- 因子管理和计算、机器学习模型集成
+- 组合优化、回测验证引擎
+- Web 界面和 API 接口
+
+### v2.0.0-parquet (2026-06-06)
+
+**架构升级**：从 MySQL 迁移到 Parquet + SQLite，零外部数据库依赖，克隆即可运行。
+
+- 实时行情分析模块：技术指标、交易信号（生成/融合/监控/回测）、风险管理（持仓/预警/压力测试）、分析报告（5种类型，可视化渲染）、实时监控（板块/异动/情绪）
+- 通达信实时行情接入，支持批量获取报价和自动刷新持仓价格
+- 日频数据中心：页面内直接触发数据下载脚本，支持任务管理和进度轮询
+- 数据存储全面迁移到 Parquet（行情/指标/信号/状态），SQLite 仅保留应用元数据
+- 投资组合管理完整闭环：创建、持仓增删改、实时价格刷新、优化落库
+- 报告可视化：指标卡片、HTML 表格、ECharts 图表、预警卡片等类型化渲染
+- 离线数据包：提供预下载的 A 股历史数据，解压即用
 
 ## 📄 许可证
 
@@ -498,38 +404,7 @@ pip install -r requirements_minimal.txt
 
 **多因子选股系统原型** - 适合继续补齐后再扩展使用。 
 
-## 日频数据中心（新增）
+## 日线、分钟线数据中心（新增）
 
-现在可以在页面直接触发 `app/utils` 中的数据下载脚本，无需手工进入目录执行。
-
-- 页面入口：`/realtime-analysis` -> `日频数据中心`
-- API 前缀：`/api/data-jobs`
+- 页面入口：`/data-management` -> `数据管理`
 - 任务能力：提交、查询、重试、状态过滤、进度轮询、历史展示
-
-### 运行要求
-开发环境默认使用 `inline` 执行模式：
-
-1. 运行 `python run.py`
-2. 直接在页面提交任务
-
-此模式下，日频数据中心任务会在当前 Web 进程内执行，无需额外启动 Celery Worker。
-
-如需切换到队列模式，可显式设置 `DATA_JOB_EXECUTION_MODE=celery`，再额外启动 Worker：
-
-```bash
-celery -A app.celery_app.celery worker -l info -P solo
-```
-
-### 常用 API
-```bash
-# 提交任务
-curl -X POST http://127.0.0.1:5000/api/data-jobs/submit \
-  -H 'Content-Type: application/json' \
-  -d '{"job_type":"daily_basic","params":{"start_date":"2026-01-01","end_date":"2026-01-31"}}'
-
-# 查看最近任务
-curl "http://127.0.0.1:5000/api/data-jobs/list?limit=20"
-
-# 仅看失败任务
-curl "http://127.0.0.1:5000/api/data-jobs/list?status=failed&limit=20"
-```
