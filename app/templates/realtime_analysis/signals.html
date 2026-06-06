@@ -94,7 +94,7 @@
                                 <form id="generateForm">
                                     <div class="mb-3">
                                         <label class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="generateTsCode" placeholder="例如: 000001.SZ" required>
+                                        <input type="text" class="form-control" id="generateTsCode" placeholder="例如: 300502 或 000001.SZ" required>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">时间周期</label>
@@ -115,7 +115,13 @@
                                         </select>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label">选择策略</label>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <label class="form-label mb-0">选择策略</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="strategySelectAll">
+                                                <label class="form-check-label small" for="strategySelectAll">全选</label>
+                                            </div>
+                                        </div>
                                         <div id="strategyCheckboxes" class="mt-2">
                                             <!-- 策略复选框将在这里动态生成 -->
                                         </div>
@@ -173,7 +179,7 @@
                                 <form id="fusionForm">
                                     <div class="mb-3">
                                         <label class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="fusionTsCode" placeholder="例如: 000001.SZ" required>
+                                        <input type="text" class="form-control" id="fusionTsCode" placeholder="例如: 300502 或 000001.SZ" required>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">时间周期</label>
@@ -238,7 +244,7 @@
                                 <form id="monitorForm">
                                     <div class="mb-3">
                                         <label class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="monitorTsCode" placeholder="留空查看所有">
+                                        <input type="text" class="form-control" id="monitorTsCode" placeholder="例如: 300502 或留空查看所有">
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">策略名称</label>
@@ -327,7 +333,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">股票代码</label>
-                                        <input type="text" class="form-control" id="backtestTsCode" placeholder="例如: 000001.SZ" required>
+                                        <input type="text" class="form-control" id="backtestTsCode" placeholder="例如: 300502 或 000001.SZ" required>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">开始日期</label>
@@ -403,6 +409,20 @@
         let supportedStrategies = [];
         let logModal;
 
+        /**
+         * 规范化股票代码：纯数字自动补全市场后缀
+         * 300502 → 300502.SZ, 600000 → 600000.SH
+         */
+        function normalizeTsCode(code) {
+            const trimmed = code.trim();
+            if (/^\d{6}$/.test(trimmed)) {
+                const prefix = trimmed[0];
+                // 0/3 开头 → 深市 SZ，6 开头 → 沪市 SH
+                return (prefix === '6') ? trimmed + '.SH' : trimmed + '.SZ';
+            }
+            return trimmed;
+        }
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
             logModal = new bootstrap.Modal(document.getElementById('logModal'));
@@ -455,6 +475,18 @@
                 `;
                 container.appendChild(div);
             });
+
+            // 全选/取消全选联动
+            const selectAll = document.getElementById('strategySelectAll');
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            selectAll.addEventListener('change', function() {
+                checkboxes.forEach(cb => cb.checked = this.checked);
+            });
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    selectAll.checked = [...checkboxes].every(c => c.checked);
+                });
+            });
         }
 
         // 渲染策略下拉框
@@ -483,7 +515,7 @@
         document.getElementById('generateForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const tsCode = document.getElementById('generateTsCode').value;
+            const tsCode = normalizeTsCode(document.getElementById('generateTsCode').value);
             const periodType = document.getElementById('generatePeriod').value;
             const lookbackDays = parseInt(document.getElementById('generateLookback').value);
             
@@ -590,7 +622,7 @@
         document.getElementById('fusionForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const tsCode = document.getElementById('fusionTsCode').value;
+            const tsCode = normalizeTsCode(document.getElementById('fusionTsCode').value);
             const periodType = document.getElementById('fusionPeriod').value;
             const timeWindowHours = parseFloat(document.getElementById('fusionWindow').value);
             
@@ -726,7 +758,7 @@
         document.getElementById('monitorForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const tsCode = document.getElementById('monitorTsCode').value;
+            const tsCode = normalizeTsCode(document.getElementById('monitorTsCode').value);
             const strategyName = document.getElementById('monitorStrategy').value;
             const status = document.getElementById('monitorStatus').value;
             
@@ -798,7 +830,7 @@
             e.preventDefault();
             
             const strategyName = document.getElementById('backtestStrategy').value;
-            const tsCode = document.getElementById('backtestTsCode').value;
+            const tsCode = normalizeTsCode(document.getElementById('backtestTsCode').value);
             const startDate = document.getElementById('backtestStartDate').value;
             const endDate = document.getElementById('backtestEndDate').value;
             const periodType = document.getElementById('backtestPeriod').value;

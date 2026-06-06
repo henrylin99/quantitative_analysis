@@ -236,31 +236,33 @@ class RealtimeReportGenerator:
         }
     
     def _collect_portfolio_data(self, portfolio_id: str) -> Dict[str, Any]:
-        """收集投资组合数据"""
-        # 获取组合持仓
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
-        
+        """收集投资组合数据（Parquet 数据源）"""
+        from app.services.parquet_state_store import ParquetStateStore, PortfolioRepository
+        repo = PortfolioRepository(ParquetStateStore())
+
+        positions = repo.list_positions(portfolio_id, active_only=True)
+
         if not positions:
             return {
                 'portfolio_id': portfolio_id,
                 'error': '组合中没有持仓数据'
             }
-        
-        # 计算组合指标
-        metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
-        
-        # 持仓分析
+
+        metrics = repo.calculate_metrics(portfolio_id)
+
         holdings_data = []
-        for position in positions:
+        for pos in positions:
+            market_value = float(pos.get('market_value') or 0)
+            total_mv = metrics.get('total_market_value', 0) or 0
             holdings_data.append({
-                'ts_code': position.ts_code,
-                'position_size': position.position_size,
-                'market_value': position.market_value,
-                'unrealized_pnl': position.unrealized_pnl,
-                'weight': (position.market_value / metrics['total_market_value'] * 100) if metrics['total_market_value'] > 0 else 0,
-                'sector': position.sector or '未分类'
+                'ts_code': pos.get('ts_code'),
+                'position_size': pos.get('position_size'),
+                'market_value': market_value,
+                'unrealized_pnl': pos.get('unrealized_pnl'),
+                'weight': (market_value / total_mv * 100) if total_mv > 0 else 0,
+                'sector': pos.get('sector') or '未分类'
             })
-        
+
         return {
             'portfolio_id': portfolio_id,
             'metrics': metrics,
@@ -270,33 +272,42 @@ class RealtimeReportGenerator:
         }
     
     def _collect_risk_data(self, portfolio_id: str) -> Dict[str, Any]:
-        """收集风险数据"""
-        # 获取组合持仓
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
-        
+        """收集风险数据（Parquet 数据源）"""
+        from app.services.parquet_state_store import ParquetStateStore, PortfolioRepository
+        repo = PortfolioRepository(ParquetStateStore())
+
+        positions = repo.list_positions(portfolio_id, active_only=True)
+
         if not positions:
             return {
                 'portfolio_id': portfolio_id,
                 'error': '组合中没有持仓数据'
             }
-        
+
         # 获取风险预警
-        alerts = RiskAlert.get_active_alerts()
-        
+        try:
+            alerts = RiskAlert.get_active_alerts()
+            alert_list = [alert.to_dict() for alert in alerts[:10]]
+            alert_count = len(alerts)
+        except Exception:
+            alert_list = []
+            alert_count = 0
+
         # 计算基础风险指标
-        total_value = sum(pos.market_value or 0 for pos in positions)
-        total_pnl = sum(pos.unrealized_pnl or 0 for pos in positions)
-        
+        total_value = sum(float(pos.get('market_value') or 0) for pos in positions)
+        total_pnl = sum(float(pos.get('unrealized_pnl') or 0) for pos in positions)
+
         # 集中度风险
-        max_position = max((pos.market_value or 0) for pos in positions) if positions else 0
+        market_values = [float(pos.get('market_value') or 0) for pos in positions]
+        max_position = max(market_values) if market_values else 0
         concentration_risk = (max_position / total_value * 100) if total_value > 0 else 0
-        
+
         # 行业分布
         sector_exposure = {}
-        for position in positions:
-            sector = position.sector or '未分类'
-            sector_exposure[sector] = sector_exposure.get(sector, 0) + (position.market_value or 0)
-        
+        for pos in positions:
+            sector = pos.get('sector') or '未分类'
+            sector_exposure[sector] = sector_exposure.get(sector, 0) + float(pos.get('market_value') or 0)
+
         return {
             'portfolio_id': portfolio_id,
             'risk_metrics': {
@@ -304,10 +315,10 @@ class RealtimeReportGenerator:
                 'total_pnl': total_pnl,
                 'concentration_risk': concentration_risk,
                 'position_count': len(positions),
-                'active_alerts': len(alerts)
+                'active_alerts': alert_count
             },
             'sector_exposure': sector_exposure,
-            'risk_alerts': [alert.to_dict() for alert in alerts[:10]],  # 最近10个预警
+            'risk_alerts': alert_list,
             'analysis_date': datetime.utcnow().isoformat()
         }
     
@@ -480,138 +491,330 @@ class RealtimeReportGenerator:
     def _generate_daily_summary_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成每日总结内容"""
         sections = []
-        
+
         if 'market_data' in data:
-            market_data = data['market_data']
+            md = data['market_data']
             sections.append({
                 'title': '市场数据概览',
-                'type': 'summary',
-                'content': f"今日共处理{market_data['minute_data_points']}个分钟数据点，"
-                          f"覆盖{market_data['active_stocks']}只股票，"
-                          f"生成{market_data['technical_indicators']}个技术指标，"
-                          f"产生{market_data['trading_signals']}个交易信号。"
+                'type': 'metrics',
+                'content': [
+                    {'label': '分钟数据点', 'value': md.get('minute_data_points', 0), 'format': 'number', 'icon': 'bi-graph-up', 'color': 'primary'},
+                    {'label': '活跃股票', 'value': md.get('active_stocks', 0), 'format': 'number', 'icon': 'bi-bar-chart', 'color': 'success'},
+                    {'label': '技术指标', 'value': md.get('technical_indicators', 0), 'format': 'number', 'icon': 'bi-speedometer2', 'color': 'info'},
+                    {'label': '交易信号', 'value': md.get('trading_signals', 0), 'format': 'number', 'icon': 'bi-lightning', 'color': 'warning'},
+                ]
             })
-        
-        sections.append({
-            'title': '数据质量评估',
-            'type': 'metrics',
-            'content': '数据接入正常，系统运行稳定。'
-        })
-        
+
+        if 'summary' in data:
+            s = data['summary']
+            sections.append({
+                'title': '数据质量评估',
+                'type': 'summary',
+                'content': f"总活跃度: {s.get('total_activity', 0)}，数据覆盖: {s.get('data_coverage', '未知')}。数据接入正常，系统运行稳定。"
+            })
+
+        # 活跃度分析表格
+        if 'market_data' in data:
+            md = data['market_data']
+            rows = [
+                {'category': '分钟行情', 'count': md.get('minute_data_points', 0)},
+                {'category': '技术指标', 'count': md.get('technical_indicators', 0)},
+                {'category': '交易信号', 'count': md.get('trading_signals', 0)},
+            ]
+            sections.append({
+                'title': '活跃度分析',
+                'type': 'table',
+                'content': {
+                    'columns': [
+                        {'key': 'category', 'label': '数据类别'},
+                        {'key': 'count', 'label': '数量', 'format': 'number'},
+                    ],
+                    'rows': rows,
+                }
+            })
+
         return sections
-    
+
     def _generate_portfolio_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成投资组合内容"""
         sections = []
-        
+
         if 'error' in data:
-            sections.append({
-                'title': '错误信息',
-                'type': 'error',
-                'content': data['error']
-            })
+            sections.append({'title': '错误信息', 'type': 'error', 'content': data['error']})
             return sections
-        
+
         if 'metrics' in data:
-            metrics = data['metrics']
+            m = data['metrics']
+            pnl = float(m.get('total_unrealized_pnl') or 0)
             sections.append({
                 'title': '组合概览',
-                'type': 'summary',
-                'content': f"组合总市值: {metrics.get('total_market_value', 0):,.2f}，"
-                          f"未实现盈亏: {metrics.get('total_unrealized_pnl', 0):,.2f}，"
-                          f"持仓数量: {data.get('position_count', 0)}个。"
+                'type': 'metrics',
+                'content': [
+                    {'label': '总市值', 'value': float(m.get('total_market_value') or 0), 'format': 'currency', 'icon': 'bi-wallet2', 'color': 'primary'},
+                    {'label': '未实现盈亏', 'value': pnl, 'format': 'pnl', 'icon': 'bi-cash-stack', 'color': self._pnl_color(pnl)},
+                    {'label': '持仓数量', 'value': data.get('position_count', 0), 'format': 'number', 'icon': 'bi-box-seam', 'color': 'info'},
+                    {'label': '收益率', 'value': float(m.get('total_pnl_percentage') or 0), 'format': 'percent', 'icon': 'bi-percent', 'color': self._pnl_color(float(m.get('total_pnl_percentage') or 0))},
+                ]
             })
-        
-        if 'holdings' in data:
+
+        if 'holdings' in data and data['holdings']:
             sections.append({
                 'title': '持仓明细',
                 'type': 'table',
-                'content': data['holdings'][:10]  # 显示前10个持仓
+                'content': {
+                    'columns': [
+                        {'key': 'ts_code', 'label': '股票代码'},
+                        {'key': 'position_size', 'label': '持仓数量', 'format': 'number'},
+                        {'key': 'market_value', 'label': '市值', 'format': 'currency'},
+                        {'key': 'unrealized_pnl', 'label': '浮动盈亏', 'format': 'pnl'},
+                        {'key': 'weight', 'label': '权重%', 'format': 'percent'},
+                        {'key': 'sector', 'label': '行业'},
+                    ],
+                    'rows': data['holdings'][:10],
+                }
             })
-        
+
+        # 行业分布图表
+        if 'metrics' in data:
+            sector_dist = data['metrics'].get('sector_distribution') or {}
+            if sector_dist:
+                sections.append({
+                    'title': '行业分布',
+                    'type': 'chart',
+                    'content': {
+                        'chart_type': 'pie',
+                        'data': [{'name': k, 'value': round(v, 1)} for k, v in sector_dist.items()],
+                    }
+                })
+
+        # 权重排名
+        if 'holdings' in data and data['holdings']:
+            top = sorted(data['holdings'], key=lambda x: float(x.get('weight') or 0), reverse=True)[:5]
+            sections.append({
+                'title': '权重 TOP5',
+                'type': 'table',
+                'content': {
+                    'columns': [
+                        {'key': 'ts_code', 'label': '股票代码'},
+                        {'key': 'market_value', 'label': '市值', 'format': 'currency'},
+                        {'key': 'weight', 'label': '权重%', 'format': 'percent'},
+                    ],
+                    'rows': top,
+                }
+            })
+
         return sections
-    
+
     def _generate_risk_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成风险评估内容"""
         sections = []
-        
+
         if 'error' in data:
-            sections.append({
-                'title': '错误信息',
-                'type': 'error',
-                'content': data['error']
-            })
+            sections.append({'title': '错误信息', 'type': 'error', 'content': data['error']})
             return sections
-        
+
         if 'risk_metrics' in data:
-            metrics = data['risk_metrics']
+            m = data['risk_metrics']
+            pnl = float(m.get('total_pnl') or 0)
+            conc = float(m.get('concentration_risk') or 0)
+            alerts = int(m.get('active_alerts') or 0)
             sections.append({
                 'title': '风险指标',
-                'type': 'summary',
-                'content': f"组合总价值: {metrics.get('total_value', 0):,.2f}，"
-                          f"集中度风险: {metrics.get('concentration_risk', 0):.2f}%，"
-                          f"活跃预警: {metrics.get('active_alerts', 0)}个。"
+                'type': 'metrics',
+                'content': [
+                    {'label': '组合总价值', 'value': float(m.get('total_value') or 0), 'format': 'currency', 'icon': 'bi-shield-check', 'color': 'primary'},
+                    {'label': '集中度风险', 'value': conc, 'format': 'percent', 'icon': 'bi-exclamation-diamond', 'color': self._risk_color(conc)},
+                    {'label': '浮动盈亏', 'value': pnl, 'format': 'pnl', 'icon': 'bi-graph-up-arrow', 'color': self._pnl_color(pnl)},
+                    {'label': '活跃预警', 'value': alerts, 'format': 'number', 'icon': 'bi-bell', 'color': 'danger' if alerts > 0 else 'success'},
+                ]
             })
-        
+
         if 'risk_alerts' in data and data['risk_alerts']:
             sections.append({
                 'title': '风险预警',
                 'type': 'alerts',
-                'content': data['risk_alerts']
+                'content': {
+                    'severity_field': 'alert_level',
+                    'items': data['risk_alerts'],
+                }
             })
-        
+
+        # 行业敞口
+        if 'sector_exposure' in data:
+            se = data['sector_exposure']
+            total_exposure = sum(float(v) for v in se.values()) or 1
+            rows = [{'sector': k, 'exposure': v, 'weight_pct': v / total_exposure * 100} for k, v in se.items()]
+            rows.sort(key=lambda x: x['exposure'], reverse=True)
+            sections.append({
+                'title': '行业敞口',
+                'type': 'table',
+                'content': {
+                    'columns': [
+                        {'key': 'sector', 'label': '行业'},
+                        {'key': 'exposure', 'label': '敞口金额', 'format': 'currency'},
+                        {'key': 'weight_pct', 'label': '占比%', 'format': 'percent'},
+                    ],
+                    'rows': rows,
+                }
+            })
+
         return sections
-    
+
     def _generate_signal_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成信号分析内容"""
         sections = []
-        
+
         if 'signal_summary' in data:
-            summary = data['signal_summary']
+            s = data['signal_summary']
+            total = s.get('total_signals', 0)
+            types = s.get('signal_types', {})
+            buy_count = types.get('BUY', 0)
+            sell_count = types.get('SELL', 0)
             sections.append({
                 'title': '信号概览',
-                'type': 'summary',
-                'content': f"分析期间({summary['analysis_period']})共生成{summary['total_signals']}个交易信号。"
+                'type': 'metrics',
+                'content': [
+                    {'label': '总信号数', 'value': total, 'format': 'number', 'icon': 'bi-lightning', 'color': 'primary'},
+                    {'label': '买入信号', 'value': buy_count, 'format': 'number', 'icon': 'bi-arrow-up-circle', 'color': 'success'},
+                    {'label': '卖出信号', 'value': sell_count, 'format': 'number', 'icon': 'bi-arrow-down-circle', 'color': 'danger'},
+                    {'label': '分析周期', 'value': s.get('analysis_period', '-'), 'format': 'text', 'icon': 'bi-clock', 'color': 'info'},
+                ]
             })
-            
-            if 'signal_types' in summary:
+
+            # 信号类型分布图表
+            if types:
                 sections.append({
                     'title': '信号类型分布',
                     'type': 'chart',
-                    'content': summary['signal_types']
+                    'content': {
+                        'chart_type': 'bar',
+                        'data': [{'name': k, 'value': v} for k, v in types.items()],
+                    }
                 })
-        
-        if 'recent_signals' in data:
+
+        # 策略表现表格
+        if 'signal_summary' in data:
+            perf = data['signal_summary'].get('strategy_performance') or {}
+            if perf:
+                rows = [
+                    {'strategy': k, 'count': v.get('count', 0), 'avg_strength': round(v.get('avg_strength', 0), 3)}
+                    for k, v in perf.items()
+                ]
+                rows.sort(key=lambda x: x['count'], reverse=True)
+                sections.append({
+                    'title': '策略表现',
+                    'type': 'table',
+                    'content': {
+                        'columns': [
+                            {'key': 'strategy', 'label': '策略'},
+                            {'key': 'count', 'label': '信号数', 'format': 'number'},
+                            {'key': 'avg_strength', 'label': '平均强度', 'format': 'number'},
+                        ],
+                        'rows': rows,
+                    }
+                })
+
+        # 最新信号表格
+        if 'recent_signals' in data and data['recent_signals']:
+            rows = data['recent_signals'][:15]
             sections.append({
                 'title': '最新信号',
                 'type': 'table',
-                'content': data['recent_signals']
+                'content': {
+                    'columns': [
+                        {'key': 'ts_code', 'label': '股票代码'},
+                        {'key': 'strategy_name', 'label': '策略'},
+                        {'key': 'signal_type', 'label': '信号类型'},
+                        {'key': 'signal_strength', 'label': '强度', 'format': 'number'},
+                        {'key': 'confidence', 'label': '置信度', 'format': 'percent'},
+                    ],
+                    'rows': rows,
+                }
             })
-        
+
         return sections
-    
+
     def _generate_market_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成市场概览内容"""
         sections = []
-        
+
         if 'market_overview' in data:
-            overview = data['market_overview']
+            o = data['market_overview']
             sections.append({
                 'title': '市场概览',
-                'type': 'summary',
-                'content': f"今日活跃股票{overview['active_stocks']}只，"
-                          f"总成交量{overview.get('total_volume', 0):,.0f}，"
-                          f"平均数据点{overview.get('avg_data_points', 0):.1f}个。"
+                'type': 'metrics',
+                'content': [
+                    {'label': '活跃股票', 'value': o.get('active_stocks', 0), 'format': 'number', 'icon': 'bi-graph-up', 'color': 'primary'},
+                    {'label': '总成交量', 'value': float(o.get('total_volume') or 0), 'format': 'number', 'icon': 'bi-bar-chart', 'color': 'success'},
+                    {'label': '平均数据点', 'value': float(o.get('avg_data_points') or 0), 'format': 'number', 'icon': 'bi-speedometer2', 'color': 'info'},
+                    {'label': '分析日期', 'value': o.get('analysis_date', '-'), 'format': 'text', 'icon': 'bi-calendar', 'color': 'secondary'},
+                ]
             })
-        
-        if 'stock_activity' in data:
+
+        # 活跃股票表格
+        if 'stock_activity' in data and data['stock_activity']:
             sections.append({
                 'title': '活跃股票',
                 'type': 'table',
-                'content': data['stock_activity']
+                'content': {
+                    'columns': [
+                        {'key': 'ts_code', 'label': '股票代码'},
+                        {'key': 'data_points', 'label': '数据点', 'format': 'number'},
+                        {'key': 'high', 'label': '最高价', 'format': 'currency'},
+                        {'key': 'low', 'label': '最低价', 'format': 'currency'},
+                        {'key': 'total_volume', 'label': '总成交量', 'format': 'number'},
+                    ],
+                    'rows': data['stock_activity'][:15],
+                }
             })
-        
+
+        # 指标分布图表
+        if 'indicator_distribution' in data:
+            dist = data['indicator_distribution']
+            if dist:
+                sections.append({
+                    'title': '指标分布',
+                    'type': 'chart',
+                    'content': {
+                        'chart_type': 'pie',
+                        'data': [{'name': str(k), 'value': int(v)} for k, v in dist.items()],
+                    }
+                })
+
+        # 成交排行
+        if 'stock_activity' in data and data['stock_activity']:
+            top = sorted(data['stock_activity'], key=lambda x: float(x.get('total_volume') or 0), reverse=True)[:10]
+            sections.append({
+                'title': '成交排行 TOP10',
+                'type': 'table',
+                'content': {
+                    'columns': [
+                        {'key': 'ts_code', 'label': '股票代码'},
+                        {'key': 'total_volume', 'label': '总成交量', 'format': 'number'},
+                        {'key': 'high', 'label': '最高价', 'format': 'currency'},
+                        {'key': 'low', 'label': '最低价', 'format': 'currency'},
+                    ],
+                    'rows': top,
+                }
+            })
+
         return sections
+
+    @staticmethod
+    def _pnl_color(value: float) -> str:
+        if value > 0:
+            return 'success'
+        if value < 0:
+            return 'danger'
+        return 'secondary'
+
+    @staticmethod
+    def _risk_color(pct: float, medium: float = 20.0, high: float = 40.0) -> str:
+        if pct >= high:
+            return 'danger'
+        if pct >= medium:
+            return 'warning'
+        return 'success'
     
     def get_reports(self, report_type: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """获取报告列表"""
