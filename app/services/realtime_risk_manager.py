@@ -145,6 +145,12 @@ class RealtimeRiskManager:
             risk_positions = []
             alerts = []
 
+            # 先计算实时权重（Parquet positions 的 weight 字段可能为空）
+            total_value = sum(float(pos.get('market_value') or 0) for pos in positions)
+            if total_value > 0:
+                for pos in positions:
+                    pos['weight'] = float(pos.get('market_value') or 0) / total_value * 100
+
             for position in positions:
                 # 更新当前价格
                 current_price = self._get_current_price(position.get('ts_code', ''))

@@ -836,33 +836,14 @@
             const name = prompt('请输入新组合名称:');
             if (!name || !name.trim()) return;
 
-            // 调用后端真正创建组合（空组合：写入一个占位标记）
-            fetch('/api/ml-factor/portfolio', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    portfolio_id: name.trim(),
-                    ts_code: '__PLACEHOLDER__',
-                    position_size: 0,
-                    avg_cost: 0,
-                    sector: ''
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    currentPortfolioId = name.trim();
-                    loadPortfolioList().then(() => {
-                        document.getElementById('portfolioId').value = currentPortfolioId;
-                    });
-                } else {
-                    alert('创建组合失败: ' + (data.message || data.error));
-                }
-            })
-            .catch(error => {
-                console.error('创建组合失败:', error);
-                alert('创建组合失败');
-            });
+            currentPortfolioId = name.trim();
+            // 先更新下拉框，用户后续通过"添加持仓"真正写入数据
+            const select = document.getElementById('portfolioId');
+            const option = document.createElement('option');
+            option.value = currentPortfolioId;
+            option.textContent = currentPortfolioId + ' (0只股票)';
+            select.appendChild(option);
+            select.value = currentPortfolioId;
         }
 
         // 添加持仓（Parquet 数据源）
