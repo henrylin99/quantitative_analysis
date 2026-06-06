@@ -14,7 +14,7 @@ from app.extensions import db
 from app.models.realtime_indicator import RealtimeIndicator
 from app.models.trading_signal import TradingSignal
 from app.models.risk_alert import RiskAlert
-from app.models.portfolio_position import PortfolioPosition
+from app.services.realtime_risk_manager import _portfolio_repo
 from app.services.realtime_data_manager import RealtimeDataManager
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.services.realtime_trading_signal_engine import RealtimeTradingSignalEngine
@@ -308,7 +308,7 @@ class WebSocketPushService:
     def _get_active_portfolio_ids(self) -> List[str]:
         """获取存在真实持仓的活跃投资组合ID。"""
         try:
-            return PortfolioPosition.list_active_portfolio_ids()
+            return _portfolio_repo.list_portfolio_ids(active_only=True)
         except Exception as e:
             logger.error(f"获取活跃投资组合失败: {e}")
             return []
