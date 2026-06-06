@@ -23,6 +23,12 @@ _signal_engine_data_dir = None
 def get_signal_engine():
     global signal_engine, _signal_engine_data_dir
     current_data_dir = os.getenv("DATA_DIR")
+
+    # Preserve injected test doubles and patched engines instead of replacing
+    # them during lazy initialization checks.
+    if signal_engine is not None and not isinstance(signal_engine, RealtimeTradingSignalEngine):
+        return signal_engine
+
     if signal_engine is None or _signal_engine_data_dir != current_data_dir:
         signal_engine = RealtimeTradingSignalEngine()
         _signal_engine_data_dir = current_data_dir
