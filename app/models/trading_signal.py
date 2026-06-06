@@ -14,11 +14,15 @@ class _TradingSignalEvent:
         self.__dict__.update(data)
 
     def to_dict(self):
-        result = dict(self.__dict__)
-        for key in ['datetime', 'created_at', 'updated_at', 'expiry_time', 'executed_time']:
-            value = result.get(key)
-            if hasattr(value, 'isoformat'):
+        import math
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, float) and math.isnan(value):
+                result[key] = None
+            elif hasattr(value, 'isoformat'):
                 result[key] = value.isoformat()
+            else:
+                result[key] = value
         return result
 
 

@@ -152,7 +152,19 @@ class RealtimeMonitorService:
             start_time = end_time - timedelta(hours=period_hours)
             minute_df = self._minute_frame(period_type=self.DEFAULT_PERIOD_TYPE, start_time=start_time, end_time=end_time)
             latest_rows = self._latest_rows(minute_df)
-            
+
+            if latest_rows.empty:
+                return {
+                    'success': True,
+                    'data': {
+                        'sectors': [],
+                        'total_sectors': 0,
+                        'period_hours': period_hours,
+                        'update_time': datetime.now().isoformat()
+                    },
+                    'message': '当前时段无分钟数据'
+                }
+
             sector_performance = []
             
             for sector_name, stock_codes in self.sector_mapping.items():
