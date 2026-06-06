@@ -1,14 +1,14 @@
 """
 实时风险管理API接口
 提供风险计算、监控、预警和止损止盈管理功能
+数据源：Parquet（通过 PortfolioRepository）
 """
 
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 import logging
 
-from app.services.realtime_risk_manager import RealtimeRiskManager
-from app.models.portfolio_position import PortfolioPosition
+from app.services.realtime_risk_manager import RealtimeRiskManager, _portfolio_repo, _update_market_data_inplace, _save_position
 from app.models.risk_alert import RiskAlert
 
 logger = logging.getLogger(__name__)
@@ -27,13 +27,13 @@ def calculate_portfolio_risk():
         data = request.get_json()
         portfolio_id = data.get('portfolio_id')
         period_days = data.get('period_days', 252)
-        
+
         if not portfolio_id:
             return jsonify({'success': False, 'message': '组合ID不能为空'})
-        
+
         result = risk_manager.calculate_portfolio_risk(portfolio_id, period_days)
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"计算组合风险失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -44,13 +44,13 @@ def monitor_position_risk():
     """监控持仓风险"""
     try:
         portfolio_id = request.args.get('portfolio_id')
-        
+
         if not portfolio_id:
             return jsonify({'success': False, 'message': '组合ID不能为空'})
-        
+
         result = risk_manager.monitor_position_risk(portfolio_id)
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"监控持仓风险失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -66,10 +66,10 @@ def manage_stop_loss_take_profit():
         stop_loss_value = float(data.get('stop_loss_value', 0.10))
         take_profit_method = data.get('take_profit_method', 'percentage')
         take_profit_value = float(data.get('take_profit_value', 0.20))
-        
+
         if not portfolio_id:
             return jsonify({'success': False, 'message': '组合ID不能为空'})
-        
+
         result = risk_manager.manage_stop_loss_take_profit(
             portfolio_id=portfolio_id,
             stop_loss_method=stop_loss_method,
@@ -77,9 +77,9 @@ def manage_stop_loss_take_profit():
             take_profit_method=take_profit_method,
             take_profit_value=take_profit_value
         )
-        
+
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"管理止损止盈失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -92,15 +92,15 @@ def get_risk_alerts():
         portfolio_id = request.args.get('portfolio_id')
         alert_level = request.args.get('alert_level')
         active_only = request.args.get('active_only', 'true').lower() == 'true'
-        
+
         result = risk_manager.get_risk_alerts(
             portfolio_id=portfolio_id,
             alert_level=alert_level,
             active_only=active_only
         )
-        
+
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"获取风险预警失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -117,10 +117,10 @@ def create_risk_alert():
         alert_message = data.get('alert_message')
         risk_value = data.get('risk_value')
         threshold_value = data.get('threshold_value')
-        
+
         if not all([ts_code, alert_type, alert_level, alert_message]):
             return jsonify({'success': False, 'message': '必填字段不能为空'})
-        
+
         result = risk_manager.create_risk_alert(
             ts_code=ts_code,
             alert_type=alert_type,
@@ -129,9 +129,9 @@ def create_risk_alert():
             risk_value=risk_value,
             threshold_value=threshold_value
         )
-        
+
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"创建风险预警失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -142,16 +142,16 @@ def resolve_risk_alert(alert_id):
     """解决风险预警"""
     try:
         alert = RiskAlert.resolve_by_id(alert_id)
-        
+
         if not alert:
             return jsonify({'success': False, 'message': '预警记录不存在'})
-        
+
         return jsonify({
             'success': True,
             'data': alert.to_dict(),
             'message': '预警已解决'
         })
-        
+
     except Exception as e:
         logger.error(f"解决风险预警失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -167,32 +167,34 @@ def create_portfolio_position():
         position_size = float(data.get('position_size'))
         avg_cost = float(data.get('avg_cost'))
         sector = data.get('sector')
-        
+
         if not all([portfolio_id, ts_code, position_size, avg_cost]):
             return jsonify({'success': False, 'message': '必填字段不能为空'})
-        
+
         # 检查是否已存在
-        existing_position = PortfolioPosition.get_position_by_stock(portfolio_id, ts_code)
+        existing_position = _portfolio_repo.get_position_by_stock(portfolio_id, ts_code)
         if existing_position:
             return jsonify({'success': False, 'message': '该股票持仓已存在'})
-        
+
         # 创建持仓
-        position = PortfolioPosition.create_position(
-            portfolio_id=portfolio_id,
-            ts_code=ts_code,
-            position_size=position_size,
-            avg_cost=avg_cost,
-            current_price=avg_cost,  # 初始价格设为成本价
-            market_value=position_size * avg_cost,
-            sector=sector
-        )
+        position = _portfolio_repo.upsert_position({
+            'portfolio_id': portfolio_id,
+            'ts_code': ts_code,
+            'position_size': position_size,
+            'avg_cost': avg_cost,
+            'current_price': avg_cost,  # 初始价格设为成本价
+            'market_value': position_size * avg_cost,
+            'unrealized_pnl': 0,
+            'sector': sector,
+            'is_active': True,
+        })
 
         return jsonify({
             'success': True,
-            'data': position.to_dict(),
+            'data': position,
             'message': '持仓创建成功'
         })
-        
+
     except Exception as e:
         logger.error(f"创建持仓失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -203,19 +205,19 @@ def get_portfolio_positions(portfolio_id):
     """获取投资组合持仓"""
     try:
         active_only = request.args.get('active_only', 'true').lower() == 'true'
-        
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id, active_only)
-        
+
+        positions = _portfolio_repo.list_positions(portfolio_id, active_only)
+
         return jsonify({
             'success': True,
             'data': {
                 'portfolio_id': portfolio_id,
-                'positions': [pos.to_dict() for pos in positions],
+                'positions': positions,
                 'total_positions': len(positions)
             },
             'message': f'获取到 {len(positions)} 个持仓'
         })
-        
+
     except Exception as e:
         logger.error(f"获取持仓失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -225,17 +227,17 @@ def get_portfolio_positions(portfolio_id):
 def get_portfolio_metrics(portfolio_id):
     """获取投资组合指标"""
     try:
-        metrics = PortfolioPosition.calculate_portfolio_metrics(portfolio_id)
-        
+        metrics = _portfolio_repo.calculate_metrics(portfolio_id)
+
         if not metrics:
             return jsonify({'success': False, 'message': '组合中没有持仓数据'})
-        
+
         return jsonify({
             'success': True,
             'data': metrics,
             'message': '组合指标计算成功'
         })
-        
+
     except Exception as e:
         logger.error(f"获取组合指标失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -246,27 +248,46 @@ def update_portfolio_position(portfolio_id, position_id):
     """更新投资组合持仓"""
     try:
         data = request.get_json()
-        
-        position = PortfolioPosition.update_position_by_id(
-            portfolio_id,
-            position_id,
-            position_size=float(data['position_size']) if 'position_size' in data else None,
-            avg_cost=float(data['avg_cost']) if 'avg_cost' in data else None,
-            current_price=float(data['current_price']) if 'current_price' in data else None,
-            sector=data.get('sector'),
-            stop_loss_price=float(data['stop_loss_price']) if 'stop_loss_price' in data else None,
-            take_profit_price=float(data['take_profit_price']) if 'take_profit_price' in data else None,
-        )
-        
-        if not position:
+
+        # 从 Parquet 中找到该持仓
+        positions = _portfolio_repo.list_positions(portfolio_id, active_only=False)
+        target = None
+        for pos in positions:
+            if pos.get('id') == position_id:
+                target = pos
+                break
+
+        if not target:
             return jsonify({'success': False, 'message': '持仓记录不存在'})
-        
+
+        # 更新字段
+        if 'position_size' in data:
+            target['position_size'] = float(data['position_size'])
+        if 'avg_cost' in data:
+            target['avg_cost'] = float(data['avg_cost'])
+        if 'current_price' in data:
+            target['current_price'] = float(data['current_price'])
+        if 'sector' in data:
+            target['sector'] = data['sector']
+        if 'stop_loss_price' in data:
+            target['stop_loss_price'] = float(data['stop_loss_price'])
+        if 'take_profit_price' in data:
+            target['take_profit_price'] = float(data['take_profit_price'])
+
+        # 重算市值和浮动盈亏
+        cp = float(target.get('current_price') or 0)
+        if cp:
+            target['market_value'] = float(target.get('position_size') or 0) * cp
+            target['unrealized_pnl'] = (cp - float(target.get('avg_cost') or 0)) * float(target.get('position_size') or 0)
+
+        _save_position(target)
+
         return jsonify({
             'success': True,
-            'data': position.to_dict(),
+            'data': target,
             'message': '持仓更新成功'
         })
-        
+
     except Exception as e:
         logger.error(f"更新持仓失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -274,16 +295,26 @@ def update_portfolio_position(portfolio_id, position_id):
 
 @realtime_risk_bp.route('/portfolio/<portfolio_id>/positions/<int:position_id>', methods=['DELETE'])
 def delete_portfolio_position(portfolio_id, position_id):
-    """删除投资组合持仓"""
+    """删除投资组合持仓（软删除）"""
     try:
-        if not PortfolioPosition.delete_position_by_id(portfolio_id, position_id):
+        positions = _portfolio_repo.list_positions(portfolio_id, active_only=False)
+        target = None
+        for pos in positions:
+            if pos.get('id') == position_id:
+                target = pos
+                break
+
+        if not target:
             return jsonify({'success': False, 'message': '持仓记录不存在'})
-        
+
+        target['is_active'] = False
+        _save_position(target)
+
         return jsonify({
             'success': True,
             'message': '持仓删除成功'
         })
-        
+
     except Exception as e:
         logger.error(f"删除持仓失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -298,7 +329,7 @@ def get_risk_thresholds():
             'data': risk_manager.risk_thresholds,
             'message': '风险阈值获取成功'
         })
-        
+
     except Exception as e:
         logger.error(f"获取风险阈值失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -309,18 +340,17 @@ def update_risk_thresholds():
     """更新风险阈值配置"""
     try:
         data = request.get_json()
-        
-        # 更新阈值
+
         for key, value in data.items():
             if key in risk_manager.risk_thresholds:
                 risk_manager.risk_thresholds[key] = float(value)
-        
+
         return jsonify({
             'success': True,
             'data': risk_manager.risk_thresholds,
             'message': '风险阈值更新成功'
         })
-        
+
     except Exception as e:
         logger.error(f"更新风险阈值失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -332,20 +362,20 @@ def batch_update_prices():
     try:
         data = request.get_json()
         portfolio_id = data.get('portfolio_id')
-        
+
         if not portfolio_id:
             return jsonify({'success': False, 'message': '组合ID不能为空'})
-        
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
+
+        positions = _portfolio_repo.list_positions(portfolio_id)
         updated_count = 0
-        
+
         for position in positions:
-            # 获取最新价格
-            current_price = risk_manager._get_current_price(position.ts_code)
+            current_price = risk_manager._get_current_price(position.get('ts_code', ''))
             if current_price:
-                position.update_market_data(current_price)
+                _update_market_data_inplace(position, current_price)
+                _save_position(position)
                 updated_count += 1
-        
+
         return jsonify({
             'success': True,
             'data': {
@@ -355,7 +385,7 @@ def batch_update_prices():
             },
             'message': f'成功更新 {updated_count} 个持仓的价格'
         })
-        
+
     except Exception as e:
         logger.error(f"批量更新价格失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -368,46 +398,43 @@ def run_stress_test():
         data = request.get_json()
         portfolio_id = data.get('portfolio_id')
         scenarios = data.get('scenarios', [])
-        
+
         if not portfolio_id:
             return jsonify({'success': False, 'message': '组合ID不能为空'})
-        
+
         if not scenarios:
-            # 默认压力测试场景
             scenarios = [
                 {'name': '市场下跌10%', 'market_shock': -0.10},
                 {'name': '市场下跌20%', 'market_shock': -0.20},
                 {'name': '波动率上升50%', 'volatility_shock': 0.50},
                 {'name': '相关性上升至0.9', 'correlation_shock': 0.90}
             ]
-        
-        # 获取组合持仓
-        positions = PortfolioPosition.get_portfolio_positions(portfolio_id)
-        
+
+        positions = _portfolio_repo.list_positions(portfolio_id)
+
         if not positions:
             return jsonify({'success': False, 'message': '组合中没有持仓数据'})
-        
+
         stress_results = []
-        
+
         for scenario in scenarios:
             scenario_result = {
                 'scenario_name': scenario['name'],
-                'original_value': sum(pos.market_value or 0 for pos in positions),
+                'original_value': sum(float(pos.get('market_value') or 0) for pos in positions),
                 'stressed_value': 0,
                 'pnl_change': 0,
                 'pnl_percentage': 0
             }
-            
-            # 简化的压力测试计算
+
             if 'market_shock' in scenario:
                 shock = scenario['market_shock']
-                stressed_value = sum((pos.market_value or 0) * (1 + shock) for pos in positions)
+                stressed_value = sum(float(pos.get('market_value') or 0) * (1 + shock) for pos in positions)
                 scenario_result['stressed_value'] = stressed_value
                 scenario_result['pnl_change'] = stressed_value - scenario_result['original_value']
-                scenario_result['pnl_percentage'] = scenario_result['pnl_change'] / scenario_result['original_value'] * 100
-            
+                scenario_result['pnl_percentage'] = scenario_result['pnl_change'] / scenario_result['original_value'] * 100 if scenario_result['original_value'] > 0 else 0
+
             stress_results.append(scenario_result)
-        
+
         return jsonify({
             'success': True,
             'data': {
@@ -419,7 +446,7 @@ def run_stress_test():
             },
             'message': f'压力测试完成，测试了 {len(scenarios)} 个场景'
         })
-        
+
     except Exception as e:
         logger.error(f"压力测试失败: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}) 
+        return jsonify({'success': False, 'message': str(e)})
