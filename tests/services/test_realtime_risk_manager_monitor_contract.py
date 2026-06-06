@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from app.services.realtime_risk_manager import RealtimeRiskManager
 
 
@@ -36,6 +38,50 @@ def test_monitor_position_risk_updates_market_data():
     assert saved["current_price"] == 11.0
     assert saved["market_value"] == 11000.0
     assert saved["unrealized_pnl"] == 1000.0
+
+
+def test_monitor_position_risk_computes_weights_after_price_refresh():
+    """Weight 应基于刷新后的市值计算，而非刷新前。"""
+    manager = RealtimeRiskManager()
+
+    positions = [
+        {
+            "ts_code": "000001.SZ",
+            "position_size": 1000.0,
+            "avg_cost": 10.0,
+            "current_price": 10.0,
+            "market_value": 10000.0,
+            "unrealized_pnl": 0.0,
+            "weight": None,
+            "is_active": True,
+        },
+        {
+            "ts_code": "000002.SZ",
+            "position_size": 500.0,
+            "avg_cost": 20.0,
+            "current_price": 20.0,
+            "market_value": 10000.0,
+            "unrealized_pnl": 0.0,
+            "weight": None,
+            "is_active": True,
+        },
+    ]
+
+    def fake_get_price(ts_code):
+        return 12.0 if ts_code == "000001.SZ" else 18.0
+
+    with patch("app.services.realtime_risk_manager._portfolio_repo") as repo:
+        repo.list_positions.return_value = positions
+        repo.calculate_metrics.return_value = {"total_market_value": 21000.0}
+
+        with patch.object(manager, "_get_current_price", side_effect=fake_get_price):
+            result = manager.monitor_position_risk("growth_a")
+
+    assert result["success"] is True
+    # 000001: 1000*12=12000, 000002: 500*18=9000, total=21000
+    # weight: 12000/21000*100 ≈ 57.14, 9000/21000*100 ≈ 42.86
+    assert positions[0]["weight"] == pytest.approx(57.142857, rel=1e-3)
+    assert positions[1]["weight"] == pytest.approx(42.857142, rel=1e-3)
 
 
 def test_create_risk_alert_uses_model_creator():
