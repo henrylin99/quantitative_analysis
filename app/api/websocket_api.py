@@ -6,6 +6,7 @@ WebSocket管理API
 from flask import Blueprint, request, jsonify
 from app.services.websocket_push_service import push_service
 from app.websocket.websocket_events import get_connection_stats
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -192,7 +193,7 @@ def test_connection():
         test_data = {
             'type': 'test',
             'message': 'WebSocket连接测试',
-            'timestamp': push_service.get_push_status()['connection_stats']
+            'timestamp': datetime.now().isoformat()
         }
         
         push_service.trigger_immediate_push('monitor', test_data)

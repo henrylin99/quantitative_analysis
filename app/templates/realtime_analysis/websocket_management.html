@@ -257,7 +257,7 @@
             }
 
             try {
-                socket = io('http://127.0.0.1:5001', {
+                socket = io(window.location.origin, {
                     transports: ['websocket', 'polling']
                 });
 
@@ -656,7 +656,7 @@
                     <small class="text-muted">${timestamp}</small>
                 </div>
                 <div class="small text-muted">
-                    ${JSON.stringify(data, null, 2).substring(0, 200)}...
+                    ${JSON.stringify(data, null, 2).substring(0, 200)}${JSON.stringify(data).length > 200 ? '...' : ''}
                 </div>
             `;
             

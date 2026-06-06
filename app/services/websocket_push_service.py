@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import json
+import pandas as pd
 
 from app.extensions import db
 from app.models.realtime_indicator import RealtimeIndicator
@@ -43,7 +44,6 @@ class WebSocketPushService:
         self.event_store = ParquetEventStore()
         
         self.is_running = False
-        self.push_thread = None
         self.push_interval = 30  # 推送间隔（秒）
         
         # 推送配置
@@ -65,43 +65,42 @@ class WebSocketPushService:
         if self.is_running:
             logger.warning("推送服务已在运行")
             return
-        
+
         self.is_running = True
-        self.push_thread = threading.Thread(target=self._push_loop, daemon=True)
-        self.push_thread.start()
+        from app.extensions import socketio
+        socketio.start_background_task(target=self._push_loop)
         logger.info("WebSocket推送服务已启动")
-    
+
     def stop_push_service(self):
         """停止推送服务"""
         self.is_running = False
-        if self.push_thread:
-            self.push_thread.join(timeout=5)
         logger.info("WebSocket推送服务已停止")
     
     def _push_loop(self):
         """推送循环"""
+        from app.extensions import socketio as _sio
         while self.is_running:
             try:
                 current_time = datetime.now()
-                
+
                 # 检查各类数据是否需要推送
                 for data_type, config in self.push_config.items():
                     if not config['enabled']:
                         continue
-                    
+
                     last_push = self.last_push_times.get(data_type)
-                    if (not last_push or 
+                    if (not last_push or
                         (current_time - last_push).total_seconds() >= config['interval']):
-                        
+
                         self._push_data_type(data_type)
                         self.last_push_times[data_type] = current_time
-                
+
                 # 等待下一次检查
-                time.sleep(10)  # 每10秒检查一次
-                
+                _sio.sleep(10)  # 使用 socketio.sleep 保证 eventlet 兼容
+
             except Exception as e:
                 logger.error(f"推送循环错误: {e}")
-                time.sleep(30)  # 出错后等待30秒再继续
+                _sio.sleep(30)
     
     def _push_data_type(self, data_type: str):
         """推送指定类型的数据"""
@@ -127,32 +126,40 @@ class WebSocketPushService:
     def _push_market_data(self):
         """推送市场数据"""
         try:
-            # 获取活跃股票列表
-            active_stocks = self.data_manager.get_active_stocks()
-            
-            for stock in active_stocks[:20]:  # 限制推送数量
-                ts_code = stock['ts_code']
-                
-                # 获取最新数据
-                latest_data = self.data_manager.get_latest_data(ts_code, '1min', 1)
-                if latest_data:
-                    market_data = {
-                        'ts_code': ts_code,
-                        'datetime': latest_data[0]['datetime'],
-                        'open': latest_data[0]['open'],
-                        'high': latest_data[0]['high'],
-                        'low': latest_data[0]['low'],
-                        'close': latest_data[0]['close'],
-                        'volume': latest_data[0]['volume'],
-                        'amount': latest_data[0]['amount'],
-                        'change_pct': self._calculate_change_pct(latest_data[0])
-                    }
-                    
-                    broadcast_market_data(ts_code, market_data)
-                    broadcast_market_data('all', market_data)  # 广播到全局房间
-            
-            logger.debug(f"推送市场数据完成，股票数量: {len(active_stocks)}")
-            
+            # 获取有分钟数据的股票列表
+            active_stocks = self.data_manager.get_available_minute_stocks()
+
+            pushed_count = 0
+            for ts_code in active_stocks[:20]:  # 限制推送数量
+                # 尝试各周期，优先1min，fallback到更粗粒度
+                latest_data = pd.DataFrame()
+                for period in ['1min', '5min', '15min', '30min', '60min']:
+                    latest_data = self.data_manager.get_minute_latest_data(ts_code, period, 2)
+                    if not latest_data.empty:
+                        break
+
+                if latest_data.empty:
+                    continue
+
+                row = latest_data.iloc[0]
+                market_data = {
+                    'ts_code': ts_code,
+                    'datetime': str(row.get('datetime', '')),
+                    'open': float(row.get('open', 0)),
+                    'high': float(row.get('high', 0)),
+                    'low': float(row.get('low', 0)),
+                    'close': float(row.get('close', 0)),
+                    'volume': float(row.get('volume', 0)),
+                    'amount': float(row.get('amount', 0)),
+                    'change_pct': self._calculate_change_pct(latest_data)
+                }
+
+                broadcast_market_data(ts_code, market_data)
+                broadcast_market_data('all', market_data)  # 广播到全局房间
+                pushed_count += 1
+
+            logger.info(f"推送市场数据完成，股票数量: {pushed_count}/{len(active_stocks)}")
+
         except Exception as e:
             logger.error(f"推送市场数据失败: {e}")
     
@@ -240,18 +247,22 @@ class WebSocketPushService:
         """推送监控数据"""
         try:
             # 获取监控数据
+            anomaly_result = self.monitor_service.detect_anomalies(
+                change_threshold=5.0, volume_threshold=3.0
+            )
+            anomaly_list = anomaly_result.get('data', {}).get('anomalies', []) \
+                if isinstance(anomaly_result, dict) and anomaly_result.get('success') else []
+
             monitor_data = {
-                'market_overview': self.monitor_service.get_market_overview(),
-                'top_movers': self.monitor_service.get_top_movers(limit=10),
-                'anomalies': self.monitor_service.detect_anomalies(
-                    change_threshold=5.0, volume_threshold=3.0
-                ),
-                'sentiment': self.monitor_service.calculate_market_sentiment(period_hours=1)
+                'market_overview': self.data_manager.get_market_overview(),
+                'top_movers': anomaly_list,
+                'anomalies': anomaly_list,
+                'sentiment': self.monitor_service.get_market_sentiment(period_hours=1)
             }
-            
+
             broadcast_monitor_data(monitor_data)
-            logger.debug("推送监控数据完成")
-            
+            logger.info("推送监控数据完成")
+
         except Exception as e:
             logger.error(f"推送监控数据失败: {e}")
     
@@ -331,17 +342,22 @@ class WebSocketPushService:
         """获取可推送的新闻数据。默认不生成模拟新闻。"""
         return []
     
-    def _calculate_change_pct(self, current_data: Dict) -> float:
-        """计算涨跌幅"""
+    def _calculate_change_pct(self, latest_data) -> float:
+        """计算涨跌幅，传入最近2条DataFrame记录"""
         try:
-            # 获取前一个交易日收盘价（简化处理）
-            prev_close = current_data.get('open', current_data['close'])
-            current_close = current_data['close']
-            
+            if latest_data.empty:
+                return 0.0
+            current_close = float(latest_data.iloc[0].get('close', 0))
+            if len(latest_data) >= 2:
+                prev_close = float(latest_data.iloc[1].get('close', 0))
+            else:
+                # 只有1条数据时用开盘价作为近似
+                prev_close = float(latest_data.iloc[0].get('open', current_close))
+
             if prev_close and prev_close != 0:
                 return round(((current_close - prev_close) / prev_close) * 100, 2)
             return 0.0
-            
+
         except Exception:
             return 0.0
     
