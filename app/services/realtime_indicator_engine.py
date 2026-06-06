@@ -699,7 +699,7 @@ class RealtimeIndicatorEngine:
             多周期指标结果
         """
         if periods is None:
-            periods = ['1min', '5min', '15min', '30min', '60min']
+            periods = ['5min', '15min', '30min', '60min']
         
         if indicators is None:
             indicators = ['MA', 'EMA', 'MACD', 'RSI']

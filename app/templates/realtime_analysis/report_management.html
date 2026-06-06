@@ -21,6 +21,12 @@
             border-radius: 6px;
             padding: 12px;
         }
+        .report-section { padding: 8px 0 8px 12px; margin-bottom: 14px; }
+        .report-section .section-title { font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; }
+        .metric-card { background: var(--obs-surface); border: none; border-radius: 8px; padding: 10px 8px; text-align: center; }
+        .metric-card .metric-icon { font-size: 1.3rem; margin-bottom: 4px; }
+        .metric-card .metric-value { font-size: 1.1rem; font-weight: 700; }
+        .metric-card .metric-label { font-size: 0.72rem; color: var(--obs-text-muted); }
     </style>
 {% endblock %}
 
@@ -180,8 +186,10 @@
                             </select>
                         </div>
                         <div class="mb-3" id="portfolioIdGroup" style="display: none;">
-                            <label class="form-label">投资组合ID</label>
-                            <input type="text" class="form-control" id="portfolioId" placeholder="请输入真实投资组合ID">
+                            <label class="form-label">投资组合</label>
+                            <select class="form-select" id="portfolioId">
+                                <option value="">请选择投资组合</option>
+                            </select>
                         </div>
                     </form>
                 </div>
@@ -277,8 +285,30 @@
         function setupEventListeners() {
             document.getElementById('reportType').addEventListener('change', function() {
                 const portfolioGroup = document.getElementById('portfolioIdGroup');
-                portfolioGroup.style.display = ['portfolio_analysis', 'risk_assessment'].includes(this.value) ? 'block' : 'none';
+                const show = ['portfolio_analysis', 'risk_assessment'].includes(this.value);
+                portfolioGroup.style.display = show ? 'block' : 'none';
+                if (show) loadPortfolioOptions();
             });
+        }
+
+        async function loadPortfolioOptions() {
+            const select = document.getElementById('portfolioId');
+            if (select.options.length > 1) return; // 已加载过
+            try {
+                const response = await fetch('/api/ml-factor/portfolio/list');
+                const result = await response.json();
+                if (result.success && result.portfolios) {
+                    select.innerHTML = '<option value="">请选择投资组合</option>';
+                    result.portfolios.forEach(p => {
+                        const option = document.createElement('option');
+                        option.value = p.portfolio_id;
+                        option.textContent = `${p.name || p.portfolio_id} (${p.position_count || 0}只)`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('加载组合列表失败:', error);
+            }
         }
 
         async function refreshData() {
@@ -316,6 +346,72 @@
             document.getElementById('totalSubscriptions').textContent = stats.subscriptions ? stats.subscriptions.total : 0;
             document.getElementById('successRate').textContent = stats.reports ? `${(stats.reports.success_rate || 0).toFixed(1)}%` : '0%';
             document.getElementById('statisticsContainer').textContent = JSON.stringify(stats, null, 2);
+            renderStatistics(stats);
+        }
+
+        function renderStatistics(stats) {
+            const container = document.getElementById('statisticsContainer');
+            const r = stats.reports || {};
+            const t = stats.templates || {};
+            const s = stats.subscriptions || {};
+            const typeStats = stats.report_type_stats || {};
+
+            const typeLabels = {
+                daily_summary: '每日总结', portfolio_analysis: '组合分析',
+                risk_assessment: '风险评估', signal_analysis: '信号分析',
+                market_overview: '市场概览', custom: '自定义'
+            };
+
+            container.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="card" style="border-left:4px solid var(--bs-primary);">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-text me-1"></i>报告统计</h6>
+                                <div class="d-flex justify-content-between mb-1"><span>总报告数</span><strong>${r.total || 0}</strong></div>
+                                <div class="d-flex justify-content-between mb-1"><span>已完成</span><strong class="text-success">${r.completed || 0}</strong></div>
+                                <div class="d-flex justify-content-between mb-1"><span>失败</span><strong class="text-danger">${r.failed || 0}</strong></div>
+                                <div class="d-flex justify-content-between"><span>成功率</span><strong>${(r.success_rate || 0).toFixed(1)}%</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card" style="border-left:4px solid var(--bs-success);">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-journal-plus me-1"></i>模板统计</h6>
+                                <div class="d-flex justify-content-between mb-1"><span>总模板数</span><strong>${t.total || 0}</strong></div>
+                                <div class="d-flex justify-content-between"><span>活跃模板</span><strong class="text-success">${t.active || 0}</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card" style="border-left:4px solid var(--bs-warning);">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-bell me-1"></i>订阅统计</h6>
+                                <div class="d-flex justify-content-between mb-1"><span>总订阅数</span><strong>${s.total || 0}</strong></div>
+                                <div class="d-flex justify-content-between"><span>活跃订阅</span><strong class="text-warning">${s.active || 0}</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ${Object.keys(typeStats).length ? `
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3"><i class="bi bi-pie-chart me-1"></i>报告类型分布</h6>
+                        <div class="row g-2">
+                            ${Object.entries(typeStats).map(([k, v]) => `
+                                <div class="col-6 col-md-4 col-lg-2">
+                                    <div class="text-center p-2 rounded" style="background:var(--obs-surface);">
+                                        <div class="fw-bold fs-5">${v}</div>
+                                        <div class="small text-muted">${typeLabels[k] || k}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+            `;
         }
 
         function renderReports() {
@@ -326,18 +422,175 @@
                 container.innerHTML = '<div class="col-12 text-muted">暂无报告数据</div>';
                 return;
             }
-            container.innerHTML = visibleReports.map(report => `
+            container.innerHTML = visibleReports.map(report => {
+                const statusClass = report.report_status === 'completed' ? 'success' :
+                                    report.report_status === 'failed' ? 'danger' : 'warning';
+                return `
                 <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card report-card">
+                    <div class="card report-card" style="cursor:pointer" onclick="toggleReportDetail(${report.id})">
                         <div class="card-body">
-                            <div class="fw-bold">${report.report_name}</div>
-                            <div class="small text-muted mb-2">${report.report_type}</div>
-                            <div class="small">状态: ${report.report_status || '-'}</div>
-                            <div class="small">生成时间: ${report.generated_at || '-'}</div>
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="fw-bold">${report.report_name}</div>
+                                <span class="badge bg-${statusClass}">${report.report_status || '-'}</span>
+                            </div>
+                            <div class="small text-muted mb-1">${report.report_type}</div>
+                            <div class="small text-muted">${report.generated_at || '-'}</div>
+                        </div>
+                        <div class="card-body border-top d-none" id="report-detail-${report.id}" style="max-height:600px;overflow-y:auto;padding:16px;">
+                            ${renderReportContent(report)}
                         </div>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
+        }
+
+        function toggleReportDetail(reportId) {
+            const el = document.getElementById(`report-detail-${reportId}`);
+            if (el) {
+                el.classList.toggle('d-none');
+                if (!el.classList.contains('d-none')) {
+                    setTimeout(() => initSectionCharts(reportId), 80);
+                }
+            }
+        }
+
+        function initSectionCharts(reportId) {
+            const detail = document.getElementById(`report-detail-${reportId}`);
+            if (!detail) return;
+            const chartDivs = detail.querySelectorAll('[id^="report-chart-"]');
+            chartDivs.forEach(div => {
+                if (div._chartInit) return;
+                div._chartInit = true;
+                const idx = parseInt(div.id.replace('report-chart-', ''));
+                const report = reports.find(r => r.id === reportId);
+                if (!report || !report.report_content || !report.report_content.sections) return;
+                const section = report.report_content.sections[idx];
+                if (!section || !section.content) return;
+                try {
+                    const chart = echarts.init(div);
+                    const cd = section.content;
+                    let option;
+                    if (cd.chart_type === 'pie') {
+                        option = {
+                            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                            series: [{ type: 'pie', radius: ['35%', '65%'], label: { fontSize: 11 }, data: cd.data || [] }]
+                        };
+                    } else {
+                        option = {
+                            tooltip: { trigger: 'axis' },
+                            xAxis: { type: 'category', data: (cd.data || []).map(d => d.name), axisLabel: { fontSize: 10 } },
+                            yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+                            series: [{ type: 'bar', data: (cd.data || []).map(d => d.value), itemStyle: { borderRadius: [4,4,0,0] } }]
+                        };
+                    }
+                    chart.setOption(option);
+                } catch (e) { console.warn('Chart init failed:', e); }
+            });
+        }
+
+        // ---- Formatting utilities ----
+        function fmtValue(value, format) {
+            if (value === null || value === undefined) return '--';
+            if (format === 'currency') return '¥' + Number(value).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+            if (format === 'percent') return Number(value).toFixed(1) + '%';
+            if (format === 'pnl') {
+                const n = Number(value);
+                return (n >= 0 ? '+' : '') + n.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+            }
+            if (format === 'number') return Number(value).toLocaleString('zh-CN');
+            if (format === 'text') return String(value);
+            return String(value);
+        }
+        function cellCls(value, format) {
+            if (format === 'pnl') { const n = Number(value); return n > 0 ? 'text-success' : n < 0 ? 'text-danger' : ''; }
+            return '';
+        }
+
+        // ---- Section renderers ----
+        const sectionRenderers = {
+            summary(content) {
+                if (typeof content === 'string') return `<div class="small text-muted">${content}</div>`;
+                return `<div class="json-block small">${JSON.stringify(content, null, 2)}</div>`;
+            },
+            metrics(content) {
+                if (!Array.isArray(content)) return sectionRenderers.summary(content);
+                return '<div class="row g-2">' + content.map(m => {
+                    const val = fmtValue(m.value, m.format);
+                    return `<div class="col-6 col-md-3">
+                        <div class="metric-card">
+                            <div class="metric-icon" style="color:var(--bs-${m.color || 'primary'})"><i class="bi ${m.icon || 'bi-hash'}"></i></div>
+                            <div class="metric-value">${val}</div>
+                            <div class="metric-label">${m.label}</div>
+                        </div>
+                    </div>`;
+                }).join('') + '</div>';
+            },
+            table(content) {
+                let headers, keys, formats = {};
+                let rows;
+                if (Array.isArray(content)) {
+                    if (!content.length) return '<div class="text-muted small">暂无数据</div>';
+                    keys = Object.keys(content[0]);
+                    headers = keys;
+                    rows = content;
+                } else if (content && content.columns && content.rows) {
+                    headers = content.columns.map(c => c.label);
+                    keys = content.columns.map(c => c.key);
+                    content.columns.forEach(c => { if (c.format) formats[c.key] = c.format; });
+                    rows = content.rows;
+                } else {
+                    return `<div class="json-block small">${JSON.stringify(content, null, 2)}</div>`;
+                }
+                if (!rows || !rows.length) return '<div class="text-muted small">暂无数据</div>';
+                return `<div class="table-responsive" style="max-height:220px;overflow-y:auto;">
+                    <table class="table table-sm table-hover" style="font-size:0.78rem;">
+                    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+                    <tbody>${rows.map(row => '<tr>' + keys.map(k => {
+                        const fmt = formats[k];
+                        return `<td class="${cellCls(row[k], fmt)}">${fmtValue(row[k], fmt)}</td>`;
+                    }).join('') + '</tr>').join('')}</tbody>
+                    </table></div>`;
+            },
+            chart(content, idx) {
+                return `<div id="report-chart-${idx}" style="width:100%;height:260px;"></div>`;
+            },
+            alerts(content) {
+                let items, sevField = 'alert_level';
+                if (Array.isArray(content)) { items = content; }
+                else if (content && content.items) { items = content.items; sevField = content.severity_field || 'alert_level'; }
+                else { return `<div class="json-block small">${JSON.stringify(content, null, 2)}</div>`; }
+                if (!items || !items.length) return '<div class="text-muted small">暂无预警</div>';
+                const colorMap = { high: 'danger', medium: 'warning', low: 'success' };
+                return items.map(a => {
+                    const level = (a[sevField] || 'low').toLowerCase();
+                    const c = colorMap[level] || 'secondary';
+                    return `<div style="border-left:3px solid var(--bs-${c});background:var(--bs-${c}-bg,transparent);padding:6px 10px;margin-bottom:5px;border-radius:4px;font-size:0.8rem;">
+                        <strong>${a.ts_code || ''}</strong> - ${a.alert_type || a.alert_message || ''}
+                        ${a.alert_message && a.alert_type ? `<div class="text-muted mt-1">${a.alert_message}</div>` : ''}
+                    </div>`;
+                }).join('');
+            },
+            error(content) {
+                return `<div class="alert alert-danger py-2" style="font-size:0.85rem;"><i class="bi bi-exclamation-triangle me-1"></i>${content}</div>`;
+            },
+        };
+        const sectionIcons = { summary:'bi-file-text', table:'bi-table', chart:'bi-bar-chart', alerts:'bi-bell', metrics:'bi-speedometer2', error:'bi-exclamation-triangle' };
+        const sectionColors = { summary:'primary', table:'info', chart:'success', alerts:'warning', metrics:'primary', error:'danger' };
+
+        function renderReportContent(report) {
+            const content = report.report_content || {};
+            const sections = content.sections || [];
+            if (!sections.length) return '<div class="text-muted small">无报告内容</div>';
+            return sections.map((section, idx) => {
+                const renderer = sectionRenderers[section.type] || sectionRenderers.summary;
+                const icon = sectionIcons[section.type] || 'bi-file-text';
+                const color = sectionColors[section.type] || 'secondary';
+                const body = renderer(section.content, idx);
+                return `<div class="report-section" style="border-left:3px solid var(--bs-${color});">
+                    <div class="fw-bold small mb-2"><i class="bi ${icon} me-1"></i>${section.title || ''}</div>
+                    ${body}
+                </div>`;
+            }).join('');
         }
 
         function renderTemplates() {
@@ -413,7 +666,7 @@
                 parameters: {},
                 generated_by: 'ui',
             };
-            const portfolioId = document.getElementById('portfolioId').value.trim();
+            const portfolioId = document.getElementById('portfolioId').value;
             if (portfolioId) {
                 payload.parameters.portfolio_id = portfolioId;
             }

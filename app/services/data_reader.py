@@ -89,7 +89,23 @@ class ParquetDataReader:
         start_date, end_date : str | None
             "YYYY-MM-DD" 或 "YYYYMMDD" 格式。
         """
-        return self._read_table("daily", ts_codes, start_date, end_date)
+        result = self._read_table("daily", ts_codes, start_date, end_date)
+        # 补充指数日线（000xxx.SH / 399xxx.SZ 等不在个股 daily 分区中）
+        if ts_codes is not None:
+            missing = set(ts_codes) - set(result.get("ts_code", pd.Series()).unique())
+            if missing:
+                index_df = self._read_index_daily(list(missing), start_date, end_date)
+                if not index_df.empty:
+                    result = pd.concat([result, index_df], ignore_index=True)
+                    if "trade_date" in result.columns:
+                        result["trade_date"] = pd.to_datetime(
+                            result["trade_date"], errors="coerce", format="mixed",
+                        )
+                        sort_cols = ["trade_date"]
+                        if "ts_code" in result.columns:
+                            sort_cols.append("ts_code")
+                        result = result.sort_values(sort_cols).reset_index(drop=True)
+        return result
 
     def get_daily_basic(
         self,
@@ -387,7 +403,14 @@ class ParquetDataReader:
 
         # 排序
         if "trade_date" in result.columns:
-            result["trade_date"] = pd.to_datetime(result["trade_date"])
+            # 同一批 parquet 可能同时存在 YYYYMMDD 和 YYYY-MM-DD 两种格式，
+            # 用 mixed 解析可以兼容历史增量数据，避免把整批历史读空。
+            result["trade_date"] = pd.to_datetime(
+                result["trade_date"],
+                errors="coerce",
+                format="mixed",
+            )
+            result = result.dropna(subset=["trade_date"])
             sort_cols = ["trade_date"]
             if "ts_code" in result.columns:
                 sort_cols.append("ts_code")
@@ -459,6 +482,52 @@ class ParquetDataReader:
                         return parquet_path
 
         return None
+
+    def _read_index_daily(
+        self,
+        ts_codes: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """从 index_daily/stock/ts_code=XXX/data.parquet 读取指数日线。"""
+        sd = _parse_date(start_date) if start_date else None
+        ed = _parse_date(end_date) if end_date else None
+
+        base = os.path.join(self.data_dir, "index_daily", "stock")
+        if not os.path.isdir(base):
+            return pd.DataFrame()
+
+        frames = []
+        for code in ts_codes:
+            path = os.path.join(base, f"ts_code={code}", "data.parquet")
+            if not os.path.isfile(path):
+                continue
+            try:
+                df = pd.read_parquet(path)
+                if not df.empty:
+                    frames.append(df)
+            except Exception as e:
+                logger.warning(f"读取指数日线失败 {path}: {e}")
+
+        if not frames:
+            return pd.DataFrame()
+
+        result = pd.concat(frames, ignore_index=True)
+
+        # 日期过滤（index_daily 的 trade_date 格式为 YYYYMMDD）
+        if "trade_date" in result.columns:
+            result["trade_date"] = pd.to_datetime(
+                result["trade_date"], errors="coerce", format="mixed",
+            )
+            result = result.dropna(subset=["trade_date"])
+            if sd:
+                sd_dt = pd.to_datetime(sd)
+                result = result[result["trade_date"] >= sd_dt]
+            if ed:
+                ed_dt = pd.to_datetime(ed)
+                result = result[result["trade_date"] <= ed_dt]
+
+        return result
 
 
 # ------------------------------------------------------------------

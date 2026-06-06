@@ -6,6 +6,24 @@
 from datetime import datetime, timedelta
 from sqlalchemy import Column, String, Float, DateTime, Integer, Index, func, Text
 from app import db
+from app.services.parquet_event_store import ParquetEventStore
+
+
+class _TradingSignalEvent:
+    def __init__(self, data):
+        self.__dict__.update(data)
+
+    def to_dict(self):
+        import math
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, float) and math.isnan(value):
+                result[key] = None
+            elif hasattr(value, 'isoformat'):
+                result[key] = value.isoformat()
+            else:
+                result[key] = value
+        return result
 
 
 class TradingSignal(db.Model):
@@ -56,6 +74,10 @@ class TradingSignal(db.Model):
         Index('idx_signal_datetime_status', 'datetime', 'status'),
         Index('idx_signal_strength', 'signal_strength'),
     )
+
+    @staticmethod
+    def _store() -> ParquetEventStore:
+        return ParquetEventStore()
     
     def __repr__(self):
         return f'<TradingSignal {self.ts_code} {self.strategy_name} {self.signal_type} {self.datetime}>'
@@ -89,181 +111,66 @@ class TradingSignal(db.Model):
     @classmethod
     def get_active_signals(cls, ts_code=None, strategy_name=None, limit=100):
         """获取活跃的交易信号"""
-        query = cls.query.filter_by(status='ACTIVE')
-        
-        if ts_code:
-            query = query.filter_by(ts_code=ts_code)
-        if strategy_name:
-            query = query.filter_by(strategy_name=strategy_name)
-        
-        return query.order_by(cls.datetime.desc()).limit(limit).all()
+        frame = cls._store().get_active_signals(ts_code=ts_code, strategy_name=strategy_name, limit=limit)
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def get_signals_by_time_range(cls, start_time, end_time, ts_code=None, strategy_name=None):
         """根据时间范围获取交易信号"""
-        query = cls.query.filter(
-            cls.datetime >= start_time,
-            cls.datetime <= end_time
+        frame = cls._store().get_signals_by_time_range(
+            start_time=start_time,
+            end_time=end_time,
+            ts_code=ts_code,
+            strategy_name=strategy_name,
         )
-        
-        if ts_code:
-            query = query.filter_by(ts_code=ts_code)
-        if strategy_name:
-            query = query.filter_by(strategy_name=strategy_name)
-        
-        return query.order_by(cls.datetime.asc()).all()
+        return [cls._row_to_event(row) for _, row in frame.iterrows()]
     
     @classmethod
     def get_signal_performance(cls, strategy_name=None, days=30):
         """获取信号表现统计"""
-        end_time = datetime.now()
-        start_time = end_time - timedelta(days=days)
-        
-        query = cls.query.filter(
-            cls.datetime >= start_time,
-            cls.status.in_(['EXECUTED', 'EXPIRED'])
-        )
-        
-        if strategy_name:
-            query = query.filter_by(strategy_name=strategy_name)
-        
-        signals = query.all()
-        
-        if not signals:
-            return {
-                'total_signals': 0,
-                'executed_signals': 0,
-                'win_rate': 0.0,
-                'avg_profit_loss': 0.0,
-                'total_profit_loss': 0.0,
-                'max_profit': 0.0,
-                'max_loss': 0.0
-            }
-        
-        executed_signals = [s for s in signals if s.status == 'EXECUTED' and s.profit_loss is not None]
-        
-        total_signals = len(signals)
-        executed_count = len(executed_signals)
-        
-        if executed_count == 0:
-            return {
-                'total_signals': total_signals,
-                'executed_signals': 0,
-                'win_rate': 0.0,
-                'avg_profit_loss': 0.0,
-                'total_profit_loss': 0.0,
-                'max_profit': 0.0,
-                'max_loss': 0.0
-            }
-        
-        profit_losses = [s.profit_loss for s in executed_signals]
-        winning_signals = [s for s in executed_signals if s.profit_loss > 0]
-        
-        return {
-            'total_signals': total_signals,
-            'executed_signals': executed_count,
-            'win_rate': len(winning_signals) / executed_count * 100,
-            'avg_profit_loss': sum(profit_losses) / executed_count,
-            'total_profit_loss': sum(profit_losses),
-            'max_profit': max(profit_losses) if profit_losses else 0.0,
-            'max_loss': min(profit_losses) if profit_losses else 0.0
-        }
+        return cls._store().get_signal_performance(strategy_name=strategy_name, days=days)
     
     @classmethod
     def batch_insert(cls, signals_data):
         """批量插入信号数据"""
         try:
-            db.session.bulk_insert_mappings(cls, signals_data)
-            db.session.commit()
+            cls._store().append_signals(signals_data)
             return True, f"成功插入 {len(signals_data)} 条信号数据"
         except Exception as e:
-            db.session.rollback()
             return False, f"批量插入失败: {str(e)}"
     
     @classmethod
     def update_signal_status(cls, signal_id, status, executed_price=None, profit_loss=None):
         """更新信号状态"""
         try:
-            signal = cls.query.get(signal_id)
-            if not signal:
-                return False, "信号不存在"
-            
-            signal.status = status
-            signal.updated_at = datetime.now()
-            
-            if executed_price:
-                signal.executed_price = executed_price
-                signal.executed_time = datetime.now()
-            
-            if profit_loss is not None:
-                signal.profit_loss = profit_loss
-                if signal.trigger_price:
-                    signal.profit_loss_pct = (profit_loss / signal.trigger_price) * 100
-            
-            db.session.commit()
-            return True, "信号状态更新成功"
+            success = cls._store().update_signal_status(
+                signal_id,
+                status,
+                executed_price=executed_price,
+                profit_loss=profit_loss,
+            )
+            return (True, "信号状态更新成功") if success else (False, "信号不存在")
         except Exception as e:
-            db.session.rollback()
             return False, f"更新失败: {str(e)}"
     
     @classmethod
     def expire_old_signals(cls, hours=24):
         """过期旧信号"""
         try:
-            cutoff_time = datetime.now() - timedelta(hours=hours)
-            expired_count = cls.query.filter(
-                cls.status == 'ACTIVE',
-                cls.datetime < cutoff_time
-            ).update({'status': 'EXPIRED'})
-            
-            db.session.commit()
+            expired_count = cls._store().expire_old_signals(hours=hours)
             return True, f"过期了 {expired_count} 条信号"
         except Exception as e:
-            db.session.rollback()
             return False, f"过期信号失败: {str(e)}"
     
     @classmethod
     def get_signal_stats(cls):
         """获取信号统计信息"""
         try:
-            # 总信号数
-            total_signals = cls.query.count()
-            
-            # 按状态统计
-            status_stats = db.session.query(
-                cls.status,
-                func.count(cls.id).label('count')
-            ).group_by(cls.status).all()
-            
-            # 按策略统计
-            strategy_stats = db.session.query(
-                cls.strategy_name,
-                func.count(cls.id).label('count')
-            ).group_by(cls.strategy_name).all()
-            
-            # 按信号类型统计
-            type_stats = db.session.query(
-                cls.signal_type,
-                func.count(cls.id).label('count')
-            ).group_by(cls.signal_type).all()
-            
-            # 股票数量
-            stock_count = db.session.query(func.count(func.distinct(cls.ts_code))).scalar()
-            
-            # 时间范围
-            time_range = db.session.query(
-                func.min(cls.datetime).label('earliest'),
-                func.max(cls.datetime).label('latest')
-            ).first()
-            
-            return {
-                'total_signals': total_signals,
-                'total_stocks': stock_count,
-                'status_stats': {stat.status: stat.count for stat in status_stats},
-                'strategy_stats': {stat.strategy_name: stat.count for stat in strategy_stats},
-                'type_stats': {stat.signal_type: stat.count for stat in type_stats},
-                'earliest_time': time_range.earliest.isoformat() if time_range.earliest else None,
-                'latest_time': time_range.latest.isoformat() if time_range.latest else None
-            }
+            return cls._store().get_signal_stats()
         except Exception as e:
-            return {'error': str(e)} 
+            return {'error': str(e)}
+
+    @staticmethod
+    def _row_to_event(row):
+        data = row.to_dict()
+        return _TradingSignalEvent(data)

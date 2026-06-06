@@ -88,8 +88,9 @@
                     <div class="card-body">
                         <h6 class="card-title">选择投资组合</h6>
                         <div class="input-group">
-                            <input type="text" class="form-control" id="portfolioId" 
-                                   placeholder="输入组合ID">
+                            <select class="form-select" id="portfolioId">
+                                <option value="">请选择投资组合</option>
+                            </select>
                             <button class="btn btn-outline-primary" onclick="loadPortfolioData()">
                                 <i class="fas fa-search"></i> 加载
                             </button>
@@ -443,7 +444,8 @@
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
             updateLastUpdateTime();
-            
+            loadPortfolioList();
+
             // 每30秒自动刷新数据
             setInterval(function() {
                 if (currentPortfolioId) {
@@ -452,16 +454,41 @@
             }, 30000);
         });
 
+        // 加载投资组合列表
+        async function loadPortfolioList() {
+            try {
+                const response = await fetch('/api/ml-factor/portfolio/list');
+                const result = await response.json();
+                if (result.success && result.portfolios) {
+                    const select = document.getElementById('portfolioId');
+                    // 保留第一个 placeholder option
+                    select.innerHTML = '<option value="">请选择投资组合</option>';
+                    result.portfolios.forEach(p => {
+                        const label = p.name || p.portfolio_id;
+                        const info = `${p.position_count || 0}只股票`;
+                        const option = document.createElement('option');
+                        option.value = p.portfolio_id;
+                        option.textContent = `${label} (${info})`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('加载组合列表失败:', error);
+            }
+        }
+
         // 加载组合数据
-        function loadPortfolioData() {
-            const portfolioId = document.getElementById('portfolioId').value.trim();
+        async function loadPortfolioData() {
+            const portfolioId = document.getElementById('portfolioId').value;
             if (!portfolioId) {
-                alert('请输入组合ID');
+                alert('请选择投资组合');
                 return;
             }
-            
+
             currentPortfolioId = portfolioId;
-            
+
+            // 先刷新实时价格，再加载持仓
+            await refreshPrices();
             // 加载持仓数据
             loadPositions();
             // 加载风险监控数据
@@ -470,39 +497,50 @@
             loadAlerts();
         }
 
-        // 加载持仓数据
+        // 从通达信刷新实时价格（节流：60秒内不重复请求）
+        let _lastRefreshTime = 0;
+        async function refreshPrices() {
+            const now = Date.now();
+            if (now - _lastRefreshTime < 60000) return;
+            _lastRefreshTime = now;
+            try {
+                const response = await fetch(
+                    `/api/ml-factor/portfolio/${encodeURIComponent(currentPortfolioId)}/refresh-prices`,
+                    { method: 'POST' }
+                );
+                const result = await response.json();
+                if (result.success && result.data.updated > 0) {
+                    console.log(`实时价格已更新: ${result.data.updated}/${result.data.total}`);
+                }
+            } catch (error) {
+                console.warn('刷新实时价格失败（将使用缓存价格）:', error);
+            }
+        }
+
+        // 加载持仓数据和组合指标（使用 Parquet 数据源）
         function loadPositions() {
-            fetch(`/api/realtime-analysis/risk/portfolio/${currentPortfolioId}/positions`)
+            fetch(`/api/ml-factor/portfolio/${encodeURIComponent(currentPortfolioId)}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        portfolioData = data.data;
-                        updatePositionsTable(data.data.positions);
-                        loadPortfolioMetrics();
+                    if (data.success && data.portfolio) {
+                        const p = data.portfolio;
+                        const positions = p.positions || [];
+                        const metrics = p.metrics || {};
+                        portfolioData = { portfolio_id: currentPortfolioId, positions: positions };
+                        updatePositionsTable(positions);
+                        updateRiskOverview(metrics);
+                        updateSectorChart(metrics.sector_distribution);
                     } else {
-                        console.error('加载持仓失败:', data.message);
-                        document.getElementById('positionsTable').innerHTML = 
+                        console.error('加载持仓失败:', data.error || data.message);
+                        document.getElementById('positionsTable').innerHTML =
                             '<tr><td colspan="9" class="text-center text-muted">暂无持仓数据</td></tr>';
                     }
                 })
                 .catch(error => {
                     console.error('加载持仓失败:', error);
-                    document.getElementById('positionsTable').innerHTML = 
+                    document.getElementById('positionsTable').innerHTML =
                         '<tr><td colspan="9" class="text-center text-danger">加载失败</td></tr>';
                 });
-        }
-
-        // 加载组合指标
-        function loadPortfolioMetrics() {
-            fetch(`/api/realtime-analysis/risk/portfolio/${currentPortfolioId}/metrics`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updateRiskOverview(data.data);
-                        updateSectorChart(data.data.sector_distribution);
-                    }
-                })
-                .catch(error => console.error('加载组合指标失败:', error));
         }
 
         // 加载风险监控数据
@@ -682,11 +720,24 @@
 
         // 显示添加持仓模态框
         function showAddPositionModal() {
+            document.getElementById('addPositionForm').reset();
             const modal = new bootstrap.Modal(document.getElementById('addPositionModal'));
             modal.show();
         }
 
-        // 添加持仓
+        // 显示创建组合模态框
+        function showCreatePortfolioModal() {
+            const name = prompt('请输入新组合名称:');
+            if (!name || !name.trim()) return;
+            currentPortfolioId = name.trim();
+            loadPositions();
+            // 刷新下拉列表，选中新组合
+            loadPortfolioList().then(() => {
+                document.getElementById('portfolioId').value = currentPortfolioId;
+            });
+        }
+
+        // 添加持仓（Parquet 数据源）
         function addPosition() {
             const formData = {
                 portfolio_id: currentPortfolioId,
@@ -696,11 +747,9 @@
                 sector: document.getElementById('newSector').value
             };
 
-            fetch('/api/realtime-analysis/risk/portfolio', {
+            fetch('/api/ml-factor/portfolio', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             })
             .then(response => response.json())
@@ -709,8 +758,7 @@
                     alert('持仓添加成功');
                     bootstrap.Modal.getInstance(document.getElementById('addPositionModal')).hide();
                     loadPositions();
-                    // 清空表单
-                    document.getElementById('addPositionForm').reset();
+                    loadPortfolioList();
                 } else {
                     alert('添加失败: ' + data.message);
                 }
@@ -718,6 +766,59 @@
             .catch(error => {
                 console.error('添加持仓失败:', error);
                 alert('添加失败');
+            });
+        }
+
+        // 编辑持仓（Parquet 数据源）
+        function editPosition(positionId) {
+            const newSize = prompt('新的持仓数量（留空取消）:');
+            if (newSize === null || newSize === '') return;
+            const newCost = prompt('新的成本价（留空取消）:');
+            if (newCost === null || newCost === '') return;
+
+            fetch(`/api/ml-factor/portfolio/${encodeURIComponent(currentPortfolioId)}/positions/${positionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    position_size: parseFloat(newSize),
+                    avg_cost: parseFloat(newCost),
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('持仓更新成功');
+                    loadPositions();
+                } else {
+                    alert('更新失败: ' + (data.message || data.error));
+                }
+            })
+            .catch(error => {
+                console.error('更新持仓失败:', error);
+                alert('更新失败');
+            });
+        }
+
+        // 删除持仓（Parquet 数据源）
+        function deletePosition(positionId) {
+            if (!confirm('确认删除该持仓？')) return;
+
+            fetch(`/api/ml-factor/portfolio/${encodeURIComponent(currentPortfolioId)}/positions/${positionId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('持仓删除成功');
+                    loadPositions();
+                    loadPortfolioList();
+                } else {
+                    alert('删除失败: ' + (data.message || data.error));
+                }
+            })
+            .catch(error => {
+                console.error('删除持仓失败:', error);
+                alert('删除失败');
             });
         }
 
@@ -874,6 +975,7 @@
         // 刷新所有数据
         function refreshAllData() {
             if (currentPortfolioId) {
+                _lastRefreshTime = 0; // 强制刷新价格
                 loadPortfolioData();
                 updateLastUpdateTime();
             }

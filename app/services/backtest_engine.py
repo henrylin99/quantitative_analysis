@@ -109,8 +109,9 @@ class BacktestEngine:
                         selected_stocks, strategy_config.get('optimization', {})
                     )
                     
-                    # 计算当前持仓价值
-                    current_prices = self._get_current_prices(trade_date, list(positions.keys()))
+                    # 获取当前持仓 + 目标持仓的价格（首次建仓时 positions 为空）
+                    all_codes = list(set(list(positions.keys()) + list(target_weights.keys())))
+                    current_prices = self._get_current_prices(trade_date, all_codes)
                     if current_prices:
                         last_prices = current_prices.copy()
                     current_portfolio_value = self._calculate_portfolio_value(
@@ -149,17 +150,18 @@ class BacktestEngine:
                 except Exception as e:
                     logger.error(f"处理交易日 {trade_date} 时出错: {e}")
                     continue
-            
-            # 计算回测指标
-            performance_metrics = self._calculate_performance_metrics(
-                portfolio_values, daily_returns, start_date, end_date
-            )
-            
+
             # 获取基准收益
             benchmark_returns = self._get_benchmark_returns(
                 start_date,
                 end_date,
                 benchmark_code=strategy_config.get('benchmark_index', '000300.SH'),
+            )
+
+            # 计算回测指标
+            performance_metrics = self._calculate_performance_metrics(
+                portfolio_values, daily_returns, start_date, end_date,
+                benchmark_returns=benchmark_returns,
             )
             execution_assumptions = self._build_execution_assumptions(strategy_config)
             trade_constraints = self._build_trade_constraints(strategy_config)
@@ -394,9 +396,10 @@ class BacktestEngine:
             logger.error(f"组合再平衡失败: {e}")
             return current_positions, current_cash, 0.0, self._apply_trade_costs(0.0, commission_rate, slippage_rate)
     
-    def _calculate_performance_metrics(self, portfolio_values: List[Dict[str, Any]], 
+    def _calculate_performance_metrics(self, portfolio_values: List[Dict[str, Any]],
                                      daily_returns: List[float],
-                                     start_date: str, end_date: str) -> Dict[str, Any]:
+                                     start_date: str, end_date: str,
+                                     benchmark_returns: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """计算回测指标"""
         try:
             if not portfolio_values or not daily_returns:
@@ -437,7 +440,26 @@ class BacktestEngine:
             
             # 卡尔玛比率
             calmar_ratio = annualized_return / max_drawdown if max_drawdown > 0 else 0
-            
+
+            # VaR (95%) - 历史模拟法
+            var_95 = float(np.percentile(returns_array, 5)) if len(returns_array) > 0 else 0.0
+
+            # CVaR (95%) - 超过 VaR 损失的均值
+            cvar_95 = float(np.mean(returns_array[returns_array <= var_95])) if np.any(returns_array <= var_95) else var_95
+
+            # Beta
+            beta = self._calc_beta(daily_returns, benchmark_returns)
+
+            # Alpha 和信息比率
+            alpha = None
+            information_ratio = None
+            if beta is not None and annualized_return:
+                benchmark_annual = self._calc_benchmark_annual_return(benchmark_returns)
+                alpha = annualized_return - (0.03 + beta * (benchmark_annual - 0.03))
+                excess = annualized_return - benchmark_annual
+                tracking_error = volatility if volatility > 0 else 1e-10
+                information_ratio = excess / tracking_error
+
             return {
                 'total_return': total_return,
                 'annualized_return': annualized_return,
@@ -448,13 +470,56 @@ class BacktestEngine:
                 'calmar_ratio': calmar_ratio,
                 'total_trades': len(daily_returns),
                 'avg_daily_return': np.mean(daily_returns) if daily_returns else 0,
-                'std_daily_return': np.std(daily_returns) if daily_returns else 0
+                'std_daily_return': np.std(daily_returns) if daily_returns else 0,
+                'var_95': var_95,
+                'cvar_95': cvar_95,
+                'beta': beta,
+                'alpha': alpha,
+                'information_ratio': information_ratio,
             }
             
         except Exception as e:
             logger.error(f"计算回测指标失败: {e}")
             return {}
-    
+
+    def _calc_beta(self, daily_returns: List[float], benchmark_returns: List[Dict[str, Any]]) -> Optional[float]:
+        """计算 Beta：组合日收益 vs 基准日收益的协方差 / 基准方差。"""
+        try:
+            if not daily_returns or not benchmark_returns:
+                return None
+            bench_daily = [r.get('daily_return', 0) for r in benchmark_returns if r.get('daily_return') is not None]
+            # 对齐长度（取较短的）
+            n = min(len(daily_returns), len(bench_daily))
+            if n < 2:
+                return None
+            port = np.array(daily_returns[:n])
+            bench = np.array(bench_daily[:n])
+            cov_matrix = np.cov(port, bench)
+            bench_var = np.var(bench, ddof=1)
+            if bench_var == 0:
+                return None
+            return float(cov_matrix[0, 1] / bench_var)
+        except Exception:
+            return None
+
+    def _calc_benchmark_annual_return(self, benchmark_returns: List[Dict[str, Any]]) -> float:
+        """从基准累计收益计算年化收益。"""
+        try:
+            if not benchmark_returns:
+                return 0.0
+            first = benchmark_returns[0].get('close', 0)
+            last = benchmark_returns[-1].get('close', 0)
+            if not first or not last:
+                return 0.0
+            total = (last - first) / first
+            days = len(benchmark_returns)
+            years = days / 252
+            if years <= 0:
+                return 0.0
+            return (1 + total) ** (1 / years) - 1
+        except Exception:
+            return 0.0
+
     def _get_benchmark_returns(self, start_date: str, end_date: str, benchmark_code: str = "000300.SH") -> List[Dict[str, Any]]:
         """获取基准收益率"""
         try:
