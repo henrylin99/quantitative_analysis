@@ -3,86 +3,119 @@
 {% block extra_css %}
 <style>
 .pattern-page { display: flex; min-height: calc(100vh - 56px); }
+
+/* ── Left Panel — uses Obsidian design tokens ── */
 .filter-panel {
     width: 300px; min-width: 300px;
-    background: #162032;
-    border-right: 1px solid rgba(99, 102, 241, 0.15);
+    background: var(--obs-surface-alt);
+    border-right: 1px solid var(--obs-border-light);
     overflow-y: auto; padding: 16px;
     display: flex; flex-direction: column;
 }
 .filter-panel .search-box { margin-bottom: 12px; }
 .filter-panel .search-box input {
-    width: 100%; padding: 6px 10px; border-radius: 4px;
-    border: 1px solid rgba(99, 102, 241, 0.2);
-    background: #0f172a; color: #e2e8f0;
+    width: 100%; padding: 6px 10px; border-radius: var(--border-radius-sm);
+    border: 1px solid var(--obs-border);
+    background: var(--obs-bg); color: var(--obs-text);
     font-size: 13px;
 }
 .filter-panel .search-box input:focus {
-    outline: none; border-color: #6366f1;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    outline: none; border-color: var(--obs-primary);
+    box-shadow: 0 0 0 2px var(--obs-primary-bg);
 }
-.filter-panel .search-box input::placeholder { color: #64748b; }
+.filter-panel .search-box input::placeholder { color: var(--obs-text-muted); }
+
+/* Accordion — matches card-header style */
 .accordion-item { border: none; margin-bottom: 2px; }
 .accordion-button {
-    background: transparent; color: #e2e8f0; font-size: 13px;
-    font-weight: 600; padding: 8px 12px; border: none; box-shadow: none;
+    background: transparent; color: var(--obs-text);
+    font-size: 13px; font-weight: 600;
+    padding: 8px 12px; border: none; box-shadow: none;
 }
 .accordion-button:not(.collapsed) {
-    background: rgba(99, 102, 241, 0.08); color: #818cf8;
+    background: var(--obs-primary-bg); color: var(--obs-primary-light);
 }
 .accordion-button::after { filter: invert(0.7); }
 .accordion-body { padding: 4px 8px; }
+
+/* Checkbox row — card-like feel, matches card hover pattern */
 .pattern-check {
-    display: flex; align-items: center; padding: 4px 6px; border-radius: 4px;
-    font-size: 12px; color: #cbd5e1; cursor: pointer;
-    background: rgba(30, 41, 59, 0.5); margin-bottom: 2px;
-    transition: background 0.15s, color 0.15s;
+    display: flex; align-items: center; padding: 4px 6px;
+    border-radius: var(--border-radius-sm);
+    font-size: 12px; color: var(--obs-text-secondary); cursor: pointer;
+    background: var(--obs-surface);
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+    transition: var(--transition-fast);
 }
-.pattern-check:hover { background: rgba(99, 102, 241, 0.12); color: #e2e8f0; }
+.pattern-check:hover {
+    border-color: var(--obs-border-hover);
+    box-shadow: 0 0 12px rgba(99,102,241,0.06);
+    color: var(--obs-text);
+}
 .pattern-check:has(input:checked) {
-    background: rgba(99, 102, 241, 0.18); color: #a5b4fc;
+    background: var(--obs-primary-bg);
+    border-color: var(--obs-border-hover);
+    color: var(--obs-primary-light);
 }
 .pattern-check input[type="checkbox"] {
-    margin-right: 6px; accent-color: #6366f1;
+    margin-right: 6px; accent-color: var(--obs-primary);
     width: 14px; height: 14px;
 }
-.pattern-check .hit-count { margin-left: auto; color: #475569; font-size: 11px; }
-.filter-actions { margin-top: auto; padding-top: 12px; display: flex; gap: 8px; }
-.filter-actions .btn { flex: 1; font-size: 13px; }
+.pattern-check .hit-count {
+    margin-left: auto; color: var(--obs-text-muted); font-size: 11px;
+}
+
+/* Reset button */
+.filter-actions { margin-top: auto; padding-top: 12px; display: flex; }
+.filter-actions .btn {
+    flex: 1; font-size: 13px;
+    border-color: var(--obs-border); color: var(--obs-text-secondary);
+}
+.filter-actions .btn:hover {
+    border-color: var(--obs-border-hover);
+    color: var(--obs-primary-light);
+    background: var(--obs-primary-bg);
+}
+
+/* ── Right Area ── */
 .result-area { flex: 1; padding: 20px; overflow-x: auto; }
 .stats-bar {
     display: flex; align-items: center; gap: 16px;
-    margin-bottom: 16px; color: #94a3b8; font-size: 14px;
+    margin-bottom: 16px; color: var(--obs-text-secondary); font-size: 14px;
 }
-.stats-bar .badge { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
-.result-table { width: 100%; font-size: 13px; color: #e2e8f0; }
+.stats-bar .badge { background: var(--obs-primary-bg); color: var(--obs-primary-light); }
+.result-table { width: 100%; font-size: 13px; color: var(--obs-text); }
 .result-table thead th {
-    background: var(--obs-surface, #1e293b); color: #94a3b8;
-    font-weight: 600; padding: 10px 12px; border-bottom: 1px solid #334155;
+    background: var(--obs-surface); color: var(--obs-text-secondary);
+    font-weight: 600; padding: 10px 12px;
+    border-bottom: 1px solid var(--obs-border);
     cursor: pointer; user-select: none; white-space: nowrap;
 }
-.result-table thead th:hover { color: #818cf8; }
+.result-table thead th:hover { color: var(--obs-primary-light); }
 .result-table thead th .sort-icon { margin-left: 4px; font-size: 10px; }
 .result-table tbody td {
-    padding: 8px 12px; border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    padding: 8px 12px; border-bottom: 1px solid rgba(51,65,85,0.4);
     white-space: nowrap;
 }
-.result-table tbody tr:hover { background: rgba(99, 102, 241, 0.05); }
-.pct-up { color: #ef4444; }
-.pct-down { color: #22c55e; }
-.pct-flat { color: #94a3b8; }
+.result-table tbody tr:hover { background: var(--obs-primary-bg); }
+.pct-up { color: var(--obs-danger); }
+.pct-down { color: var(--obs-success); }
+.pct-flat { color: var(--obs-text-secondary); }
 .pagination-bar {
     display: flex; align-items: center; justify-content: center;
     gap: 6px; margin-top: 16px;
 }
 .page-btn {
-    padding: 4px 10px; border-radius: 4px; border: 1px solid #334155;
-    background: transparent; color: #94a3b8; font-size: 12px; cursor: pointer;
+    padding: 4px 10px; border-radius: var(--border-radius-sm);
+    border: 1px solid var(--obs-border);
+    background: transparent; color: var(--obs-text-secondary);
+    font-size: 12px; cursor: pointer;
 }
-.page-btn:hover { border-color: #6366f1; color: #e2e8f0; }
-.page-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+.page-btn:hover { border-color: var(--obs-primary); color: var(--obs-text); }
+.page-btn.active { background: var(--obs-primary); color: #fff; border-color: var(--obs-primary); }
 .page-btn:disabled { opacity: 0.4; cursor: default; }
-.empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--obs-text-muted); }
 .empty-state i { font-size: 48px; margin-bottom: 16px; }
 @media (max-width: 768px) {
     .pattern-page { flex-direction: column; }
@@ -99,7 +132,7 @@
     </div>
     <div class="accordion" id="groupAccordion"></div>
     <div class="filter-actions">
-      <button class="btn btn-outline-secondary" onclick="resetFilters()" style="border-color:rgba(99,102,241,0.3);color:#94a3b8;">
+      <button class="btn btn-outline-secondary" onclick="resetFilters()">
         <i class="fas fa-undo me-1"></i>重置
       </button>
     </div>
