@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   web:
     build: .
@@ -8,18 +6,46 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      DATA_DIR: /app/data
+      SQLITE_DATABASE_PATH: /app/instance/stock_cursor.sqlite3
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+      - ./instance:/app/instance
+      - ./logs:/app/logs
     depends_on:
       - redis
+    restart: unless-stopped
 
   worker:
     build: .
     command: celery -A app.celery_app.celery worker -l info -P solo
     env_file:
       - .env
+    environment:
+      DATA_DIR: /app/data
+      SQLITE_DATABASE_PATH: /app/instance/stock_cursor.sqlite3
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+      - ./instance:/app/instance
+      - ./logs:/app/logs
     depends_on:
       - redis
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:
