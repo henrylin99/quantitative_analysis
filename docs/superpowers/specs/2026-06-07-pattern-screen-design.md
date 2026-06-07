@@ -25,9 +25,10 @@ app/templates/pattern_screen.html        # 页面模板
 
 ### 数据层
 
-- 启动时读取 `data/data.parquet` 到内存，缓存 DataFrame
+- 通过 `current_app.config['DATA_DIR']` 解析路径，读取 `{DATA_DIR}/data.parquet` 到内存，缓存 DataFrame
 - 132 个二值形态字段 + 基础字段（ts_code, name, industry, pct_chg, close, amount, total_mv, turnover_rate, vol_ratio_5 等）
 - 提供字段元数据（分组定义、中文标签、当日命中数）
+- 提供 `invalidate_cache()` 方法，在宽表重建 data job 完成后调用以刷新缓存
 
 ### 服务层 — PatternScreenService
 
@@ -41,7 +42,16 @@ class PatternScreenService:
 
     def screen(patterns, sort_by, order, limit, offset) -> dict
         # 纯 AND 筛选：所有勾选字段必须 == 1
-        # 返回 {total, offset, limit, rows: [...]}
+        # patterns: list[str]，每个 key 必须存在于 DataFrame 列中，否则返回 400
+        # sort_by: 必须在白名单内: ["pct_chg", "close", "amount", "total_mv",
+        #          "turnover_rate", "vol_ratio_5", "consec_up_days"]，默认 "pct_chg"
+        # order: 仅接受 "asc" 或 "desc"，默认 "desc"
+        # limit: 1-500，默认 50
+        # offset: >= 0，默认 0
+        # 返回 {total, offset, limit, trade_date, rows: [...]}
+
+    def invalidate_cache()
+        # 清除缓存的 DataFrame，下次调用时重新读取 parquet
 ```
 
 ### API 端点
@@ -63,7 +73,7 @@ POST `/api/pattern-screen/screen` 请求体：
 }
 ```
 
-响应格式（遵循项目约定）：
+响应格式（遵循 `analysis_api.py` 的 `{code, message, data}` 约定）：
 
 ```json
 {
@@ -73,6 +83,7 @@ POST `/api/pattern-screen/screen` 请求体：
     "total": 42,
     "offset": 0,
     "limit": 50,
+    "trade_date": "20260605",
     "rows": [
       {
         "ts_code": "000001.SZ",
@@ -89,6 +100,14 @@ POST `/api/pattern-screen/screen` 请求体：
   }
 }
 ```
+
+#### 参数校验规则
+
+- `patterns`: 可选，默认 `[]`（返回全部股票）；若提供，每个 key 必须在 DataFrame 列中，否则 400
+- `sort_by`: 可选，默认 `"pct_chg"`；必须在白名单中，否则 400
+- `order`: 可选，默认 `"desc"`；仅接受 `"asc"` / `"desc"`，否则 400
+- `limit`: 可选，默认 50；范围 1-500，超出截断
+- `offset`: 可选，默认 0；必须 >= 0
 
 ### 形态分组定义
 
@@ -108,9 +127,9 @@ POST `/api/pattern-screen/screen` 请求体：
 
 ### Blueprint 注册
 
-在 `app/__init__.py` 中注册：
-- API blueprint: `pattern_screen_api`，url_prefix=`/api/pattern-screen`
-- 页面 blueprint: `pattern_screen`，url_prefix 无
+在 `app/__init__.py` 中注册（Pattern A：url_prefix 在 Blueprint 构造函数中声明）：
+- API blueprint: `pattern_screen_api = Blueprint('pattern_screen_api', __name__, url_prefix='/api/pattern-screen')`，然后 `app.register_blueprint(pattern_screen_api)`
+- 页面 blueprint: `pattern_screen_bp = Blueprint('pattern_screen', __name__)`，路由 `@pattern_screen_bp.route('/pattern-screen/')`
 
 ## 前端设计
 
@@ -146,11 +165,12 @@ POST `/api/pattern-screen/screen` 请求体：
 ## 筛选逻辑
 
 - **纯 AND**：所有勾选的形态字段必须同时为 1
-- 无勾选时返回全部 5524 只股票（仅排序和分页）
+- 无勾选时（`patterns` 为空或省略）返回全部股票（仅排序和分页）
+- 不在分组定义中的 DataFrame 列（如 `consec_up_days`）仍可作为 `sort_by` 使用，但不显示在筛选面板中
 
 ## 导航集成
 
-在 `base.html` 导航栏中添加"形态选股"链接，指向 `/pattern-screen/`。
+在 `base.html` 导航栏中添加"形态选股"链接，使用 `url_for('pattern_screen.index')` 生成 URL。
 
 ## 不做的事情
 
