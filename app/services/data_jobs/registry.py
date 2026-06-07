@@ -18,6 +18,7 @@ class JobRegistry:
             "moneyflow",              # 15
             "stk_factor",             # 17
             "cyq_perf",               # 18
+            "wide_table_builder",     # 20
         }
 
         self._jobs: Dict[str, JobDefinition] = {
@@ -126,6 +127,17 @@ class JobRegistry:
                 dependencies=["daily_history_by_code"],
                 source_name="derived",
                 source_mode="derived",
+            ),
+            "wide_table_builder": JobDefinition(
+                "wide_table_builder",
+                "衍生计算",
+                "app/utils/wide_table_builder.py",
+                display_name="大宽表构建",
+                description="合并日线基本指标、技术因子、资金流向和股票基础资料为最新交易日大宽表。",
+                recommended_order=10,
+                source_name="derived",
+                source_mode="derived",
+                dependencies=["daily_basic", "stk_factor", "moneyflow", "stock_basic"],
             ),
         }
 

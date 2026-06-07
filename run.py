@@ -3,10 +3,8 @@
 
 import os
 from app import create_app
-from app.extensions import db
 from app.extensions import socketio
-from sqlalchemy import inspect
-from startup_runtime import build_health_report, build_health_summary_lines, build_startup_report
+from startup_runtime import build_health_report, build_health_summary_lines, build_startup_report, inspect_parquet_data_assets
 
 # 创建Flask应用实例
 app = create_app(os.getenv('FLASK_ENV', 'default'))
@@ -14,26 +12,14 @@ app = create_app(os.getenv('FLASK_ENV', 'default'))
 
 def inspect_runtime_health(flask_app):
     with flask_app.app_context():
-        existing_tables = set()
-        non_empty_tables = set()
-        connected = False
-
-        try:
-            inspector = inspect(db.engine)
-            existing_tables = set(inspector.get_table_names())
-            connected = True
-            for table in existing_tables & {"stock_basic", "stock_trade_calendar", "data_job_run"}:
-                count = db.session.execute(db.text(f"SELECT COUNT(*) FROM {table}")).scalar()
-                if count and int(count) > 0:
-                    non_empty_tables.add(table)
-        except Exception:
-            connected = False
+        data_dir = flask_app.config.get("DATA_DIR")
+        connected, existing_assets, non_empty_assets = inspect_parquet_data_assets(data_dir)
 
         return build_health_report(
             flask_app.config,
             connected=connected,
-            existing_tables=existing_tables,
-            non_empty_tables=non_empty_tables,
+            existing_tables=existing_assets,
+            non_empty_tables=non_empty_assets,
         )
 
 if __name__ == '__main__':
@@ -42,6 +28,13 @@ if __name__ == '__main__':
         print(f"  - {line}")
     for line in build_health_summary_lines(inspect_runtime_health(app)):
         print(line)
+
+    # 大宽表状态检查
+    with app.app_context():
+        from app.services.wide_table_status import should_update_wide_table
+        need_update, reason = should_update_wide_table(app.config.get("DATA_DIR"))
+        tag = "⚠️" if need_update else "✅"
+        print(f"  {tag} 大宽表: {reason}")
 
     # 开发环境下运行，使用SocketIO
     socketio.run(

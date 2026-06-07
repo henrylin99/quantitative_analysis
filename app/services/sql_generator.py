@@ -21,16 +21,31 @@ class SQLGenerator:
         try:
             intent = intent_result['intent']['name']
             entities = intent_result['entities']
-            
-            # 检查是否有多条件查询
-            if 'conditions' in entities and len(entities['conditions']) > 1:
-                # 处理多条件查询
-                sql = self._build_multi_condition_sql(entities)
+
+            # 判断是否需要多表 JOIN 的查询
+            has_conditions = 'conditions' in entities and len(entities['conditions']) > 0
+            has_technical = False
+            has_money_flow = False
+            if has_conditions:
+                for cond in entities['conditions']:
+                    cat = cond.get('field', {}).get('category', '')
+                    name = cond.get('field', {}).get('name', '')
+                    if cat == 'technical_fields' or name in ('MACD', 'KDJ', 'RSI', '均线'):
+                        has_technical = True
+                    if cat == 'money_flow_fields' or name in ('资金', '资金流', '净流入', '资金净流入'):
+                        has_money_flow = True
+
+            # 技术指标 / 资金流向 / 多条件 → 统一走 multi-condition builder
+            if has_technical or has_money_flow:
+                sql = self._build_multi_condition_sql(entities, intent)
+                template_used = 'multi_condition_dynamic'
+            elif has_conditions and len(entities['conditions']) > 1:
+                sql = self._build_multi_condition_sql(entities, intent)
                 template_used = 'multi_condition_dynamic'
             else:
                 # 1. 尝试使用模板生成
                 template_result = self.template_manager.generate_from_template(intent, entities)
-                
+
                 if template_result['success']:
                     sql = template_result['sql']
                     template_used = template_result['template_id']
@@ -38,11 +53,11 @@ class SQLGenerator:
                     # 2. 使用动态构建器生成
                     sql = self.query_builder.build_dynamic_sql(intent, entities)
                     template_used = None
-            
+
             # 3. SQL优化和验证
             optimized_sql = self._optimize_sql(sql)
             validation_result = self._validate_sql(optimized_sql)
-            
+
             return {
                 'success': validation_result['valid'],
                 'sql': optimized_sql,
@@ -50,7 +65,7 @@ class SQLGenerator:
                 'error': validation_result.get('error'),
                 'explanation': self._generate_explanation(intent, entities)
             }
-            
+
         except Exception as e:
             return {
                 'success': False,
@@ -129,103 +144,151 @@ class SQLGenerator:
         
         return base_explanation
     
-    def _build_multi_condition_sql(self, entities: Dict[str, Any]) -> str:
-        """构建多条件查询SQL"""
-        conditions = entities['conditions']
-        
-        # 分析需要的表
-        tables_needed = set(['stock_business'])  # 主表
+    def _build_multi_condition_sql(self, entities: Dict[str, Any],
+                                    intent: str = '') -> str:
+        """构建多条件 / 多表 JOIN 查询 SQL
+        支持技术指标（stock_factor）、资金流向（stock_moneyflow）等跨表查询。
+        """
+        conditions = entities.get('conditions', [])
+
+        # ---- 1. 分类条件 & 确定需要的表 ----
+        tables_needed = {'stock_business'}
         technical_conditions = []
         business_conditions = []
-        
+        money_flow_conditions = []
+
         for condition in conditions:
             field_info = condition.get('field', {})
             field_category = field_info.get('category', '')
-            
-            if field_category == 'technical_fields' or 'MACD' in field_info.get('name', ''):
+            field_name = field_info.get('name', '')
+
+            if field_category == 'technical_fields' or field_name in ('MACD', 'KDJ', 'RSI', '均线'):
                 tables_needed.add('stock_factor')
                 technical_conditions.append(condition)
+            elif field_category == 'money_flow_fields' or field_name in ('资金', '资金流', '净流入', '资金净流入'):
+                tables_needed.add('stock_moneyflow')
+                money_flow_conditions.append(condition)
             else:
                 business_conditions.append(condition)
-        
-        # 构建SELECT子句
+
+        # 资金流向意图但没有条件时，仍然需要 JOIN
+        if intent == 'money_flow' and 'stock_moneyflow' not in tables_needed:
+            tables_needed.add('stock_moneyflow')
+            money_flow_conditions.append({
+                'field': {'name': '资金净流入', 'db_field': 'net_mf_amount',
+                          'category': 'money_flow_fields'},
+                'comparison': 'greater_than', 'value': 0
+            })
+
+        # ---- 2. SELECT 子句 ----
         select_fields = ['sb.ts_code', 'sb.stock_name']
-        
-        # 添加查询条件中涉及的字段
+
         for condition in conditions:
             field_info = condition.get('field', {})
             db_field = field_info.get('db_field', field_info.get('name', ''))
-            
-            if field_info.get('category') == 'technical_fields':
+
+            if field_info.get('category') == 'technical_fields' or \
+               field_info.get('name') in ('MACD', 'KDJ', 'RSI', '均线'):
                 if 'MACD' in field_info.get('name', ''):
-                    select_fields.extend(['sf.macd_dif', 'sf.macd_dea', 'sf.macd'])
+                    for f in ('sf.macd_dif', 'sf.macd_dea', 'sf.macd'):
+                        if f not in select_fields:
+                            select_fields.append(f)
                 else:
-                    select_fields.append(f'sf.{db_field}')
+                    f = f'sf.{db_field}'
+                    if f not in select_fields:
+                        select_fields.append(f)
+            elif field_info.get('category') == 'money_flow_fields' or \
+                 field_info.get('name') in ('资金', '资金流', '净流入', '资金净流入'):
+                f = f'sm.{db_field}'
+                if f not in select_fields:
+                    select_fields.append(f)
             else:
-                if db_field not in ['ts_code', 'stock_name']:
-                    select_fields.append(f'sb.{db_field}')
-        
-        # 去重
+                if db_field not in ('ts_code', 'stock_name'):
+                    f = f'sb.{db_field}'
+                    if f not in select_fields:
+                        select_fields.append(f)
+
+        # 资金流向意图自动补 net_mf_amount
+        if 'stock_moneyflow' in tables_needed and not any(
+                'net_mf_amount' in f for f in select_fields):
+            select_fields.append('sm.net_mf_amount')
+
         select_fields = list(dict.fromkeys(select_fields))
-        
-        # 构建FROM子句
+
+        # ---- 3. FROM / JOIN 子句 ----
         from_clause = "FROM stock_business sb"
         if 'stock_factor' in tables_needed:
             from_clause += "\nJOIN stock_factor sf ON sb.ts_code = sf.ts_code"
-        
-        # 构建WHERE子句
+        if 'stock_moneyflow' in tables_needed:
+            from_clause += "\nJOIN stock_moneyflow sm ON sb.ts_code = sm.ts_code"
+
+        # ---- 4. WHERE 子句 ----
         where_conditions = []
-        
-        # 处理业务条件
+
         for condition in business_conditions:
-            condition_sql = self._build_single_condition_sql(condition, 'sb')
-            if condition_sql:
-                where_conditions.append(condition_sql)
-        
-        # 处理技术指标条件
+            sql = self._build_single_condition_sql(condition, 'sb')
+            if sql:
+                where_conditions.append(sql)
+
         for condition in technical_conditions:
-            condition_sql = self._build_technical_condition_sql(condition)
-            if condition_sql:
-                where_conditions.append(condition_sql)
-        
-        # 确保取最新数据
-        if 'stock_factor' in tables_needed:
-            where_conditions.append("""sf.trade_date = (
-                SELECT MAX(trade_date) FROM stock_factor WHERE ts_code = sb.ts_code
-            )""")
-        
-        # 基本过滤条件
+            sql = self._build_technical_condition_sql(condition)
+            if sql:
+                where_conditions.append(sql)
+
+        for condition in money_flow_conditions:
+            field_info = condition.get('field', {})
+            db_field = field_info.get('db_field', 'net_mf_amount')
+            comparison = condition.get('comparison')
+            # 没有显式比较操作时，默认过滤 net_mf_amount > 0
+            value = condition.get('value', 0) if comparison else 0
+            if comparison == 'less_than':
+                where_conditions.append(f"sm.{db_field} < {value}")
+            else:
+                where_conditions.append(f"sm.{db_field} > {value}")
+
         where_conditions.append("sb.ts_code IS NOT NULL")
-        
-        # 组装SQL
+
+        # ---- 5. 组装 SQL ----
         sql_parts = [
             f"SELECT {', '.join(select_fields)}",
             from_clause,
             f"WHERE {' AND '.join(where_conditions)}"
         ]
-        
-        # 添加排序和限制
+
+        # ---- 6. ORDER BY ----
         limit = entities.get('limit', 20)
-        
-        # 根据查询类型确定排序
+        is_ranking = entities.get('sort') or intent in ('ranking', 'money_flow')
+
         if technical_conditions:
-            # 如果有技术指标条件，按技术指标排序
-            for condition in technical_conditions:
-                if 'MACD' in condition.get('field', {}).get('name', ''):
+            for cond in technical_conditions:
+                name = cond.get('field', {}).get('name', '')
+                if 'MACD' in name:
                     sql_parts.append("ORDER BY sf.macd DESC")
                     break
+                elif 'RSI' in name:
+                    sql_parts.append("ORDER BY sf.rsi_6 DESC")
+                    break
+        elif money_flow_conditions:
+            sql_parts.append("ORDER BY sm.net_mf_amount DESC")
+        elif is_ranking:
+            # ranking: 按第一个业务字段 DESC
+            for cond in business_conditions:
+                db_field = cond.get('field', {}).get('db_field', '')
+                if db_field:
+                    sql_parts.append(f"ORDER BY sb.{db_field} DESC")
+                    break
         else:
-            # 否则按第一个数值字段排序
-            for condition in business_conditions:
-                field_info = condition.get('field', {})
+            for cond in business_conditions:
+                field_info = cond.get('field', {})
                 db_field = field_info.get('db_field', '')
-                if db_field and condition.get('comparison') in ['greater_than', 'less_than']:
-                    order = 'DESC' if condition.get('comparison') == 'greater_than' else 'ASC'
+                comp = cond.get('comparison')
+                if db_field and comp in ('greater_than', 'less_than'):
+                    order = 'DESC' if comp == 'greater_than' else 'ASC'
                     sql_parts.append(f"ORDER BY sb.{db_field} {order}")
                     break
-        
+
         sql_parts.append(f"LIMIT {limit}")
-        
+
         return '\n'.join(sql_parts)
     
     def _build_single_condition_sql(self, condition: Dict[str, Any], table_alias: str = '') -> Optional[str]:
@@ -593,15 +656,15 @@ class QueryBuilder:
     def _build_select_clause(self, entities: Dict[str, Any], main_table: str) -> str:
         """构建SELECT子句"""
         select_fields = []
-        
-        # 基础字段
+
+        # 基础字段 — 始终包含 stock_name（通过 JOIN 或直接取）
         if main_table == 'stock_business':
             select_fields.extend(['ts_code', 'stock_name'])
         elif main_table == 'stock_factor':
             select_fields.extend(['ts_code', 'trade_date'])
         elif main_table == 'stock_moneyflow':
             select_fields.extend(['ts_code', 'trade_date'])
-        
+
         # 根据新的条件结构添加字段
         if 'conditions' in entities:
             for condition in entities['conditions']:
@@ -610,7 +673,7 @@ class QueryBuilder:
                     db_field = field_info.get('db_field', field_info['name'])
                     if db_field not in select_fields:
                         select_fields.append(db_field)
-        
+
         # 兼容旧的实体结构
         if 'fields' in entities:
             for field in entities['fields']:
@@ -620,24 +683,27 @@ class QueryBuilder:
                     if mapping['table'] == main_table:
                         if mapping['field'] not in select_fields:
                             select_fields.append(mapping['field'])
-        
+
         # 如果没有特定字段，添加常用字段
         if len(select_fields) <= 2:  # 只有基础字段
             if main_table == 'stock_business':
                 select_fields.extend(['daily_close', 'factor_pct_change'])
-        
+
         # 去重并格式化
-        select_fields = list(dict.fromkeys(select_fields))  # 去重保持顺序
-        
+        select_fields = list(dict.fromkeys(select_fields))
+
         return f"SELECT {', '.join(select_fields)}"
     
     def _build_from_clause(self, main_table: str, entities: Dict[str, Any]) -> str:
         """构建FROM子句"""
         from_clause = f"FROM {main_table}"
-        
-        # 检查是否需要JOIN其他表
+
+        # 如果主表不是 stock_business，自动 JOIN 以获取 stock_name
         join_tables = set()
-        
+        if main_table != 'stock_business':
+            join_tables.add('stock_business')
+
+        # 检查是否需要JOIN其他表
         if 'fields' in entities:
             for field in entities['fields']:
                 field_name = field['name']
@@ -648,7 +714,9 @@ class QueryBuilder:
         
         # 添加JOIN子句
         for join_table in join_tables:
-            if join_table == 'stock_factor' and main_table == 'stock_business':
+            if join_table == 'stock_business' and main_table != 'stock_business':
+                from_clause += f"\nJOIN stock_business sb ON {main_table}.ts_code = sb.ts_code"
+            elif join_table == 'stock_factor' and main_table == 'stock_business':
                 from_clause += f"\nJOIN {join_table} sf ON {main_table}.ts_code = sf.ts_code"
             elif join_table == 'stock_moneyflow' and main_table == 'stock_business':
                 from_clause += f"\nJOIN {join_table} sm ON {main_table}.ts_code = sm.ts_code"
@@ -748,21 +816,29 @@ class QueryBuilder:
     
     def _build_order_clause(self, entities: Dict[str, Any]) -> str:
         """构建ORDER BY子句"""
-        if 'sort' in entities:
-            order = entities.get('order', 'desc').upper()
-            
-            # 确定排序字段
-            if 'fields' in entities:
-                field = entities['fields'][0]  # 使用第一个字段排序
-                field_name = field['name']
-                if field_name in self.field_mappings:
-                    mapping = self.field_mappings[field_name]
-                    return f"ORDER BY {mapping['field']} {order}"
-            
-            # 默认排序
-            return "ORDER BY daily_close DESC"
-        
-        return ""
+        if 'sort' not in entities:
+            return ""
+
+        order = entities.get('order', 'desc').upper()
+
+        # 从 conditions 中找排序字段
+        if 'conditions' in entities:
+            for cond in entities['conditions']:
+                field_info = cond.get('field', {})
+                db_field = field_info.get('db_field', '')
+                if db_field:
+                    return f"ORDER BY {db_field} {order}"
+
+        # 从 fields 中找排序字段
+        if 'fields' in entities:
+            field = entities['fields'][0]
+            field_name = field['name']
+            if field_name in self.field_mappings:
+                mapping = self.field_mappings[field_name]
+                return f"ORDER BY {mapping['field']} {order}"
+
+        # 默认排序
+        return "ORDER BY daily_close DESC"
     
     def _build_limit_clause(self, entities: Dict[str, Any]) -> str:
         """构建LIMIT子句"""

@@ -182,6 +182,46 @@
                     </div>
                 </div>
 
+                <!-- 大宽表状态与构建 -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card" id="wide-table-panel">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-table-cells"></i> 大宽表 (stock_business)</h5>
+                                <span id="wideTableStatusBadge" class="badge bg-secondary">检查中...</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <div class="small mb-1">
+                                            <strong>宽表日期：</strong><span id="wideTableDate">-</span>
+                                        </div>
+                                        <div class="small mb-1">
+                                            <strong>数据源日期：</strong>
+                                            <span id="wideTableSourceDates" class="text-muted">-</span>
+                                        </div>
+                                        <div class="small mb-1">
+                                            <strong>更新状态：</strong><span id="wideTableUpdateReason">-</span>
+                                        </div>
+                                        <div class="small text-muted">
+                                            宽表合并了日线基本指标、技术因子、资金流向和股票基础资料，仅保留最新交易日数据（约 5K 行）。
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <button id="buildWideTableBtn" class="btn btn-primary" disabled>
+                                            <i class="fas fa-hammer"></i> 构建/更新大宽表
+                                        </button>
+                                        <button id="refreshWideTableStatusBtn" class="btn btn-outline-secondary ms-2">
+                                            <i class="fas fa-sync-alt"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="wideTableBuildResult" class="alert mt-3" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 数据操作面板 -->
                 <div class="row">
                     <!-- 数据同步 -->

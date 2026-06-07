@@ -58,6 +58,10 @@ def run_data_job(run_id: int):
 
         if completed.returncode == 0:
             store.update_run_status(run, "success", progress=100.0, progress_message="任务执行完成")
+            # 大宽表构建成功后清除缓存，使后续请求读取新数据
+            if run.job_type == "wide_table_builder":
+                from app.services.data_reader import ParquetDataReader
+                ParquetDataReader.invalidate_stock_business_cache()
             store.save_run(run)
             return {"run_id": run_id, "status": "success"}
 
