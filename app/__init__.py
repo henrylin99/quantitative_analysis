@@ -38,6 +38,7 @@ def create_app(config_name='default'):
     from app.routes.ml_factor_routes import ml_factor_routes
     from app.routes.realtime_analysis_routes import realtime_analysis_routes
     from app.routes.heatmap import heatmap_routes
+    from app.api.pattern_screen_api import pattern_screen_api
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(ml_factor_bp)
     app.register_blueprint(text2sql_bp)
@@ -52,7 +53,8 @@ def create_app(config_name='default'):
     app.register_blueprint(ml_factor_routes)
     app.register_blueprint(realtime_analysis_routes)
     app.register_blueprint(heatmap_routes)
-    
+    app.register_blueprint(pattern_screen_api)
+
     from app.main import main_bp
     app.register_blueprint(main_bp)
     
