@@ -25,18 +25,27 @@
 }
 .filter-panel .search-box input::placeholder { color: var(--obs-text-muted); }
 
-/* Accordion — matches card-header style */
-.accordion-item { border: none; margin-bottom: 2px; }
+/* Accordion — override Bootstrap defaults completely */
+.accordion-item {
+    border: none !important; margin-bottom: 2px;
+    background: transparent !important;
+}
 .accordion-button {
-    background: transparent; color: var(--obs-text);
+    background: transparent !important; color: var(--obs-text);
     font-size: 13px; font-weight: 600;
-    padding: 8px 12px; border: none; box-shadow: none;
+    padding: 8px 12px; border: none !important;
+    box-shadow: none !important;
 }
 .accordion-button:not(.collapsed) {
-    background: var(--obs-primary-bg); color: var(--obs-primary-light);
+    background: var(--obs-primary-bg) !important; color: var(--obs-primary-light);
 }
 .accordion-button::after { filter: invert(0.7); }
-.accordion-body { padding: 4px 8px; }
+.accordion-collapse { border: none !important; }
+.accordion-body {
+    padding: 4px 8px;
+    background: transparent !important;
+    border: none !important;
+}
 
 /* Checkbox row — card-like feel, matches card hover pattern */
 .pattern-check {
@@ -70,12 +79,14 @@
 .filter-actions { margin-top: auto; padding-top: 12px; display: flex; }
 .filter-actions .btn {
     flex: 1; font-size: 13px;
-    border-color: var(--obs-border); color: var(--obs-text-secondary);
+    border-color: var(--obs-border) !important;
+    color: var(--obs-text-secondary) !important;
+    background: transparent !important;
 }
 .filter-actions .btn:hover {
-    border-color: var(--obs-border-hover);
-    color: var(--obs-primary-light);
-    background: var(--obs-primary-bg);
+    border-color: var(--obs-border-hover) !important;
+    color: var(--obs-primary-light) !important;
+    background: var(--obs-primary-bg) !important;
 }
 
 /* ── Right Area ── */
