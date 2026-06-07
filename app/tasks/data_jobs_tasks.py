@@ -62,6 +62,10 @@ def run_data_job(run_id: int):
             if run.job_type == "wide_table_builder":
                 from app.services.data_reader import ParquetDataReader
                 ParquetDataReader.invalidate_stock_business_cache()
+                # 同时清除 text2sql 的 SQLite 临时表缓存
+                from app.services.text2sql_engine import get_text2sql_engine
+                engine = get_text2sql_engine()
+                engine.query_executor.invalidate_cache()
             store.save_run(run)
             return {"run_id": run_id, "status": "success"}
 

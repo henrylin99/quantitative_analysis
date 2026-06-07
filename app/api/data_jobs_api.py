@@ -23,6 +23,16 @@ def submit_job():
     if not job_type:
         return jsonify({"success": False, "error": "missing job_type"}), 400
 
+    # 大宽表构建任务需通过 18:00 校验
+    if job_type == "wide_table_builder":
+        from flask import current_app
+        status = get_wide_table_status(current_app.config.get("DATA_DIR"))
+        if not status["past_cutoff"]:
+            return jsonify({
+                "success": False,
+                "error": "当前时间未过 18:00，数据源可能尚未下载完毕，请稍后再试",
+            }), 400
+
     params = payload.get("params", {})
     try:
         run = get_data_job_service().submit(job_type, params)
@@ -93,13 +103,24 @@ def wide_table_status():
 
 @data_jobs_bp.route("/wide-table/build", methods=["POST"])
 def build_wide_table():
-    """提交大宽表构建任务。"""
+    """提交大宽表构建任务。需通过 18:00 校验。"""
     try:
+        # 后端强制 18:00 校验，防止绕过 UI 直接调 API
+        from flask import current_app
+        status = get_wide_table_status(current_app.config.get("DATA_DIR"))
+        if not status["past_cutoff"]:
+            return jsonify({
+                "success": False,
+                "error": "当前时间未过 18:00，数据源可能尚未下载完毕，请稍后再试",
+            }), 400
+
         run = get_data_job_service().submit("wide_table_builder", {})
         # 构建成功后清缓存（inline 模式立即生效，celery 模式在 task 完成后清）
         if run.status == "success":
             from app.services.data_reader import ParquetDataReader
             ParquetDataReader.invalidate_stock_business_cache()
+            from app.services.text2sql_engine import get_text2sql_engine
+            get_text2sql_engine().query_executor.invalidate_cache()
         return jsonify({
             "success": True,
             "run_id": run.id,
