@@ -106,12 +106,12 @@
 
     function pctColor(val) {
         if (val > 0) {
-            var t = Math.min(val / 8, 1);
+            var t = Math.min(val / 6, 1);
             return 'rgb(' + Math.round(192 + (245-192)*(1-t)) + ',' +
                             Math.round(57 + (183-57)*(1-t)) + ',' +
                             Math.round(43 + (177-43)*(1-t)) + ')';
         } else if (val < 0) {
-            var t = Math.min(Math.abs(val) / 8, 1);
+            var t = Math.min(Math.abs(val) / 6, 1);
             return 'rgb(' + Math.round(39 + (169-39)*(1-t)) + ',' +
                             Math.round(174 + (223-174)*(1-t)) + ',' +
                             Math.round(96 + (191-96)*(1-t)) + ')';
