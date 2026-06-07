@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.services.data_jobs.service import DataJobService
+from app.services.wide_table_status import get_wide_table_status
 
 
 data_jobs_bp = Blueprint("data_jobs", __name__, url_prefix="/api/data-jobs")
@@ -76,3 +77,36 @@ def retry_run(run_id: int):
         return jsonify({"success": False, "error": str(exc)}), 500
 
     return jsonify({"success": True, "run_id": run.id, "status": run.status})
+
+
+@data_jobs_bp.route("/wide-table/status", methods=["GET"])
+def wide_table_status():
+    """返回大宽表状态：是否存在、日期、是否需要更新、是否过了 18:00。"""
+    try:
+        from flask import current_app
+        data_dir = current_app.config.get("DATA_DIR")
+        status = get_wide_table_status(data_dir)
+        return jsonify({"success": True, "status": status})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@data_jobs_bp.route("/wide-table/build", methods=["POST"])
+def build_wide_table():
+    """提交大宽表构建任务。"""
+    try:
+        run = get_data_job_service().submit("wide_table_builder", {})
+        # 构建成功后清缓存（inline 模式立即生效，celery 模式在 task 完成后清）
+        if run.status == "success":
+            from app.services.data_reader import ParquetDataReader
+            ParquetDataReader.invalidate_stock_business_cache()
+        return jsonify({
+            "success": True,
+            "run_id": run.id,
+            "job_type": run.job_type,
+            "status": run.status,
+        })
+    except (KeyError, ValueError) as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500

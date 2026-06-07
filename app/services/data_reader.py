@@ -257,6 +257,11 @@ class ParquetDataReader:
 
     _stock_business_cache: Optional[pd.DataFrame] = None
 
+    @classmethod
+    def invalidate_stock_business_cache(cls):
+        """清除 stock_business 缓存，使下次读取重新加载文件。"""
+        cls._stock_business_cache = None
+
     def get_stock_business(self, ts_code: Optional[str] = None,
                            trade_date: Optional[str] = None) -> pd.DataFrame:
         """读取股票业务大宽表（daily_basic + factor + moneyflow 合并）。"""

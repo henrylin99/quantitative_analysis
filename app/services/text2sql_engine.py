@@ -4,9 +4,11 @@ Text2SQL核心引擎
 """
 
 import logging
+import os
+import re
 import time
 import traceback
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 
 logger = logging.getLogger(__name__)
 from flask import request
@@ -241,40 +243,89 @@ class Text2SQLEngine:
 
 
 class QueryExecutor:
-    """查询执行器"""
-    
+    """查询执行器
+    自动将 Parquet 数据按正确列名映射加载到 SQLite 临时表，
+    使生成的 SQL 可以直接在 SQLite 上执行。
+    """
+
     def __init__(self):
-        self.max_result_count = 1000  # 最大结果数量限制
-    
+        self.max_result_count = 1000
+        self._loaded_tables: Set[str] = set()
+
+    # ---- Parquet → SQLite 列名映射 ----
+    # key = SQL 模板中使用的列名, value = Parquet 文件中的实际列名
+    TABLE_COLUMNS = {
+        'stock_business': {
+            'ts_code': 'ts_code', 'stock_name': 'stock_name',
+            'trade_date': 'trade_date', 'daily_close': 'close',
+            'factor_pct_change': 'factor_pct_change',
+            'vol': 'factor_vol', 'factor_vol': 'factor_vol',
+            'amount': 'factor_amount', 'factor_amount': 'factor_amount',
+            'pe_ttm': 'pe_ttm', 'pb': 'pb', 'pe': 'pe',
+            'turnover_rate': 'turnover_rate',
+            'total_mv': 'total_mv', 'circ_mv': 'circ_mv',
+        },
+        'stock_factor': {
+            'ts_code': 'ts_code', 'trade_date': 'trade_date',
+            'macd': 'factor_macd', 'macd_dif': 'factor_macd_dif',
+            'macd_dea': 'factor_macd_dea',
+            'rsi_6': 'factor_rsi_6', 'rsi_12': 'factor_rsi_12',
+            'rsi_24': 'factor_rsi_24',
+            'kdj_k': 'factor_kdj_k', 'kdj_d': 'factor_kdj_d',
+            'kdj_j': 'factor_kdj_j',
+        },
+        'stock_moneyflow': {
+            'ts_code': 'ts_code', 'trade_date': 'trade_date',
+            'net_mf_amount': 'moneyflow_net_amount',
+        },
+        'stock_ma_data': {
+            'ts_code': 'ts_code',
+            'ma5': 'ma5', 'ma10': 'ma10', 'ma20': 'ma20',
+            'ma30': 'ma30', 'ma60': 'ma60', 'ma120': 'ma120',
+        },
+    }
+
+    # 每张虚拟表对应的 Parquet 源文件
+    TABLE_SOURCES = {
+        'stock_business':  'stock_business.parquet',
+        'stock_factor':    'stock_business.parquet',   # 宽表已含因子数据
+        'stock_moneyflow': 'stock_business.parquet',   # 宽表已含资金流数据
+        'stock_ma_data':   'stock_ma_data.parquet',
+    }
+
+    # ---- public ----
+
     def execute(self, sql: str) -> Dict[str, Any]:
         """执行SQL查询"""
         try:
             if not sql:
                 return {'success': False, 'error': 'SQL为空'}
-            
+
+            # 确保 SQL 引用的数据表已从 Parquet 加载到 SQLite
+            self._ensure_data_tables(sql)
+
             # 执行查询
             result = db.session.execute(text(sql))
-            
+
             # 获取列名
             columns = list(result.keys())
-            
+
             # 获取数据
             rows = result.fetchall()
-            
+
             # 检查结果数量限制
             if len(rows) > self.max_result_count:
                 return {
                     'success': False,
                     'error': f'查询结果过多({len(rows)}条)，请添加更多筛选条件'
                 }
-            
+
             # 转换为字典列表
             data = []
             for row in rows:
                 row_dict = {}
                 for i, column in enumerate(columns):
                     value = row[i]
-                    # 处理特殊数据类型
                     if value is not None:
                         if isinstance(value, (int, float)):
                             row_dict[column] = value
@@ -283,17 +334,17 @@ class QueryExecutor:
                     else:
                         row_dict[column] = None
                 data.append(row_dict)
-            
+
             return {
                 'success': True,
                 'data': data,
                 'columns': columns,
                 'row_count': len(data)
             }
-            
+
         except Exception as e:
             error_msg = str(e)
-            
+
             # 处理常见的数据库错误
             if 'no such table' in error_msg.lower():
                 error_msg = '数据表不存在，请检查数据库配置'
@@ -301,7 +352,7 @@ class QueryExecutor:
                 error_msg = '字段不存在，请检查查询条件'
             elif 'syntax error' in error_msg.lower():
                 error_msg = 'SQL语法错误'
-            
+
             return {
                 'success': False,
                 'error': error_msg,
@@ -309,6 +360,86 @@ class QueryExecutor:
                 'columns': [],
                 'row_count': 0
             }
+
+    # ---- private: Parquet → SQLite 桥接 ----
+
+    def _ensure_data_tables(self, sql: str):
+        """检查 SQL 引用的表，若缺失则从 Parquet 加载"""
+        tables = self._extract_table_names(sql)
+        for tbl in tables:
+            if tbl in self.TABLE_COLUMNS and tbl not in self._loaded_tables:
+                self._load_parquet_to_sqlite(tbl)
+
+    @staticmethod
+    def _extract_table_names(sql: str) -> Set[str]:
+        """从 FROM / JOIN 子句提取表名"""
+        return set(re.findall(r'(?:FROM|JOIN)\s+(\w+)', sql, re.IGNORECASE))
+
+    def _load_parquet_to_sqlite(self, table_name: str):
+        """从 Parquet 文件加载数据到 SQLite 临时表"""
+        try:
+            import pandas as pd
+            from flask import current_app
+
+            parquet_file = self.TABLE_SOURCES[table_name]
+            data_dir = current_app.config.get('DATA_DIR', 'data')
+            if not os.path.isabs(data_dir):
+                data_dir = os.path.join(current_app.root_path, '..', data_dir)
+            parquet_path = os.path.join(data_dir, parquet_file)
+
+            if not os.path.exists(parquet_path):
+                logger.warning(f"Parquet 文件不存在: {parquet_path}")
+                return
+
+            df = pd.read_parquet(parquet_path)
+
+            # 只取最新交易日数据（约 5K 行），保持 SQLite 轻量
+            if 'trade_date' in df.columns:
+                latest_date = df['trade_date'].max()
+                df = df[df['trade_date'] == latest_date]
+
+            # 按 TABLE_COLUMNS 映射选取并重命名列
+            col_map = self.TABLE_COLUMNS[table_name]
+            available = {sql_col: pq_col
+                         for sql_col, pq_col in col_map.items()
+                         if pq_col in df.columns}
+            if not available:
+                return
+
+            # 去重 Parquet 列：多个 SQL 名可能映射到同一个 Parquet 列
+            unique_pq_cols = list(dict.fromkeys(available.values()))
+            df = df[unique_pq_cols].copy()
+
+            # 建立重命名映射：每个 Parquet 列 → 第一个出现的 SQL 列名
+            pq_to_first_sql = {}
+            for sql_col, pq_col in available.items():
+                if pq_col not in pq_to_first_sql:
+                    pq_to_first_sql[pq_col] = sql_col
+            df.rename(columns=pq_to_first_sql, inplace=True)
+
+            # 补充别名列（同一 Parquet 列的其它 SQL 名）
+            for sql_col, pq_col in available.items():
+                primary_sql = pq_to_first_sql[pq_col]
+                if sql_col != primary_sql and sql_col not in df.columns:
+                    df[sql_col] = df[primary_sql]
+
+            # NaN → None（SQLite 不支持 NaN）
+            df = df.where(pd.notnull(df), None)
+
+            # 写入 SQLite（通过 raw_connection 使用底层 sqlite3 连接，
+            # 兼容 SQLAlchemy 2.0 + Pandas 3.x）
+            raw_conn = db.engine.raw_connection()
+            try:
+                df.to_sql(table_name, raw_conn, if_exists='replace', index=False)
+            finally:
+                raw_conn.close()
+
+            self._loaded_tables.add(table_name)
+            logger.info(f"Loaded {len(df)} rows into '{table_name}' from {parquet_file}")
+
+        except Exception as e:
+            logger.error(f"Failed to load '{table_name}' from Parquet: {e}")
+            db.session.rollback()
 
 
 class ResultFormatter:

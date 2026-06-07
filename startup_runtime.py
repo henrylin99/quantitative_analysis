@@ -9,6 +9,7 @@ PARQUET_ASSETS = (
     "stock_trade_calendar.parquet",
     "daily_history/daily",
     "daily_basic/daily",
+    "stock_business.parquet",
 )
 
 

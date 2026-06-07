@@ -73,14 +73,13 @@ class NLPProcessor:
         """预处理查询文本"""
         # 去除多余空格
         query = re.sub(r'\s+', ' ', query.strip())
-        
+
         # 统一标点符号
         query = query.replace('，', ',').replace('。', '.').replace('？', '?')
-        
-        # 统一数字格式
-        query = re.sub(r'(\d+)%', r'\1百分比', query)
+
+        # 统一数字格式（保留 % 供后续 percentage 模式匹配）
         query = re.sub(r'(\d+)元', r'\1', query)
-        
+
         return query
 
 
@@ -199,14 +198,15 @@ class EntityExtractor:
             'price_fields': ['收盘价', '开盘价', '最高价', '最低价', 'close', 'open', 'high', 'low', '价格'],
             'volume_fields': ['成交量', '成交额', 'vol', 'amount', 'volume', '交易量', '交易额'],
             'ratio_fields': ['涨跌幅', '涨幅', '跌幅', 'pct_change', '换手率', 'turnover_rate', '量比', 'volume_ratio'],
-            'valuation_fields': ['市盈率', 'PE', 'pe_ttm', '市净率', 'PB', 'pb', 'pe'],
-            'technical_fields': ['MACD', 'RSI', 'KDJ', '布林带', '均线', 'MA']
+            'valuation_fields': ['市盈率', 'PE', 'pe_ttm', '市净率', 'PB', 'pb', 'pe', 'ROE', 'ROA', 'roe', 'roa'],
+            'technical_fields': ['MACD', 'RSI', 'KDJ', '布林带', '均线', 'MA'],
+            'money_flow_fields': ['资金', '资金流', '净流入', '净流出', '主力资金', '资金净流入', '资金净流出']
         }
         
         # 字段到数据库字段的映射
         self.field_db_mapping = {
             '市盈率': 'pe_ttm',
-            'PE': 'pe_ttm', 
+            'PE': 'pe_ttm',
             'pe': 'pe_ttm',
             '市净率': 'pb',
             'PB': 'pb',
@@ -217,7 +217,18 @@ class EntityExtractor:
             '收盘价': 'daily_close',
             '涨跌幅': 'factor_pct_change',
             '成交量': 'factor_vol',
-            '成交额': 'amount'
+            '成交额': 'amount',
+            'ROE': 'roe',
+            'ROA': 'roa',
+            'roe': 'roe',
+            'roa': 'roa',
+            '资金': 'net_mf_amount',
+            '资金流': 'net_mf_amount',
+            '净流入': 'net_mf_amount',
+            '资金净流入': 'net_mf_amount',
+            '净流出': 'net_mf_amount',
+            '资金净流出': 'net_mf_amount',
+            '主力资金': 'net_mf_amount',
         }
     
     def extract(self, query: str) -> Dict[str, Any]:
@@ -299,10 +310,11 @@ class EntityExtractor:
     def _is_technical_indicator_condition(self, condition: str) -> bool:
         """判断是否为技术指标条件"""
         technical_patterns = [
-            r'MACD.*金叉', r'MACD.*死叉', r'MACD.*向上', r'MACD.*向下',
+            r'MACD.*金叉', r'金叉.*MACD', r'MACD.*死叉', r'MACD.*向上', r'MACD.*向下',
             r'RSI.*超买', r'RSI.*超卖', r'RSI.*大于', r'RSI.*小于',
             r'KDJ.*金叉', r'KDJ.*死叉',
-            r'均线.*金叉', r'均线.*死叉', r'均线.*多头', r'均线.*空头'
+            r'均线.*金叉', r'均线.*死叉', r'均线.*多头', r'均线.*空头',
+            r'金叉.*股票', r'死叉.*股票',
         ]
         
         for pattern in technical_patterns:
@@ -314,18 +326,18 @@ class EntityExtractor:
     def _extract_technical_condition(self, condition: str) -> Dict[str, Any]:
         """提取技术指标条件"""
         condition_entity = {}
-        
-        if 'MACD' in condition:
+
+        if 'MACD' in condition or ('金叉' in condition and 'KDJ' not in condition and '均线' not in condition):
             condition_entity['field'] = {
                 'name': 'MACD',
                 'original': 'MACD',
                 'category': 'technical_fields',
                 'db_field': 'macd'
             }
-            
+
             if '金叉' in condition:
                 condition_entity['comparison'] = 'golden_cross'
-                condition_entity['value'] = 'golden_cross'  # 特殊值表示金叉
+                condition_entity['value'] = 'golden_cross'
             elif '死叉' in condition:
                 condition_entity['comparison'] = 'death_cross'
                 condition_entity['value'] = 'death_cross'
@@ -483,37 +495,43 @@ class EntityExtractor:
     def _extract_sorting(self, query: str) -> Dict[str, Any]:
         """提取排序信息"""
         sorting = {}
-        
-        if re.search(r'排名|排序|排列', query):
+
+        if re.search(r'排名|排序|排列|最多|最大|最高|前\d+.*名|前\d+.*只', query):
             sorting['sort'] = True
-            
+
             if re.search(r'升序|从小到大|asc', query):
                 sorting['order'] = 'asc'
             elif re.search(r'降序|从大到小|desc', query):
                 sorting['order'] = 'desc'
             else:
                 sorting['order'] = 'desc'  # 默认降序
-        
+
         return sorting
     
     def _extract_limits(self, query: str) -> Dict[str, Any]:
         """提取限制数量"""
         limits = {}
-        
-        # 提取前N名
+
+        # 提取前N名/前N只
         top_match = re.search(r'前(\d+)(?:名|个|只|支)?', query)
         if top_match:
             limits['limit'] = int(top_match.group(1))
-        
+
         # 提取top N
         top_match = re.search(r'top\s*(\d+)', query, re.IGNORECASE)
         if top_match:
             limits['limit'] = int(top_match.group(1))
-        
+
+        # 提取"N只股票"（无"前"前缀，如"最多的10只股票"）
+        if 'limit' not in limits:
+            count_match = re.search(r'(\d+)(?:只|支)股票', query)
+            if count_match:
+                limits['limit'] = int(count_match.group(1))
+
         # 默认限制
         if 'limit' not in limits:
             limits['limit'] = 20
-        
+
         return limits
 
 
