@@ -333,15 +333,6 @@
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-flask me-1"></i>试用功能
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('heatmap_routes.index') }}"><i class="fas fa-th-large me-1"></i>板块热力图</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('pattern_screen.index') }}"><i class="fas fa-crosshairs me-1"></i>形态选股</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-brain me-1"></i>多因子模型
                         </a>
                         <ul class="dropdown-menu">
@@ -368,6 +359,15 @@
                             <li><a class="dropdown-item" href="/realtime-analysis/monitor">实时监控</a></li>
                             <li><a class="dropdown-item" href="/realtime-analysis/risk">风险管理</a></li>
                             <li><a class="dropdown-item" href="/realtime-analysis/reports">分析报告</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-flask me-1"></i>试用功能
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('heatmap_routes.index') }}"><i class="fas fa-th-large me-1"></i>板块热力图</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('pattern_screen.index') }}"><i class="fas fa-crosshairs me-1"></i>形态选股</a></li>
                         </ul>
                     </li>
                 </ul>
