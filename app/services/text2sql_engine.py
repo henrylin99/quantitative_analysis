@@ -252,6 +252,10 @@ class QueryExecutor:
         self.max_result_count = 1000
         self._loaded_tables: Set[str] = set()
 
+    def invalidate_cache(self):
+        """清除已加载的临时表记录，下次查询时重新从 Parquet 加载。"""
+        self._loaded_tables.clear()
+
     # ---- Parquet → SQLite 列名映射 ----
     # key = SQL 模板中使用的列名, value = Parquet 文件中的实际列名
     TABLE_COLUMNS = {
@@ -277,6 +281,7 @@ class QueryExecutor:
         'stock_moneyflow': {
             'ts_code': 'ts_code', 'trade_date': 'trade_date',
             'net_mf_amount': 'moneyflow_net_amount',
+            'net_mf_vol': 'moneyflow_net_vol',
         },
         'stock_ma_data': {
             'ts_code': 'ts_code',

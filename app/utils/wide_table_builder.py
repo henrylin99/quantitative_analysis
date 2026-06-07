@@ -99,8 +99,12 @@ def build_wide_table() -> pd.DataFrame:
     # 3. moneyflow
     mf = reader._read_latest_partition("moneyflow")
     if mf is not None and not mf.empty:
-        mf = mf[["ts_code", "net_mf_amount"]].copy()
-        mf.rename(columns={"net_mf_amount": "moneyflow_net_amount"}, inplace=True)
+        mf_cols = [c for c in ["ts_code", "net_mf_amount", "net_mf_vol"] if c in mf.columns]
+        mf = mf[mf_cols].copy()
+        mf.rename(columns={
+            "net_mf_amount": "moneyflow_net_amount",
+            "net_mf_vol": "moneyflow_net_vol",
+        }, inplace=True)
         print(f"[wide_table_builder] moneyflow: {len(mf)} 行")
         result = result.merge(mf, on="ts_code", how="left")
     else:
