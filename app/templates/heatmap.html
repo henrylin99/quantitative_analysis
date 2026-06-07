@@ -11,6 +11,14 @@
 }
 .heatmap-title { font-size: 20px; font-weight: 600; color: #e2e8f0; }
 .heatmap-date { color: #94a3b8; font-size: 14px; }
+.sort-btns { display: flex; gap: 6px; }
+.sort-btn {
+    padding: 4px 12px; border-radius: 4px; border: 1px solid #334155;
+    background: transparent; color: #94a3b8; font-size: 12px; cursor: pointer;
+    transition: all 0.2s;
+}
+.sort-btn:hover { border-color: #6366f1; color: #e2e8f0; }
+.sort-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
 .heatmap-legend {
     display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;
 }
@@ -69,10 +77,16 @@
             <span class="heatmap-title">板块热力图</span>
             <span class="heatmap-date" style="margin-left:12px;">{{ trade_date }}</span>
         </div>
-        <div class="heatmap-legend">
-            <span>跌</span>
-            <div class="legend-bar"></div>
-            <span>涨</span>
+        <div style="display:flex;align-items:center;gap:20px;">
+            <div class="sort-btns">
+                <button class="sort-btn active" data-sort="pct" onclick="switchSort('pct')">涨跌幅排序</button>
+                <button class="sort-btn" data-sort="mv" onclick="switchSort('mv')">市值排序</button>
+            </div>
+            <div class="heatmap-legend">
+                <span>跌</span>
+                <div class="legend-bar"></div>
+                <span>涨</span>
+            </div>
         </div>
     </div>
     <div id="treemap-chart"></div>
@@ -92,12 +106,12 @@
 
     function pctColor(val) {
         if (val > 0) {
-            var t = Math.min(val / 5, 1);
+            var t = Math.min(val / 8, 1);
             return 'rgb(' + Math.round(192 + (245-192)*(1-t)) + ',' +
                             Math.round(57 + (183-57)*(1-t)) + ',' +
                             Math.round(43 + (177-43)*(1-t)) + ')';
         } else if (val < 0) {
-            var t = Math.min(Math.abs(val) / 5, 1);
+            var t = Math.min(Math.abs(val) / 8, 1);
             return 'rgb(' + Math.round(39 + (169-39)*(1-t)) + ',' +
                             Math.round(174 + (223-174)*(1-t)) + ',' +
                             Math.round(96 + (191-96)*(1-t)) + ')';
@@ -118,43 +132,70 @@
         };
     });
 
-    var option = {
-        tooltip: {
-            formatter: function(info) {
-                var d = info.data;
-                return '<b>' + d.name + '</b><br/>' +
-                    '加权涨跌: <b>' + d.avg_pct_chg.toFixed(2) + '%</b><br/>' +
-                    '涨/跌: ' + d.up_count + '/' + d.down_count +
-                    ' (共' + d.stock_count + '只)<br/>' +
-                    '净流入: ' + (d.net_mf_amount / 10000).toFixed(2) + '亿';
-            }
-        },
-        series: [{
-            type: 'treemap',
-            data: treemapData,
-            roam: false,
-            nodeClick: false,
-            breadcrumb: { show: false },
-            levels: [{
-                itemStyle: { borderColor: '#0f172a', borderWidth: 2, gapWidth: 2 },
-                upperLabel: { show: false }
-            }],
-            label: {
-                show: true,
-                formatter: function(params) {
-                    var d = params.data;
-                    var sign = d.avg_pct_chg >= 0 ? '+' : '';
-                    return d.name + '\n' + sign + d.avg_pct_chg.toFixed(2) + '%';
-                },
-                fontSize: 13,
-                color: '#fff',
-                textShadowColor: 'rgba(0,0,0,0.5)',
-                textShadowBlur: 4
-            }
-        }]
-    };
+    // 默认按涨跌幅排序（绝对值降序，涨跌两端最突出的排最前）
+    treemapData.sort(function(a, b) { return Math.abs(b.avg_pct_chg) - Math.abs(a.avg_pct_chg); });
 
-    chart.setOption(option);
+    function buildOption(data) {
+        return {
+            tooltip: {
+                formatter: function(info) {
+                    var d = info.data;
+                    return '<b>' + d.name + '</b><br/>' +
+                        '加权涨跌: <b>' + d.avg_pct_chg.toFixed(2) + '%</b><br/>' +
+                        '涨/跌: ' + d.up_count + '/' + d.down_count +
+                        ' (共' + d.stock_count + '只)<br/>' +
+                        '净流入: ' + (d.net_mf_amount / 10000).toFixed(2) + '亿';
+                }
+            },
+            series: [{
+                type: 'treemap',
+                data: data,
+                roam: false,
+                nodeClick: false,
+                breadcrumb: { show: false },
+                levels: [{
+                    itemStyle: { borderColor: '#0f172a', borderWidth: 2, gapWidth: 2 },
+                    upperLabel: { show: false }
+                }],
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        var d = params.data;
+                        var sign = d.avg_pct_chg >= 0 ? '+' : '';
+                        return d.name + '\n' + sign + d.avg_pct_chg.toFixed(2) + '%';
+                    },
+                    fontSize: 13,
+                    color: '#fff',
+                    textShadowColor: 'rgba(0,0,0,0.5)',
+                    textShadowBlur: 4
+                }
+            }]
+        };
+    }
+
+    chart.setOption(buildOption(treemapData));
+
+    // ---- 排序切换 ----
+    var currentSort = 'pct';
+
+    window.switchSort = function(mode) {
+        if (mode === currentSort) return;
+        currentSort = mode;
+
+        // 更新按钮状态
+        document.querySelectorAll('.sort-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.sort === mode);
+        });
+
+        // 重新排序数据
+        if (mode === 'pct') {
+            treemapData.sort(function(a, b) { return Math.abs(b.avg_pct_chg) - Math.abs(a.avg_pct_chg); });
+        } else {
+            treemapData.sort(function(a, b) { return b.value - a.value; });
+        }
+
+        chart.setOption(buildOption(treemapData));
+    };
 
     // ---- Sector Click → Stock Table ----
     var activeIndustry = null;
