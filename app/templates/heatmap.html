@@ -123,6 +123,7 @@
         return {
             name: s.name,
             value: s.total_mv,
+            total_mv: s.total_mv,
             avg_pct_chg: s.avg_pct_chg,
             stock_count: s.stock_count,
             up_count: s.up_count,
@@ -132,8 +133,22 @@
         };
     });
 
-    // 默认按涨跌幅排序（绝对值降序，涨跌两端最突出的排最前）
-    treemapData.sort(function(a, b) { return Math.abs(b.avg_pct_chg) - Math.abs(a.avg_pct_chg); });
+    function applySort(data, mode) {
+        // 深拷贝避免修改原数组
+        var sorted = data.map(function(d) {
+            var item = {};
+            for (var k in d) item[k] = d[k];
+            // 涨跌幅排序：矩形面积 = 涨跌幅绝对值 × 系数，让波动大的板块更突出
+            if (mode === 'pct') {
+                item.value = Math.max(Math.abs(d.avg_pct_chg), 0.01);
+            } else {
+                item.value = d.total_mv;
+            }
+            return item;
+        });
+        sorted.sort(function(a, b) { return b.value - a.value; });
+        return sorted;
+    }
 
     function buildOption(data) {
         return {
@@ -173,28 +188,19 @@
         };
     }
 
-    chart.setOption(buildOption(treemapData));
+    var currentSort = 'pct';
+    chart.setOption(buildOption(applySort(treemapData, 'pct')));
 
     // ---- 排序切换 ----
-    var currentSort = 'pct';
-
     window.switchSort = function(mode) {
         if (mode === currentSort) return;
         currentSort = mode;
 
-        // 更新按钮状态
         document.querySelectorAll('.sort-btn').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.sort === mode);
         });
 
-        // 重新排序数据
-        if (mode === 'pct') {
-            treemapData.sort(function(a, b) { return Math.abs(b.avg_pct_chg) - Math.abs(a.avg_pct_chg); });
-        } else {
-            treemapData.sort(function(a, b) { return b.value - a.value; });
-        }
-
-        chart.setOption(buildOption(treemapData));
+        chart.setOption(buildOption(applySort(treemapData, mode)));
     };
 
     // ---- Sector Click → Stock Table ----
