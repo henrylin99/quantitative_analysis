@@ -57,9 +57,9 @@
 .stock-table tbody tr:hover { background: rgba(99, 102, 241, 0.08); }
 .stock-table td { padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
 .stock-table td:first-child { font-weight: 500; }
-.pct-up { color: #ef4444; }
-.pct-down { color: #22c55e; }
-.pct-flat { color: #94a3b8; }
+.stock-table td.pct-up { color: #ef4444; }
+.stock-table td.pct-down { color: #22c55e; }
+.stock-table td.pct-flat { color: #94a3b8; }
 .error-banner {
     padding: 20px; text-align: center; color: #ef4444;
     background: #1e293b; border-radius: 8px; margin: 20px 0;
@@ -206,6 +206,11 @@
     // ---- Sector Click → Stock Table ----
     var activeIndustry = null;
 
+    window.closeSectorPanel = function() {
+        document.getElementById('stock-detail').style.display = 'none';
+        activeIndustry = null;
+    };
+
     chart.on('click', function(params) {
         var industry = params.data.name;
         var panel = document.getElementById('stock-detail');
@@ -226,8 +231,7 @@
             '<span class="panel-summary" style="margin-left:16px;">加权涨跌: ' +
             '<span style="color:' + (sector.avg_pct_chg >= 0 ? '#ef4444' : '#22c55e') + '">' +
             sign + sector.avg_pct_chg.toFixed(2) + '%</span></span></div>' +
-            '<button class="panel-close" onclick="document.getElementById(\'stock-detail\').style.display=\'none\';' +
-            'window._activeIndustry=null;">&times;</button>' +
+            '<button class="panel-close" onclick="closeSectorPanel()">&times;</button>' +
             '</div>' +
             '<table class="stock-table"><thead><tr>' +
             '<th>名称</th><th>涨跌幅</th><th>收盘价</th><th>总市值(亿)</th>' +
@@ -235,7 +239,7 @@
             '</tr></thead><tbody>';
 
         filtered.forEach(function(s) {
-            var cls = s.pct_chg > 0 ? 'pct-up' : (s.pct_chg < 0 ? 'pct-down' : 'pct-flat');
+            var cls = s.pct_chg > 0 ? 'pct-up' : (s.pct_chg < 0 ? 'pct-down' : '');
             var pSign = s.pct_chg > 0 ? '+' : '';
             html += '<tr>' +
                 '<td>' + s.name + '</td>' +

@@ -346,7 +346,7 @@ function resetFilters() {
     document.querySelectorAll('.pattern-check input').forEach(cb => cb.checked = false);
     document.getElementById('searchInput').value = '';
     filterBySearch();
-    updateSelectedCount();
+    onPatternChange();
     currentOffset = 0;
     currentSort = 'pct_chg';
     currentOrder = 'desc';
