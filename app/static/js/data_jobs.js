@@ -375,5 +375,101 @@
         updateProgressView(null);
         loadJobTypes();
         loadRunHistory();
+
+        // 大宽表按钮绑定
+        var buildBtn = document.getElementById("buildWideTableBtn");
+        var refreshWideBtn = document.getElementById("refreshWideTableStatusBtn");
+        if (buildBtn) buildBtn.addEventListener("click", submitBuildWideTable);
+        if (refreshWideBtn) refreshWideBtn.addEventListener("click", loadWideTableStatus);
+        loadWideTableStatus();
     });
+
+    // ---- 大宽表状态与构建 ----
+
+    async function loadWideTableStatus() {
+        var badge = document.getElementById("wideTableStatusBadge");
+        var dateEl = document.getElementById("wideTableDate");
+        var sourceDatesEl = document.getElementById("wideTableSourceDates");
+        var reasonEl = document.getElementById("wideTableUpdateReason");
+        var buildBtn = document.getElementById("buildWideTableBtn");
+        if (!badge) return;
+
+        badge.className = "badge bg-secondary";
+        badge.textContent = "检查中...";
+
+        try {
+            var resp = await fetch("/api/data-jobs/wide-table/status");
+            var data = await resp.json();
+            if (!data.success) {
+                badge.className = "badge bg-danger";
+                badge.textContent = "查询失败";
+                return;
+            }
+
+            var s = data.status;
+            dateEl.textContent = s.wide_table_date || "文件不存在";
+
+            var parts = [];
+            if (s.source_dates) {
+                for (var table in s.source_dates) {
+                    parts.push(table + ": " + (s.source_dates[table] || "无"));
+                }
+            }
+            sourceDatesEl.textContent = parts.join(" | ");
+
+            if (!s.exists) {
+                badge.className = "badge bg-danger";
+                badge.textContent = "缺失";
+                buildBtn.disabled = !s.past_cutoff;
+                reasonEl.textContent = "宽表文件不存在" + (s.past_cutoff ? "，可以构建" : "，需等待 18:00 后");
+            } else if (s.should_update) {
+                badge.className = "badge bg-warning text-dark";
+                badge.textContent = "需更新";
+                buildBtn.disabled = !s.past_cutoff;
+                reasonEl.textContent = s.reason + (s.past_cutoff ? "" : "（需等待 18:00 后）");
+            } else {
+                badge.className = "badge bg-success";
+                badge.textContent = "正常";
+                buildBtn.disabled = true;
+                reasonEl.textContent = "宽表已是最新";
+            }
+        } catch (err) {
+            badge.className = "badge bg-danger";
+            badge.textContent = "网络错误";
+        }
+    }
+
+    async function submitBuildWideTable() {
+        var buildBtn = document.getElementById("buildWideTableBtn");
+        var resultBox = document.getElementById("wideTableBuildResult");
+
+        buildBtn.disabled = true;
+        resultBox.style.display = "block";
+        resultBox.className = "alert alert-info mt-3";
+        resultBox.textContent = "正在提交大宽表构建任务...";
+
+        try {
+            var resp = await fetch("/api/data-jobs/wide-table/build", { method: "POST" });
+            var data = await resp.json();
+
+            if (data.success) {
+                resultBox.className = "alert alert-success mt-3";
+                resultBox.textContent = "构建任务已提交 (run_id=" + data.run_id + ")，请查看下方日频数据中心的进度。";
+                currentRunId = data.run_id;
+                await fetchRunStatus(currentRunId);
+                startPolling(currentRunId);
+                loadRunHistory();
+            } else {
+                resultBox.className = "alert alert-danger mt-3";
+                resultBox.textContent = "构建失败: " + data.error;
+                buildBtn.disabled = false;
+            }
+        } catch (err) {
+            resultBox.className = "alert alert-danger mt-3";
+            resultBox.textContent = "网络错误: " + err.message;
+            buildBtn.disabled = false;
+        }
+
+        setTimeout(loadWideTableStatus, 5000);
+    }
 })();
