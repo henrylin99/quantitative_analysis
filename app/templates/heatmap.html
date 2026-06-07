@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}板块热力图{% endblock %}
+
+{% block extra_css %}
+<style>
+.heatmap-page { padding: 20px 0; }
+.heatmap-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+}
+.heatmap-title { font-size: 20px; font-weight: 600; color: #e2e8f0; }
+.heatmap-date { color: #94a3b8; font-size: 14px; }
+.heatmap-legend {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;
+}
+.legend-bar {
+    width: 120px; height: 12px; border-radius: 3px;
+    background: linear-gradient(to right, #27ae60, #a9dfbf, #bdc3c7, #f5b7b1, #c0392b);
+}
+#treemap-chart { width: 100%; height: 520px; }
+.stock-detail-panel {
+    margin-top: 16px; display: none;
+    animation: slideDown 0.3s ease;
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: #1e293b; border-radius: 8px 8px 0 0;
+    border-bottom: 1px solid #334155;
+}
+.panel-title { font-size: 16px; font-weight: 600; color: #e2e8f0; }
+.panel-summary { font-size: 13px; color: #94a3b8; }
+.panel-close {
+    background: none; border: none; color: #94a3b8; cursor: pointer;
+    font-size: 18px; padding: 0 4px;
+}
+.panel-close:hover { color: #e2e8f0; }
+.stock-table { width: 100%; }
+.stock-table thead th {
+    background: #0f172a; color: #94a3b8; font-size: 12px; font-weight: 500;
+    padding: 8px 12px; border-bottom: 1px solid #1e293b; position: sticky; top: 0;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.stock-table tbody tr { border-bottom: 1px solid #1e293b; }
+.stock-table tbody tr:hover { background: rgba(99, 102, 241, 0.08); }
+.stock-table td { padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.stock-table td:first-child { font-weight: 500; }
+.pct-up { color: #ef4444; }
+.pct-down { color: #22c55e; }
+.pct-flat { color: #94a3b8; }
+.error-banner {
+    padding: 20px; text-align: center; color: #ef4444;
+    background: #1e293b; border-radius: 8px; margin: 20px 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid heatmap-page">
+    {% if error is defined and error %}
+    <div class="error-banner">{{ error }}</div>
+    {% else %}
+    <div class="heatmap-header">
+        <div>
+            <span class="heatmap-title">板块热力图</span>
+            <span class="heatmap-date" style="margin-left:12px;">{{ trade_date }}</span>
+        </div>
+        <div class="heatmap-legend">
+            <span>跌</span>
+            <div class="legend-bar"></div>
+            <span>涨</span>
+        </div>
+    </div>
+    <div id="treemap-chart"></div>
+    <div id="stock-detail" class="stock-detail-panel"></div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var sectors = {{ sectors_json | tojson }};
+    var stocks = {{ stocks_json | tojson }};
+
+    // ---- Treemap ----
+    var chart = echarts.init(document.getElementById('treemap-chart'), 'financial');
+
+    function pctColor(val) {
+        if (val > 0) {
+            var t = Math.min(val / 5, 1);
+            return 'rgb(' + Math.round(192 + (245-192)*(1-t)) + ',' +
+                            Math.round(57 + (183-57)*(1-t)) + ',' +
+                            Math.round(43 + (177-43)*(1-t)) + ')';
+        } else if (val < 0) {
+            var t = Math.min(Math.abs(val) / 5, 1);
+            return 'rgb(' + Math.round(39 + (169-39)*(1-t)) + ',' +
+                            Math.round(174 + (223-174)*(1-t)) + ',' +
+                            Math.round(96 + (191-96)*(1-t)) + ')';
+        }
+        return '#bdc3c7';
+    }
+
+    var treemapData = sectors.map(function(s) {
+        return {
+            name: s.name,
+            value: s.total_mv,
+            avg_pct_chg: s.avg_pct_chg,
+            stock_count: s.stock_count,
+            up_count: s.up_count,
+            down_count: s.down_count,
+            net_mf_amount: s.net_mf_amount,
+            itemStyle: { color: pctColor(s.avg_pct_chg) }
+        };
+    });
+
+    var option = {
+        tooltip: {
+            formatter: function(info) {
+                var d = info.data;
+                return '<b>' + d.name + '</b><br/>' +
+                    '加权涨跌: <b>' + d.avg_pct_chg.toFixed(2) + '%</b><br/>' +
+                    '涨/跌: ' + d.up_count + '/' + d.down_count +
+                    ' (共' + d.stock_count + '只)<br/>' +
+                    '净流入: ' + (d.net_mf_amount / 10000).toFixed(2) + '亿';
+            }
+        },
+        series: [{
+            type: 'treemap',
+            data: treemapData,
+            roam: false,
+            nodeClick: false,
+            breadcrumb: { show: false },
+            levels: [{
+                itemStyle: { borderColor: '#0f172a', borderWidth: 2, gapWidth: 2 },
+                upperLabel: { show: false }
+            }],
+            label: {
+                show: true,
+                formatter: function(params) {
+                    var d = params.data;
+                    var sign = d.avg_pct_chg >= 0 ? '+' : '';
+                    return d.name + '\n' + sign + d.avg_pct_chg.toFixed(2) + '%';
+                },
+                fontSize: 13,
+                color: '#fff',
+                textShadowColor: 'rgba(0,0,0,0.5)',
+                textShadowBlur: 4
+            }
+        }]
+    };
+
+    chart.setOption(option);
+
+    // ---- Sector Click → Stock Table ----
+    var activeIndustry = null;
+
+    chart.on('click', function(params) {
+        var industry = params.data.name;
+        var panel = document.getElementById('stock-detail');
+
+        if (activeIndustry === industry) {
+            panel.style.display = 'none';
+            activeIndustry = null;
+            return;
+        }
+        activeIndustry = industry;
+
+        var sector = sectors.find(function(s) { return s.name === industry; });
+        var filtered = stocks.filter(function(s) { return s.industry === industry; });
+
+        var sign = sector.avg_pct_chg >= 0 ? '+' : '';
+        var html = '<div class="panel-header">' +
+            '<div><span class="panel-title">' + industry + '（' + filtered.length + '只）</span>' +
+            '<span class="panel-summary" style="margin-left:16px;">加权涨跌: ' +
+            '<span style="color:' + (sector.avg_pct_chg >= 0 ? '#ef4444' : '#22c55e') + '">' +
+            sign + sector.avg_pct_chg.toFixed(2) + '%</span></span></div>' +
+            '<button class="panel-close" onclick="document.getElementById(\'stock-detail\').style.display=\'none\';' +
+            'window._activeIndustry=null;">&times;</button>' +
+            '</div>' +
+            '<table class="stock-table"><thead><tr>' +
+            '<th>名称</th><th>涨跌幅</th><th>收盘价</th><th>总市值(亿)</th>' +
+            '<th>净流入(万)</th><th>换手率</th>' +
+            '</tr></thead><tbody>';
+
+        filtered.forEach(function(s) {
+            var cls = s.pct_chg > 0 ? 'pct-up' : (s.pct_chg < 0 ? 'pct-down' : 'pct-flat');
+            var pSign = s.pct_chg > 0 ? '+' : '';
+            html += '<tr>' +
+                '<td>' + s.name + '</td>' +
+                '<td class="' + cls + '">' + pSign + (s.pct_chg != null ? s.pct_chg.toFixed(2) : '--') + '%</td>' +
+                '<td>' + (s.close != null ? s.close.toFixed(2) : '--') + '</td>' +
+                '<td>' + (s.total_mv != null ? (s.total_mv / 10000).toFixed(1) : '--') + '</td>' +
+                '<td class="' + (s.net_mf_amount > 0 ? 'pct-up' : (s.net_mf_amount < 0 ? 'pct-down' : '')) + '">' +
+                (s.net_mf_amount != null ? s.net_mf_amount.toFixed(0) : '--') + '</td>' +
+                '<td>' + (s.turnover_rate != null ? s.turnover_rate.toFixed(2) + '%' : '--') + '</td>' +
+                '</tr>';
+        });
+
+        html += '</tbody></table>';
+        panel.innerHTML = html;
+        panel.style.display = 'block';
+        window._activeIndustry = industry;
+    });
+
+    window.addEventListener('resize', function() { chart.resize(); });
+})();
+</script>
+{% endblock %}
