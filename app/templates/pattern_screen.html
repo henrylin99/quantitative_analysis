@@ -5,36 +5,48 @@
 .pattern-page { display: flex; min-height: calc(100vh - 56px); }
 .filter-panel {
     width: 300px; min-width: 300px;
-    background: var(--obs-surface, #1e293b);
-    border-right: 1px solid var(--obs-border, #334155);
+    background: #162032;
+    border-right: 1px solid rgba(99, 102, 241, 0.15);
     overflow-y: auto; padding: 16px;
     display: flex; flex-direction: column;
 }
 .filter-panel .search-box { margin-bottom: 12px; }
 .filter-panel .search-box input {
     width: 100%; padding: 6px 10px; border-radius: 4px;
-    border: 1px solid var(--obs-border, #334155);
-    background: var(--obs-bg, #0f172a); color: var(--obs-text, #e2e8f0);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    background: #0f172a; color: #e2e8f0;
     font-size: 13px;
 }
+.filter-panel .search-box input:focus {
+    outline: none; border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
 .filter-panel .search-box input::placeholder { color: #64748b; }
-.accordion-item { border: none; margin-bottom: 4px; }
+.accordion-item { border: none; margin-bottom: 2px; }
 .accordion-button {
     background: transparent; color: #e2e8f0; font-size: 13px;
     font-weight: 600; padding: 8px 12px; border: none; box-shadow: none;
 }
 .accordion-button:not(.collapsed) {
-    background: rgba(99, 102, 241, 0.1); color: #818cf8;
+    background: rgba(99, 102, 241, 0.08); color: #818cf8;
 }
 .accordion-button::after { filter: invert(0.7); }
 .accordion-body { padding: 4px 8px; }
 .pattern-check {
-    display: flex; align-items: center; padding: 3px 4px; border-radius: 3px;
-    font-size: 12px; color: #94a3b8; cursor: pointer;
+    display: flex; align-items: center; padding: 4px 6px; border-radius: 4px;
+    font-size: 12px; color: #cbd5e1; cursor: pointer;
+    background: rgba(30, 41, 59, 0.5); margin-bottom: 2px;
+    transition: background 0.15s, color 0.15s;
 }
-.pattern-check:hover { background: rgba(99, 102, 241, 0.08); }
-.pattern-check input[type="checkbox"] { margin-right: 6px; accent-color: #6366f1; }
-.pattern-check .hit-count { margin-left: auto; color: #64748b; font-size: 11px; }
+.pattern-check:hover { background: rgba(99, 102, 241, 0.12); color: #e2e8f0; }
+.pattern-check:has(input:checked) {
+    background: rgba(99, 102, 241, 0.18); color: #a5b4fc;
+}
+.pattern-check input[type="checkbox"] {
+    margin-right: 6px; accent-color: #6366f1;
+    width: 14px; height: 14px;
+}
+.pattern-check .hit-count { margin-left: auto; color: #475569; font-size: 11px; }
 .filter-actions { margin-top: auto; padding-top: 12px; display: flex; gap: 8px; }
 .filter-actions .btn { flex: 1; font-size: 13px; }
 .result-area { flex: 1; padding: 20px; overflow-x: auto; }
@@ -87,11 +99,8 @@
     </div>
     <div class="accordion" id="groupAccordion"></div>
     <div class="filter-actions">
-      <button class="btn btn-outline-secondary" onclick="resetFilters()">
+      <button class="btn btn-outline-secondary" onclick="resetFilters()" style="border-color:rgba(99,102,241,0.3);color:#94a3b8;">
         <i class="fas fa-undo me-1"></i>重置
-      </button>
-      <button class="btn btn-primary" onclick="doScreen()" style="background:#6366f1;border-color:#6366f1;">
-        <i class="fas fa-search me-1"></i>筛选
       </button>
     </div>
   </div>
@@ -156,7 +165,7 @@ function renderGroups(groups) {
             <div class="accordion-body">
               ${g.fields.map(f => `
                 <label class="pattern-check" data-label="${f.label}">
-                  <input type="checkbox" value="${f.key}" onchange="updateSelectedCount()">
+                  <input type="checkbox" value="${f.key}" onchange="onPatternChange()">
                   ${f.label}
                   <span class="hit-count">${f.count}</span>
                 </label>
@@ -175,9 +184,11 @@ function filterBySearch() {
     });
 }
 
-function updateSelectedCount() {
+function onPatternChange() {
     const count = document.querySelectorAll('.pattern-check input:checked').length;
     document.getElementById('selectedCount').textContent = count;
+    currentOffset = 0;
+    doScreen();
 }
 
 function getCheckedPatterns() {
