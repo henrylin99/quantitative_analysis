@@ -331,15 +331,14 @@
                             <i class="fas fa-filter me-1"></i>选股筛选
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('heatmap_routes.index') }}">
-                            <i class="fas fa-th-large me-1"></i>板块热力图
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-flask me-1"></i>试用功能
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('pattern_screen.index') }}">
-                            <i class="fas fa-crosshairs me-1"></i>形态选股
-                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('heatmap_routes.index') }}"><i class="fas fa-th-large me-1"></i>板块热力图</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('pattern_screen.index') }}"><i class="fas fa-crosshairs me-1"></i>形态选股</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
