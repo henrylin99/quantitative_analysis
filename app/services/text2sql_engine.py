@@ -372,13 +372,28 @@ class QueryExecutor:
     # ---- private: Parquet → SQLite 桥接 ----
 
     def _ensure_data_tables(self, sql: str):
-        """检查 SQL 引用的表，若缺失或源文件已变更则重新加载"""
+        """检查 SQL 引用的表，若缺失或源文件已变更则重新加载。
+        同一 Parquet 文件可能对应多个虚拟表（如 stock_business.parquet
+        同时是 stock_business / stock_factor / stock_moneyflow 的源），
+        文件变更时需重置所有共享该文件的已加载虚拟表。
+        """
         tables = self._extract_table_names(sql)
+        stale_tables = set()
         for tbl in tables:
             if tbl not in self.TABLE_COLUMNS:
                 continue
-            if tbl not in self._loaded_tables or self._is_parquet_stale(tbl):
-                self._load_parquet_to_sqlite(tbl)
+            if tbl not in self._loaded_tables:
+                stale_tables.add(tbl)
+            elif self._is_parquet_stale(tbl):
+                stale_tables.add(tbl)
+                # 文件变更 → 重置所有共享同一 Parquet 源的已加载虚拟表
+                stale_file = self.TABLE_SOURCES.get(tbl)
+                for loaded_tbl in list(self._loaded_tables):
+                    if self.TABLE_SOURCES.get(loaded_tbl) == stale_file:
+                        stale_tables.add(loaded_tbl)
+
+        for tbl in stale_tables:
+            self._load_parquet_to_sqlite(tbl)
 
     def _is_parquet_stale(self, table_name: str) -> bool:
         """检测 Parquet 源文件是否在上次加载后被修改（跨进程安全）。"""
@@ -395,7 +410,8 @@ class QueryExecutor:
             if not os.path.exists(parquet_path):
                 return False
             current_mtime = os.path.getmtime(parquet_path)
-            cached_mtime = self._file_mtimes.get(parquet_path, 0)
+            # 按 (table_name, parquet_path) 追踪，每个虚拟表独立记录
+            cached_mtime = self._file_mtimes.get((table_name, parquet_path), 0)
             return current_mtime > cached_mtime
         except Exception:
             return False
@@ -465,8 +481,8 @@ class QueryExecutor:
                 raw_conn.close()
 
             self._loaded_tables.add(table_name)
-            # 记录文件 mtime，后续查询时检测文件是否被重建
-            self._file_mtimes[parquet_path] = os.path.getmtime(parquet_path)
+            # 按 (虚拟表名, 文件路径) 记录 mtime，同一文件的不同虚拟表独立追踪
+            self._file_mtimes[(table_name, parquet_path)] = os.path.getmtime(parquet_path)
             logger.info(f"Loaded {len(df)} rows into '{table_name}' from {parquet_file}")
 
         except Exception as e:
