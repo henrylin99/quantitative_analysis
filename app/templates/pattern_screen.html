@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block title %}形态选股{% endblock %}
+{% block extra_css %}
+<style>
+.pattern-page { display: flex; min-height: calc(100vh - 56px); }
+
+/* ── Left Panel — uses Obsidian design tokens ── */
+.filter-panel {
+    width: 300px; min-width: 300px;
+    background: var(--obs-surface-alt);
+    border-right: 1px solid var(--obs-border-light);
+    overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column;
+}
+.filter-panel .search-box { margin-bottom: 12px; }
+.filter-panel .search-box input {
+    width: 100%; padding: 6px 10px; border-radius: var(--border-radius-sm);
+    border: 1px solid var(--obs-border);
+    background: var(--obs-bg); color: var(--obs-text);
+    font-size: 13px;
+}
+.filter-panel .search-box input:focus {
+    outline: none; border-color: var(--obs-primary);
+    box-shadow: 0 0 0 2px var(--obs-primary-bg);
+}
+.filter-panel .search-box input::placeholder { color: var(--obs-text-muted); }
+
+/* Accordion — override Bootstrap defaults completely */
+.accordion-item {
+    border: none !important; margin-bottom: 2px;
+    background: transparent !important;
+}
+.accordion-button {
+    background: transparent !important; color: var(--obs-text);
+    font-size: 13px; font-weight: 600;
+    padding: 8px 12px; border: none !important;
+    box-shadow: none !important;
+}
+.accordion-button:not(.collapsed) {
+    background: var(--obs-primary-bg) !important; color: var(--obs-primary-light);
+}
+.accordion-button::after { filter: invert(0.7); }
+.accordion-collapse { border: none !important; }
+.accordion-body {
+    padding: 4px 8px;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Checkbox row — card-like feel, matches card hover pattern */
+.pattern-check {
+    display: flex; align-items: center; padding: 4px 6px;
+    border-radius: var(--border-radius-sm);
+    font-size: 12px; color: var(--obs-text-secondary); cursor: pointer;
+    background: var(--obs-surface);
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+    transition: var(--transition-fast);
+}
+.pattern-check:hover {
+    border-color: var(--obs-border-hover);
+    box-shadow: 0 0 12px rgba(99,102,241,0.06);
+    color: var(--obs-text);
+}
+.pattern-check:has(input:checked) {
+    background: var(--obs-primary-bg);
+    border-color: var(--obs-border-hover);
+    color: var(--obs-primary-light);
+}
+.pattern-check input[type="checkbox"] {
+    margin-right: 6px; accent-color: var(--obs-primary);
+    width: 14px; height: 14px;
+}
+.pattern-check .hit-count {
+    margin-left: auto; color: var(--obs-text-muted); font-size: 11px;
+}
+
+/* Reset button */
+.filter-actions { margin-top: auto; padding-top: 12px; display: flex; }
+.filter-actions .btn {
+    flex: 1; font-size: 13px;
+    border-color: var(--obs-border) !important;
+    color: var(--obs-text-secondary) !important;
+    background: transparent !important;
+}
+.filter-actions .btn:hover {
+    border-color: var(--obs-border-hover) !important;
+    color: var(--obs-primary-light) !important;
+    background: var(--obs-primary-bg) !important;
+}
+
+/* ── Right Area ── */
+.result-area { flex: 1; padding: 20px; overflow-x: auto; }
+.stats-bar {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 16px; color: var(--obs-text-secondary); font-size: 14px;
+}
+.stats-bar .badge { background: var(--obs-primary-bg); color: var(--obs-primary-light); }
+.result-table { width: 100%; font-size: 13px; color: var(--obs-text); }
+.result-table thead th {
+    background: var(--obs-surface); color: var(--obs-text-secondary);
+    font-weight: 600; padding: 10px 12px;
+    border-bottom: 1px solid var(--obs-border);
+    cursor: pointer; user-select: none; white-space: nowrap;
+}
+.result-table thead th:hover { color: var(--obs-primary-light); }
+.result-table thead th .sort-icon { margin-left: 4px; font-size: 10px; }
+.result-table tbody td {
+    padding: 8px 12px; border-bottom: 1px solid rgba(51,65,85,0.4);
+    white-space: nowrap;
+}
+.result-table tbody tr:hover { background: var(--obs-primary-bg); }
+.pct-up { color: var(--obs-danger); }
+.pct-down { color: var(--obs-success); }
+.pct-flat { color: var(--obs-text-secondary); }
+.pagination-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; margin-top: 16px;
+}
+.page-btn {
+    padding: 4px 10px; border-radius: var(--border-radius-sm);
+    border: 1px solid var(--obs-border);
+    background: transparent; color: var(--obs-text-secondary);
+    font-size: 12px; cursor: pointer;
+}
+.page-btn:hover { border-color: var(--obs-primary); color: var(--obs-text); }
+.page-btn.active { background: var(--obs-primary); color: #fff; border-color: var(--obs-primary); }
+.page-btn:disabled { opacity: 0.4; cursor: default; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--obs-text-muted); }
+.empty-state i { font-size: 48px; margin-bottom: 16px; }
+@media (max-width: 768px) {
+    .pattern-page { flex-direction: column; }
+    .filter-panel { width: 100%; min-width: auto; max-height: 40vh; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pattern-page">
+  <div class="filter-panel">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="搜索形态名称..." oninput="filterBySearch()">
+    </div>
+    <div class="accordion" id="groupAccordion"></div>
+    <div class="filter-actions">
+      <button class="btn btn-outline-secondary" onclick="resetFilters()">
+        <i class="fas fa-undo me-1"></i>重置
+      </button>
+    </div>
+  </div>
+  <div class="result-area">
+    <div class="stats-bar" id="statsBar">
+      <span>交易日: <strong id="tradeDate">--</strong></span>
+      <span>|</span>
+      <span>已选: <span class="badge" id="selectedCount">0</span> 个形态</span>
+      <span>|</span>
+      <span>匹配: <strong id="totalCount">0</strong> 只</span>
+    </div>
+    <div id="tableContainer">
+      <div class="empty-state">
+        <i class="fas fa-crosshairs d-block"></i>
+        <div>加载中...</div>
+      </div>
+    </div>
+    <div class="pagination-bar" id="paginationBar"></div>
+  </div>
+</div>
+
+<script>
+let currentSort = 'pct_chg';
+let currentOrder = 'desc';
+let currentOffset = 0;
+let currentLimit = 50;
+let currentTotal = 0;
+let allGroups = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadGroups();
+    doScreen();
+});
+
+async function loadGroups() {
+    try {
+        const resp = await axios.get('/api/pattern-screen/groups');
+        const data = resp.data.data;
+        if (!data) return;
+        allGroups = data;
+        renderGroups(data);
+    } catch (e) {
+        console.error('加载分组失败:', e);
+    }
+}
+
+function renderGroups(groups) {
+    const container = document.getElementById('groupAccordion');
+    container.innerHTML = '';
+    groups.forEach((g, idx) => {
+        const show = idx < 2;
+        container.innerHTML += `
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button ${show ? '' : 'collapsed'}" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#group-${g.id}">
+              ${g.label} <span style="margin-left:auto;font-weight:400;font-size:11px;color:#64748b;">${g.fields.length}</span>
+            </button>
+          </h2>
+          <div id="group-${g.id}" class="accordion-collapse collapse ${show ? 'show' : ''}"
+               data-bs-parent="#groupAccordion">
+            <div class="accordion-body">
+              ${g.fields.map(f => `
+                <label class="pattern-check" data-label="${f.label}">
+                  <input type="checkbox" value="${f.key}" onchange="onPatternChange()">
+                  ${f.label}
+                  <span class="hit-count">${f.count}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>`;
+    });
+}
+
+function filterBySearch() {
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    document.querySelectorAll('.pattern-check').forEach(el => {
+        const label = el.getAttribute('data-label').toLowerCase();
+        el.style.display = (!q || label.includes(q)) ? '' : 'none';
+    });
+}
+
+function onPatternChange() {
+    const count = document.querySelectorAll('.pattern-check input:checked').length;
+    document.getElementById('selectedCount').textContent = count;
+    currentOffset = 0;
+    doScreen();
+}
+
+function getCheckedPatterns() {
+    return Array.from(document.querySelectorAll('.pattern-check input:checked'))
+        .map(cb => cb.value);
+}
+
+async function doScreen() {
+    const patterns = getCheckedPatterns();
+    try {
+        const resp = await axios.post('/api/pattern-screen/screen', {
+            patterns,
+            sort_by: currentSort,
+            order: currentOrder,
+            limit: currentLimit,
+            offset: currentOffset,
+        });
+        const result = resp.data.data;
+        if (!result) return;
+        currentTotal = result.total;
+        document.getElementById('tradeDate').textContent = formatDate(result.trade_date);
+        document.getElementById('totalCount').textContent = result.total;
+        renderTable(result.rows);
+        renderPagination(result.total, result.limit, result.offset);
+    } catch (e) {
+        console.error('筛选失败:', e);
+        document.getElementById('tableContainer').innerHTML =
+            '<div class="empty-state"><i class="fas fa-exclamation-triangle d-block"></i><div>筛选失败，请重试</div></div>';
+    }
+}
+
+function renderTable(rows) {
+    if (!rows || rows.length === 0) {
+        document.getElementById('tableContainer').innerHTML =
+            '<div class="empty-state"><i class="fas fa-inbox d-block"></i><div>暂无匹配结果</div></div>';
+        return;
+    }
+    const sortIcon = (col) => {
+        if (col !== currentSort) return '<i class="fas fa-sort sort-icon" style="opacity:0.3"></i>';
+        return currentOrder === 'desc'
+            ? '<i class="fas fa-sort-down sort-icon"></i>'
+            : '<i class="fas fa-sort-up sort-icon"></i>';
+    };
+    let html = `<table class="result-table">
+      <thead><tr>
+        <th onclick="sortTable('ts_code')">代码 ${sortIcon('ts_code')}</th>
+        <th>名称</th>
+        <th>行业</th>
+        <th onclick="sortTable('pct_chg')">涨跌幅 ${sortIcon('pct_chg')}</th>
+        <th onclick="sortTable('close')">现价 ${sortIcon('close')}</th>
+        <th onclick="sortTable('amount')">成交额 ${sortIcon('amount')}</th>
+        <th onclick="sortTable('total_mv')">总市值 ${sortIcon('total_mv')}</th>
+        <th onclick="sortTable('turnover_rate')">换手率 ${sortIcon('turnover_rate')}</th>
+        <th onclick="sortTable('vol_ratio_5')">量比 ${sortIcon('vol_ratio_5')}</th>
+      </tr></thead><tbody>`;
+    rows.forEach(r => {
+        const pctClass = r.pct_chg > 0 ? 'pct-up' : (r.pct_chg < 0 ? 'pct-down' : 'pct-flat');
+        const pctStr = r.pct_chg > 0 ? '+' + r.pct_chg.toFixed(2) : r.pct_chg.toFixed(2);
+        html += `<tr>
+          <td>${r.ts_code || ''}</td>
+          <td>${r.name || ''}</td>
+          <td>${r.industry || '--'}</td>
+          <td class="${pctClass}">${pctStr}%</td>
+          <td>${fmtNum(r.close, 2)}</td>
+          <td>${fmtAmount(r.amount)}</td>
+          <td>${fmtAmount(r.total_mv)}</td>
+          <td>${fmtNum(r.turnover_rate, 2)}%</td>
+          <td>${fmtNum(r.vol_ratio_5, 2)}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('tableContainer').innerHTML = html;
+}
+
+function sortTable(field) {
+    if (currentSort === field) {
+        currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+    } else {
+        currentSort = field;
+        currentOrder = 'desc';
+    }
+    currentOffset = 0;
+    doScreen();
+}
+
+function renderPagination(total, limit, offset) {
+    const bar = document.getElementById('paginationBar');
+    if (total <= limit) { bar.innerHTML = ''; return; }
+    const pages = Math.ceil(total / limit);
+    const cur = Math.floor(offset / limit) + 1;
+    let html = `<button class="page-btn" onclick="gotoPage(${offset - limit})" ${cur === 1 ? 'disabled' : ''}>
+        <i class="fas fa-chevron-left"></i></button>`;
+    let start = Math.max(1, cur - 3);
+    let end = Math.min(pages, start + 6);
+    start = Math.max(1, end - 6);
+    for (let i = start; i <= end; i++) {
+        const off = (i - 1) * limit;
+        html += `<button class="page-btn ${i === cur ? 'active' : ''}" onclick="gotoPage(${off})">${i}</button>`;
+    }
+    html += `<button class="page-btn" onclick="gotoPage(${offset + limit})" ${cur === pages ? 'disabled' : ''}>
+        <i class="fas fa-chevron-right"></i></button>`;
+    bar.innerHTML = html;
+}
+
+function gotoPage(offset) {
+    currentOffset = Math.max(0, offset);
+    doScreen();
+}
+
+function resetFilters() {
+    document.querySelectorAll('.pattern-check input').forEach(cb => cb.checked = false);
+    document.getElementById('searchInput').value = '';
+    filterBySearch();
+    onPatternChange();
+    currentOffset = 0;
+    currentSort = 'pct_chg';
+    currentOrder = 'desc';
+    doScreen();
+}
+
+function fmtNum(v, digits) {
+    if (v == null) return '--';
+    return Number(v).toFixed(digits);
+}
+
+function fmtAmount(v) {
+    if (v == null) return '--';
+    v = Number(v);
+    if (Math.abs(v) >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+    if (Math.abs(v) >= 1e4) return (v / 1e4).toFixed(2) + '万';
+    return v.toFixed(2);
+}
+
+function formatDate(d) {
+    if (!d || d.length !== 8) return d || '--';
+    return d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8);
+}
+</script>
+{% endblock %}
