@@ -251,10 +251,13 @@ class QueryExecutor:
     def __init__(self):
         self.max_result_count = 1000
         self._loaded_tables: Set[str] = set()
+        # {parquet_abs_path: mtime_at_load} — 用于检测文件是否被重建
+        self._file_mtimes: Dict[str, float] = {}
 
     def invalidate_cache(self):
         """清除已加载的临时表记录，下次查询时重新从 Parquet 加载。"""
         self._loaded_tables.clear()
+        self._file_mtimes.clear()
 
     # ---- Parquet → SQLite 列名映射 ----
     # key = SQL 模板中使用的列名, value = Parquet 文件中的实际列名
@@ -369,11 +372,33 @@ class QueryExecutor:
     # ---- private: Parquet → SQLite 桥接 ----
 
     def _ensure_data_tables(self, sql: str):
-        """检查 SQL 引用的表，若缺失则从 Parquet 加载"""
+        """检查 SQL 引用的表，若缺失或源文件已变更则重新加载"""
         tables = self._extract_table_names(sql)
         for tbl in tables:
-            if tbl in self.TABLE_COLUMNS and tbl not in self._loaded_tables:
+            if tbl not in self.TABLE_COLUMNS:
+                continue
+            if tbl not in self._loaded_tables or self._is_parquet_stale(tbl):
                 self._load_parquet_to_sqlite(tbl)
+
+    def _is_parquet_stale(self, table_name: str) -> bool:
+        """检测 Parquet 源文件是否在上次加载后被修改（跨进程安全）。"""
+        try:
+            from flask import current_app
+            import os
+            data_dir = current_app.config.get('DATA_DIR', 'data')
+            if not os.path.isabs(data_dir):
+                data_dir = os.path.join(current_app.root_path, '..', data_dir)
+            parquet_file = self.TABLE_SOURCES.get(table_name)
+            if not parquet_file:
+                return False
+            parquet_path = os.path.join(data_dir, parquet_file)
+            if not os.path.exists(parquet_path):
+                return False
+            current_mtime = os.path.getmtime(parquet_path)
+            cached_mtime = self._file_mtimes.get(parquet_path, 0)
+            return current_mtime > cached_mtime
+        except Exception:
+            return False
 
     @staticmethod
     def _extract_table_names(sql: str) -> Set[str]:
@@ -440,6 +465,8 @@ class QueryExecutor:
                 raw_conn.close()
 
             self._loaded_tables.add(table_name)
+            # 记录文件 mtime，后续查询时检测文件是否被重建
+            self._file_mtimes[parquet_path] = os.path.getmtime(parquet_path)
             logger.info(f"Loaded {len(df)} rows into '{table_name}' from {parquet_file}")
 
         except Exception as e:
