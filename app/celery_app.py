@@ -38,12 +38,13 @@ class _LocalCelery:
 
 def make_celery(config_name: str = "default"):
     cfg = config[config_name]
-    broker = f"redis://{cfg.REDIS_HOST}:{cfg.REDIS_PORT}/{cfg.REDIS_DB}"
+    broker = cfg.CELERY_BROKER_URL
+    backend = cfg.CELERY_RESULT_BACKEND
 
     if Celery is None:
         return _LocalCelery()
 
-    celery = Celery("quant_data_jobs", broker=broker, backend=broker)
+    celery = Celery("quant_data_jobs", broker=broker, backend=backend)
     celery.conf.update(
         task_serializer="json",
         accept_content=["json"],

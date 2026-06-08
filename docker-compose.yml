@@ -1,25 +1,35 @@
 version: "3.9"
 
+x-app-common: &app-common
+  build: .
+  env_file:
+    - .env
+  volumes:
+    - ./data:/app/data
+    - ./instance:/app/instance
+    - ./logs:/app/logs
+  depends_on:
+    - redis
+  restart: unless-stopped
+
 services:
   web:
-    build: .
+    <<: *app-common
     command: python run.py
     ports:
       - "5000:5000"
-    env_file:
-      - .env
-    depends_on:
-      - redis
 
   worker:
-    build: .
+    <<: *app-common
     command: celery -A app.celery_app.celery worker -l info -P solo
-    env_file:
-      - .env
-    depends_on:
-      - redis
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:
