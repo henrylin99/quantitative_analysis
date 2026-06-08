@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多因子选股系统 — 项目介绍</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --primary-dark: #1d4ed8;
+            --accent: #10b981;
+            --accent-light: #34d399;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #f1f5f9;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
+            --radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--accent) 100%);
+            color: #fff;
+            padding: 80px 24px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+        .hero .subtitle {
+            font-size: 1.25rem;
+            opacity: 0.9;
+            max-width: 680px;
+            margin: 0 auto 28px;
+        }
+        .hero .badges {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+            backdrop-filter: blur(4px);
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+
+        /* ── Container ── */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* ── Section ── */
+        section {
+            padding: 64px 0;
+        }
+        section:nth-child(even) {
+            background: #fff;
+        }
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--primary-dark);
+        }
+        .section-desc {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-bottom: 36px;
+            max-width: 720px;
+        }
+
+        /* ── Feature Grid ── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        .card .icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+        .card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .card p {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+        }
+        .card ul {
+            list-style: none;
+            margin-top: 8px;
+        }
+        .card ul li {
+            position: relative;
+            padding-left: 18px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+        .card ul li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* ── Architecture ── */
+        .arch-diagram {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 36px;
+            box-shadow: var(--shadow);
+            overflow-x: auto;
+        }
+        .arch-diagram pre {
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: var(--text);
+        }
+
+        /* ── Table ── */
+        .styled-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        .styled-table thead {
+            background: var(--primary);
+            color: #fff;
+        }
+        .styled-table th, .styled-table td {
+            padding: 14px 20px;
+            text-align: left;
+            font-size: 0.92rem;
+        }
+        .styled-table tbody tr {
+            border-bottom: 1px solid var(--border);
+        }
+        .styled-table tbody tr:last-child {
+            border-bottom: none;
+        }
+        .styled-table tbody tr:hover {
+            background: #f0f7ff;
+        }
+        .styled-table code {
+            background: var(--code-bg);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--primary-dark);
+        }
+
+        /* ── Code Block ── */
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: var(--radius);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        .code-block code {
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+            font-size: 0.88rem;
+            line-height: 1.7;
+        }
+        .code-block .comment { color: #94a3b8; }
+        .code-block .cmd { color: #38bdf8; }
+
+        /* ── Factor Tags ── */
+        .factor-group {
+            margin-bottom: 20px;
+        }
+        .factor-group h4 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            color: var(--primary-dark);
+        }
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .tag {
+            display: inline-block;
+            padding: 5px 14px;
+            background: #eff6ff;
+            color: var(--primary);
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            border: 1px solid #bfdbfe;
+        }
+
+        /* ── Timeline ── */
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+        }
+        .timeline::before {
+            content: "";
+            position: absolute;
+            left: 8px;
+            top: 4px;
+            bottom: 4px;
+            width: 2px;
+            background: var(--border);
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 28px;
+        }
+        .timeline-item::before {
+            content: "";
+            position: absolute;
+            left: -28px;
+            top: 6px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--primary);
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+        .timeline-item .date {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        .timeline-item h4 {
+            font-size: 1.05rem;
+            margin: 2px 0 4px;
+        }
+        .timeline-item p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* ── Flow Diagram ── */
+        .flow-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 20px 0;
+        }
+        .flow-step {
+            background: var(--primary);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            min-width: 120px;
+        }
+        .flow-step.alt {
+            background: var(--accent);
+        }
+        .flow-arrow {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+        }
+
+        /* ── Footer ── */
+        footer {
+            background: #1e293b;
+            color: #94a3b8;
+            text-align: center;
+            padding: 40px 24px;
+            font-size: 0.9rem;
+        }
+        footer a {
+            color: var(--primary-light);
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .hero h1 { font-size: 2rem; }
+            .hero .subtitle { font-size: 1rem; }
+            .section-title { font-size: 1.4rem; }
+            .grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Stats ── */
+        .stats-row {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 36px;
+        }
+        .stat-box {
+            flex: 1;
+            min-width: 140px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+        .stat-box .number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        .stat-box .label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<div class="hero">
+    <h1>📈 多因子选股系统</h1>
+    <p class="subtitle">面向 A 股市场的全链路量化分析平台 — 因子计算 · 机器学习 · 组合优化 · 回测验证 · 实时行情</p>
+    <div class="badges">
+        <span class="badge">Python 3.8+</span>
+        <span class="badge">Flask + SQLAlchemy</span>
+        <span class="badge">Parquet + SQLite</span>
+        <span class="badge">零外部数据库依赖</span>
+        <span class="badge">MIT License</span>
+    </div>
+</div>
+
+<!-- ═══════════════ STATS ═══════════════ -->
+<section>
+    <div class="container">
+        <div class="stats-row">
+            <div class="stat-box">
+                <div class="number">108</div>
+                <div class="label">Python 模块</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">15,600+</div>
+                <div class="label">行业务代码</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">30+</div>
+                <div class="label">服务模块</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">14</div>
+                <div class="label">API 蓝图</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">12</div>
+                <div class="label">内置因子</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 核心功能 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🧩 核心功能</h2>
+        <p class="section-desc">覆盖从数据管理到策略回测的量化研究全流程，开箱即用。</p>
+        <div class="grid">
+            <div class="card">
+                <div class="icon">📊</div>
+                <h3>实时行情分析</h3>
+                <p>通达信分钟数据接入，支持 MACD、KDJ、RSI、布林带等技术指标实时计算与展示。</p>
+                <ul>
+                    <li>多策略信号生成与融合</li>
+                    <li>信号监控与策略回测</li>
+                    <li>板块表现与异动检测</li>
+                    <li>市场情绪指标</li>
+                </ul>
+            </div>
+            <div class="card">
+                <div class="icon">🧮</div>
+                <h3>因子与选股</h3>
+                <p>内置 12 个因子 + 自定义因子表达式引擎，支持白名单安全校验。</p>
+                <ul>
+                    <li>动量、波动率、技术、基本面因子</li>
+                    <li>自定义因子公式（白名单校验）</li>
+                    <li>因子评分与 ML 选股</li>
+                    <li>Text2SQL 自然语言查询</li>
+                </ul>
+            </div>
+            <div class="card">
+                <div class="icon">🤖</div>
+                <h3>机器学习建模</h3>
+                <p>支持 XGBoost、LightGBM、RandomForest 三大算法的完整模型生命周期。</p>
+                <ul>
+                    <li>模型创建、训练、预测一体化</li>
+                    <li>异步训练任务管理</li>
+                    <li>特征工程与因子组合</li>
+                    <li>模型性能评估与比较</li>
+                </ul>
+            </div>
+            <div class="card">
+                <div class="icon">📈</div>
+                <h3>组合优化</h3>
+                <p>四种经典优化方法，从简单等权到因子中性，灵活配置。</p>
+                <ul>
+                    <li>等权重优化</li>
+                    <li>均值方差优化</li>
+                    <li>风险平价优化</li>
+                    <li>因子中性组合</li>
+                </ul>
+            </div>
+            <div class="card">
+                <div class="icon">🔄</div>
+                <h3>回测验证</h3>
+                <p>单策略与多策略回测，丰富的绩效指标，可视化结果展示。</p>
+                <ul>
+                    <li>单策略回测</li>
+                    <li>多策略比较</li>
+                    <li>年化收益 / 夏普比率 / 最大回撤</li>
+                    <li>胜率与卡尔玛比率</li>
+                </ul>
+            </div>
+            <div class="card">
+                <div class="icon">🛡️</div>
+                <h3>风险管理</h3>
+                <p>组合持仓管理、实时价格刷新、风险指标监控、预警管理、压力测试。</p>
+                <ul>
+                    <li>投资组合持仓 CRUD</li>
+                    <li>通达信接口实时价格</li>
+                    <li>风险指标与预警</li>
+                    <li>压力测试场景分析</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 请求流程 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🔀 请求流程</h2>
+        <p class="section-desc">系统采用分层架构，请求从 HTTP/WebSocket 入口经过蓝图路由、业务服务层到达数据存储。</p>
+        <div class="flow-box">
+            <div class="flow-step">HTTP / WebSocket</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">Blueprint<br><small>app/api/*.py</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">Service<br><small>app/services/*.py</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step alt">ParquetDataReader<br><small>行情数据</small></div>
+        </div>
+        <div class="flow-box" style="margin-top: -8px;">
+            <span class="flow-arrow">↕</span>
+        </div>
+        <div class="flow-box" style="margin-top: -12px;">
+            <div class="flow-step alt">SQLAlchemy Models<br><small>SQLite 应用状态</small></div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 系统架构 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🏗️ 系统架构</h2>
+        <p class="section-desc">v2.0 采用 Parquet + SQLite 架构，零外部数据库依赖，克隆即可运行。</p>
+        <div class="arch-diagram">
+<pre>quantitative_analysis/
+├── app/                              # 应用主目录
+│   ├── __init__.py                  # Flask 工厂模式 (create_app)
+│   ├── extensions.py                # 扩展初始化 (SQLAlchemy, SocketIO, Redis)
+│   ├── api/                         # API 蓝图
+│   │   ├── analysis_api.py          #   市场分析 API
+│   │   ├── ml_factor_api.py         #   ML 因子管理 API
+│   │   ├── realtime_analysis.py     #   实时分析 API
+│   │   ├── realtime_indicators.py   #   实时指标 API
+│   │   ├── realtime_signals.py      #   交易信号 API
+│   │   ├── realtime_monitor.py      #   实时监控 API
+│   │   ├── realtime_risk.py         #   风险管理 API
+│   │   ├── realtime_report.py       #   分析报告 API
+│   │   ├── text2sql_api.py          #   自然语言查询 API
+│   │   ├── data_jobs_api.py         #   数据下载任务 API
+│   │   └── websocket_api.py         #   WebSocket 管理 API
+│   ├── models/                      # 数据模型 (SQLAlchemy + Parquet 事件)
+│   ├── services/                    # 核心业务服务
+│   │   ├── factor_engine.py         #   因子计算引擎
+│   │   ├── factor_expression_engine.py  # 自定义因子表达式引擎
+│   │   ├── ml_models.py             #   ML 模型管理器
+│   │   ├── stock_scoring.py         #   股票评分引擎
+│   │   ├── portfolio_optimizer.py   #   组合优化器
+│   │   ├── backtest_engine.py       #   回测引擎
+│   │   ├── text2sql_engine.py       #   Text2SQL 引擎
+│   │   ├── llm_service.py           #   LLM 服务 (Ollama/OpenAI)
+│   │   ├── realtime_indicator_engine.py   # 实时指标引擎
+│   │   ├── realtime_trading_signal_engine.py  # 交易信号引擎
+│   │   ├── realtime_risk_manager.py #   风险管理器
+│   │   ├── realtime_report_generator.py  # 报告生成器
+│   │   └── data_jobs/               #   数据下载任务系统
+│   ├── routes/                      # 页面路由 (HTML 渲染)
+│   ├── templates/                   # Jinja2 HTML 模板
+│   ├── static/                      # CSS / JS / 图片
+│   ├── utils/                       # 数据下载脚本 (通达信/Baostock/Tushare)
+│   ├── websocket/                   # WebSocket 推送服务
+│   └── services/tongdaxin/          # 通达信行情客户端
+├── data/                            # 数据目录
+│   ├── stock_minute/                #   分钟级行情 Parquet
+│   ├── ml_factor_state/             #   ML 因子状态 Parquet
+│   └── realtime_events/            #   实时事件 Parquet
+├── tests/                           # 测试用例
+├── acceptance/                      # 验收标准与里程碑
+├── config.py                        # 配置管理
+├── requirements.txt                 # 依赖包
+├── run.py                           # Web 启动入口
+├── run_system.py                    # 初始化与诊断工具
+└── README.md                        # 项目说明</pre>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 核心服务 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">⚙️ 核心服务</h2>
+        <p class="section-desc">各服务模块职责明确、边界清晰，遵循「蓝图 → 服务 → 数据」的分层架构。</p>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th>服务</th>
+                    <th>文件</th>
+                    <th>职责</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>FactorEngine</strong></td>
+                    <td><code>services/factor_engine.py</code></td>
+                    <td>内置因子计算与自定义因子管理</td>
+                </tr>
+                <tr>
+                    <td><strong>FactorExpressionEngine</strong></td>
+                    <td><code>services/factor_expression_engine.py</code></td>
+                    <td>白名单校验的自定义因子公式引擎</td>
+                </tr>
+                <tr>
+                    <td><strong>MLModelManager</strong></td>
+                    <td><code>services/ml_models.py</code></td>
+                    <td>XGBoost / LightGBM / RandomForest 模型生命周期</td>
+                </tr>
+                <tr>
+                    <td><strong>ModelTrainingJobService</strong></td>
+                    <td><code>services/model_training_job_service.py</code></td>
+                    <td>异步训练任务轮询与管理</td>
+                </tr>
+                <tr>
+                    <td><strong>StockScoringEngine</strong></td>
+                    <td><code>services/stock_scoring.py</code></td>
+                    <td>因子评分与 ML 评分的综合选股引擎</td>
+                </tr>
+                <tr>
+                    <td><strong>PortfolioOptimizer</strong></td>
+                    <td><code>services/portfolio_optimizer.py</code></td>
+                    <td>等权 / 均值方差 / 风险平价 / 因子中性</td>
+                </tr>
+                <tr>
+                    <td><strong>BacktestEngine</strong></td>
+                    <td><code>services/backtest_engine.py</code></td>
+                    <td>单策略与多策略回测</td>
+                </tr>
+                <tr>
+                    <td><strong>Text2SQLEngine</strong></td>
+                    <td><code>services/text2sql_engine.py</code></td>
+                    <td>LLM 驱动的自然语言转 SQL 查询</td>
+                </tr>
+                <tr>
+                    <td><strong>RealtimeIndicatorEngine</strong></td>
+                    <td><code>services/realtime_indicator_engine.py</code></td>
+                    <td>实时技术指标计算</td>
+                </tr>
+                <tr>
+                    <td><strong>RealtimeTradingSignalEngine</strong></td>
+                    <td><code>services/realtime_trading_signal_engine.py</code></td>
+                    <td>多策略交易信号生成与融合</td>
+                </tr>
+                <tr>
+                    <td><strong>RealtimeRiskManager</strong></td>
+                    <td><code>services/realtime_risk_manager.py</code></td>
+                    <td>风险指标、预警管理、压力测试</td>
+                </tr>
+                <tr>
+                    <td><strong>DataJobs</strong></td>
+                    <td><code>services/data_jobs/</code></td>
+                    <td>数据下载任务执行器（Inline / Celery）</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ═══════════════ API 蓝图 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🔗 API 蓝图一览</h2>
+        <p class="section-desc">所有 API 均为 RESTful 风格，按功能域组织为独立蓝图。</p>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th>URL 前缀</th>
+                    <th>功能域</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><code>/api</code></td><td>主 API — 股票、分析、Text2SQL</td></tr>
+                <tr><td><code>/api/ml-factor/*</code></td><td>因子管理、ML 模型、选股评分、组合优化</td></tr>
+                <tr><td><code>/api/data-jobs/*</code></td><td>数据下载任务提交与状态查询</td></tr>
+                <tr><td><code>/api/realtime-analysis/*</code></td><td>实时指标、信号、监控、风险、报告</td></tr>
+                <tr><td><code>/api/websocket/*</code></td><td>WebSocket 管理端点</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ═══════════════ 内置因子 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">📊 内置因子</h2>
+        <p class="section-desc">系统预置 12 个因子，覆盖动量、波动率、技术面和基本面四大维度。</p>
+
+        <div class="grid">
+            <div class="card">
+                <h3>🚀 动量因子</h3>
+                <div class="tag-list">
+                    <span class="tag">momentum_1d (1日动量)</span>
+                    <span class="tag">momentum_5d (5日动量)</span>
+                    <span class="tag">momentum_20d (20日动量)</span>
+                </div>
+            </div>
+            <div class="card">
+                <h3>〰️ 波动率因子</h3>
+                <div class="tag-list">
+                    <span class="tag">volatility_20d (20日波动率)</span>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📈 技术指标</h3>
+                <div class="tag-list">
+                    <span class="tag">rsi_14 (RSI 相对强弱)</span>
+                    <span class="tag">turnover_rate (换手率)</span>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📋 基本面因子</h3>
+                <div class="tag-list">
+                    <span class="tag">pe_ratio (市盈率)</span>
+                    <span class="tag">pb_ratio (市净率)</span>
+                    <span class="tag">roe (净资产收益率)</span>
+                    <span class="tag">debt_ratio (资产负债率)</span>
+                    <span class="tag">current_ratio (流动比率)</span>
+                    <span class="tag">gross_margin (毛利率)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 数据架构 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">💾 数据架构</h2>
+        <p class="section-desc">v2.0 采用 Parquet + SQLite 双层存储，无需 MySQL，克隆即可运行。</p>
+        <div class="grid">
+            <div class="card">
+                <h3>📁 Parquet 文件</h3>
+                <p>高性能列式存储，承载所有市场行情数据、ML 因子状态和实时事件。</p>
+                <ul>
+                    <li>历史行情 (日线/分钟线)</li>
+                    <li>基本面、技术面、资金流数据</li>
+                    <li>ML 因子状态</li>
+                    <li>实时事件记录</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>🗄️ SQLite 数据库</h3>
+                <p>轻量级应用状态存储，管理持仓、报告、预警等低并发元数据。</p>
+                <ul>
+                    <li>投资组合持仓</li>
+                    <li>交易信号记录</li>
+                    <li>风险预警</li>
+                    <li>Text2SQL 元数据</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>⚡ Redis 缓存</h3>
+                <p>用于 Celery 任务队列和实时数据缓存（可选依赖）。</p>
+                <ul>
+                    <li>Celery 任务 Broker</li>
+                    <li>实时数据缓存</li>
+                    <li>WebSocket 消息分发</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 技术栈 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🛠️ 技术栈</h2>
+        <p class="section-desc">基于 Python 生态的成熟量化技术栈，兼顾功能丰富与开发效率。</p>
+        <div class="grid">
+            <div class="card">
+                <h3>后端框架</h3>
+                <ul>
+                    <li>Python 3.8 – 3.11</li>
+                    <li>Flask (Web 框架)</li>
+                    <li>Flask-SocketIO (WebSocket)</li>
+                    <li>Flask-SQLAlchemy (ORM)</li>
+                    <li>Celery (异步任务)</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>数据处理</h3>
+                <ul>
+                    <li>Pandas / NumPy</li>
+                    <li>PyArrow (Parquet I/O)</li>
+                    <li>SciPy (科学计算)</li>
+                    <li>Scikit-learn (ML 基础)</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>机器学习</h3>
+                <ul>
+                    <li>XGBoost</li>
+                    <li>LightGBM</li>
+                    <li>RandomForest (Scikit-learn)</li>
+                    <li>CVXPY (组合优化)</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>前端 & 可视化</h3>
+                <ul>
+                    <li>Bootstrap 5</li>
+                    <li>ECharts (图表)</li>
+                    <li>Plotly (交互图表)</li>
+                    <li>Matplotlib / MPLFinance</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>数据源</h3>
+                <ul>
+                    <li>通达信 (实时行情)</li>
+                    <li>Baostock (历史数据)</li>
+                    <li>Tushare (可选数据源)</li>
+                    <li>Parquet 离线数据包</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>AI 能力</h3>
+                <ul>
+                    <li>Ollama (本地 LLM)</li>
+                    <li>OpenAI API (可选)</li>
+                    <li>Text2SQL (自然语言查询)</li>
+                    <li>Qwen2.5-Coder (默认模型)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 快速开始 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🚀 快速开始</h2>
+        <p class="section-desc">三步启动：克隆 → 安装 → 运行，无需配置外部数据库。</p>
+
+        <div class="grid">
+            <div class="card">
+                <h3>1️⃣ 克隆 & 安装</h3>
+                <div class="code-block">
+<code><span class="comment"># 克隆项目</span>
+<span class="cmd">git clone</span> &lt;repository-url&gt;
+<span class="cmd">cd</span> quantitative_analysis
+
+<span class="comment"># 安装依赖</span>
+<span class="cmd">pip install</span> -r requirements.txt
+
+<span class="comment"># 如遇兼容问题，使用最小依赖</span>
+<span class="cmd">pip install</span> -r requirements_minimal.txt</code>
+                </div>
+            </div>
+            <div class="card">
+                <h3>2️⃣ 下载数据</h3>
+                <p>下载预打包的 A 股历史数据（更新至 2026-06-03），解压到 <code>data/</code> 目录即可。</p>
+                <ul>
+                    <li>夸克网盘</li>
+                    <li>123 网盘</li>
+                    <li>百度网盘</li>
+                    <li>或通过数据管理页面在线更新</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>3️⃣ 启动系统</h3>
+                <div class="code-block">
+<code><span class="comment"># 启动 Web 服务</span>
+<span class="cmd">python</span> run.py
+
+<span class="comment"># 访问地址</span>
+http://localhost:5000    <span class="comment"># Web 界面</span>
+http://localhost:5000/api <span class="comment"># API 入口</span></code>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+            <h3>🐳 容器化启动（可选）</h3>
+            <div class="code-block">
+<code><span class="cmd">cp</span> .env.example .env
+<span class="cmd">docker compose up</span> --build</code>
+            </div>
+            <p style="margin-top: 8px; color: var(--text-secondary); font-size: 0.9rem;">
+                默认启动 Web + SQLite + Redis；市场数据和 ML 因子状态仍使用本地 Parquet 文件。
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 配置说明 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🔧 配置说明</h2>
+        <p class="section-desc">所有配置通过 <code>config.py</code> 管理，支持环境变量 <code>.env</code> 文件覆盖。</p>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th>配置项</th>
+                    <th>默认值</th>
+                    <th>说明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><code>DATA_SOURCE</code></td><td><code>parquet</code></td><td>数据源类型</td></tr>
+                <tr><td><code>SQLALCHEMY_DATABASE_URI</code></td><td>SQLite</td><td>应用状态数据库</td></tr>
+                <tr><td><code>REDIS_HOST / REDIS_PORT</code></td><td><code>localhost:6379</code></td><td>Redis 连接（Celery/缓存）</td></tr>
+                <tr><td><code>FLASK_ENV</code></td><td><code>development</code></td><td>运行环境</td></tr>
+                <tr><td><code>DATA_JOB_EXECUTION_MODE</code></td><td><code>inline</code></td><td>任务执行模式（inline / celery）</td></tr>
+                <tr><td><code>LLM_CONFIG</code></td><td>Ollama (qwen2.5-coder)</td><td>LLM 提供商配置</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ═══════════════ 测试 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🧪 测试体系</h2>
+        <p class="section-desc">基于真实 Flask App Fixture 的测试框架，在 Service 边界进行 Mock。</p>
+        <div class="grid">
+            <div class="card">
+                <h3>测试命令</h3>
+                <div class="code-block">
+<code><span class="comment"># 运行全部测试</span>
+<span class="cmd">pytest</span>
+
+<span class="comment"># 运行单个测试文件</span>
+<span class="cmd">pytest</span> tests/services/test_factor_engine.py
+
+<span class="comment"># 按关键词过滤</span>
+<span class="cmd">pytest</span> -k "portfolio"
+
+<span class="comment"># 按模块 marker 验收</span>
+<span class="cmd">pytest</span> -m module_factor_engine -q</code>
+                </div>
+            </div>
+            <div class="card">
+                <h3>测试结构</h3>
+                <ul>
+                    <li><code>tests/services/</code> — 服务层单元/合约测试</li>
+                    <li><code>tests/api/</code> — Flask 测试客户端 API 合约测试</li>
+                    <li><code>tests/regression/</code> — 防止 Demo/Mock 数据泄漏回归测试</li>
+                    <li><code>tests/ui/</code> — UI 层检查</li>
+                </ul>
+                <p style="margin-top: 12px; color: var(--text-secondary); font-size: 0.88rem;">
+                    重型可选依赖（xgboost, lightgbm, cvxpy 等）在 <code>conftest.py</code> 中自动 Stub，测试无需安装。
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 更新日志 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">📝 更新日志</h2>
+        <p class="section-desc">版本演进记录。</p>
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="date">2025-06-01</div>
+                <h4>v1.0.0 — 多因子选股系统初始版本</h4>
+                <p>因子管理和计算、机器学习模型集成、组合优化、回测验证引擎、Web 界面和 API 接口。</p>
+            </div>
+            <div class="timeline-item">
+                <div class="date">2026-06-06</div>
+                <h4>v2.0.0-parquet — 架构升级</h4>
+                <p>从 MySQL 迁移到 Parquet + SQLite，零外部数据库依赖，克隆即可运行。新增实时行情分析模块、通达信行情接入、日频数据中心、投资组合管理完整闭环、报告可视化、离线数据包。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ 项目定位 ═══════════════ -->
+<section>
+    <div class="container">
+        <h2 class="section-title">🎯 项目定位</h2>
+        <div class="grid">
+            <div class="card" style="border-left: 4px solid var(--accent);">
+                <h3>✅ 适用场景</h3>
+                <ul>
+                    <li>量化交易入门学习</li>
+                    <li>策略研究与验证</li>
+                    <li>二次开发与定制</li>
+                    <li>量化系统架构参考</li>
+                </ul>
+            </div>
+            <div class="card" style="border-left: 4px solid #ef4444;">
+                <h3>❌ 不适用场景</h3>
+                <ul>
+                    <li>直接用于实盘交易</li>
+                    <li>高频交易系统</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer>
+    <p><strong>多因子选股系统</strong> — 面向 A 股市场的全链路量化分析平台</p>
+    <p style="margin-top: 8px;">
+        MIT License &nbsp;|&nbsp;
+        如有问题或建议：提交 Issue 或联系
+        <a href="mailto:39189996@qq.com">39189996@qq.com</a>
+    </p>
+    <p style="margin-top: 16px; font-size: 0.8rem; opacity: 0.6;">
+        本文档由项目源码自动生成 &nbsp;·&nbsp; 2026-06-08
+    </p>
+</footer>
+
+</body>
+</html>

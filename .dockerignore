@@ -1,0 +1,53 @@
+# Data volumes — mounted at runtime, not baked into image
+data/
+instance/
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose*.yml
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / CI
+tests/
+acceptance/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docs & images
+images/
+*.html
+*.md
+!README.md
