@@ -8,6 +8,13 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      - REDIS_HOST=redis
+      - DATA_DIR=/app/data
+      - SQLITE_DATABASE_PATH=/app/instance/stock_cursor.sqlite3
+    volumes:
+      - ./data:/app/data
+      - ./instance:/app/instance
     depends_on:
       - redis
 
@@ -16,6 +23,13 @@ services:
     command: celery -A app.celery_app.celery worker -l info -P solo
     env_file:
       - .env
+    environment:
+      - REDIS_HOST=redis
+      - DATA_DIR=/app/data
+      - SQLITE_DATABASE_PATH=/app/instance/stock_cursor.sqlite3
+    volumes:
+      - ./data:/app/data
+      - ./instance:/app/instance
     depends_on:
       - redis
 
