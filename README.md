@@ -48,6 +48,14 @@
 - 百度网盘：https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
 - 如有 Tushare 接口，可通过数据管理页面更新数据
 
+## 工具下载
+- anaconda或者python 二选一就行，以免环境冲突，简单一点用python，需要更多功能用anaconda  
+- anaconda下载地址： https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive/
+- python下载地址，建议用3.12.10
+https://www.python.org/downloads/windows/
+
+- 查看SQLite数据库，免费软件可以下载 https://sqlitebrowser.org/dl/ 然后把stock_cursor.sqlite3文件拖入软件中即可使用。
+
 ![系统主界面](./images/1-2.png)
 
 ## 🌟 系统特色
