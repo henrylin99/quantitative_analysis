@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}每日市场简报{% endblock %}
+
+{% block extra_css %}
+<style>
+.brief-page {
+    padding: 20px 0 32px;
+}
+
+.brief-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 18px;
+}
+
+.brief-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+}
+
+.brief-title {
+    margin: 14px 0 8px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.brief-subtitle {
+    color: #94a3b8;
+    margin-bottom: 0;
+}
+
+.brief-card,
+.summary-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 16px;
+    box-shadow: 0 12px 36px rgba(2, 6, 23, 0.18);
+}
+
+.summary-card .card-body {
+    min-height: 98px;
+}
+
+.summary-label {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.summary-value {
+    color: #e2e8f0;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 4px 0 0;
+}
+
+.brief-section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.brief-section-note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.brief-block {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    color: #e2e8f0;
+    background: #0f172a;
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    border-radius: 14px;
+    padding: 18px;
+}
+
+.brief-line {
+    margin-bottom: 6px;
+}
+
+.copy-area {
+    min-height: 320px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    resize: vertical;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.brief-table {
+    margin-bottom: 0;
+}
+
+.brief-table thead th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    white-space: nowrap;
+}
+
+.brief-table tbody td {
+    white-space: nowrap;
+    color: #e2e8f0;
+    border-top-color: rgba(51, 65, 85, 0.45);
+}
+
+.brief-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.up {
+    color: #f87171;
+}
+
+.down {
+    color: #34d399;
+}
+
+.section-divider {
+    height: 1px;
+    background: rgba(51, 65, 85, 0.85);
+    margin: 18px 0;
+}
+
+.error-banner {
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fecaca;
+    margin-bottom: 18px;
+}
+
+@media (max-width: 768px) {
+    .brief-title {
+        font-size: 22px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid brief-page">
+    {% if error %}
+    <div class="error-banner">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="brief-hero">
+        <div class="brief-kicker">
+            <i class="fas fa-pen-nib"></i>
+            试用功能
+        </div>
+        <h1 class="brief-title">每日市场简报生成器</h1>
+        <p class="brief-subtitle">
+            数据来源：<span style="color:#cbd5e1;font-weight:600;">{{ summary.trade_date or '--' }}</span>
+            ，自动生成全市场截面简报，适合快速晨会、盘后复盘和内容摘录。
+        </p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">上涨 / 下跌</div>
+                    <div class="summary-value">{{ summary.advance_count }} / {{ summary.decline_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">涨停 / 跌停</div>
+                    <div class="summary-value">{{ summary.limit_up_count }} / {{ summary.limit_down_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">全市场成交额</div>
+                    <div class="summary-value">{{ '%.2f'|format(summary.turnover_total / 10000) }} 亿</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">覆盖股票数</div>
+                    <div class="summary-value">{{ summary.stock_count }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card brief-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h2 class="brief-section-title">结构化简报</h2>
+                            <div class="brief-section-note">按晨会/盘后播报格式生成，可直接复制使用</div>
+                        </div>
+                        <button class="btn btn-outline-light btn-sm" onclick="copyBriefText()">
+                            <i class="fas fa-copy me-1"></i>复制全文
+                        </button>
+                    </div>
+                    <div class="brief-block" id="briefText">{{ brief_text }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card brief-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h2 class="brief-section-title">成交额 TOP10</h2>
+                            <div class="brief-section-note">单位：万元</div>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="table brief-table">
+                            <thead>
+                                <tr>
+                                    <th>代码</th>
+                                    <th>名称</th>
+                                    <th>行业</th>
+                                    <th class="text-end">成交额(万)</th>
+                                    <th class="text-end">涨跌幅</th>
+                                    <th class="text-end">主力净流入(万)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in top_amount %}
+                                <tr>
+                                    <td>{{ row.ts_code }}</td>
+                                    <td>{{ row.name }}</td>
+                                    <td>{{ row.industry }}</td>
+                                    <td class="text-end">{{ '%.2f'|format(row.amount) }}</td>
+                                    <td class="text-end {% if row.pct_chg >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.pct_chg) }}%
+                                    </td>
+                                    <td class="text-end {% if row.net_mf_amount >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.net_mf_amount) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-lg-6">
+            <div class="card brief-card h-100">
+                <div class="card-body">
+                    <h2 class="brief-section-title mb-2">行业涨幅排名</h2>
+                    <div class="brief-section-note mb-3">按行业平均涨跌幅降序</div>
+                    <div class="table-wrap">
+                        <table class="table brief-table">
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>行业</th>
+                                    <th class="text-end">平均涨跌幅</th>
+                                    <th class="text-end">上涨/下跌</th>
+                                    <th class="text-end">成交额(亿)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in industry_top %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ row.industry }}</td>
+                                    <td class="text-end {% if row.avg_pct_chg >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.avg_pct_chg) }}%
+                                    </td>
+                                    <td class="text-end">{{ row.advance_count }} / {{ row.decline_count }}</td>
+                                    <td class="text-end">{{ '%.2f'|format(row.total_amount / 10000) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="card brief-card h-100">
+                <div class="card-body">
+                    <h2 class="brief-section-title mb-2">行业跌幅排名</h2>
+                    <div class="brief-section-note mb-3">按行业平均涨跌幅升序</div>
+                    <div class="table-wrap">
+                        <table class="table brief-table">
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>行业</th>
+                                    <th class="text-end">平均涨跌幅</th>
+                                    <th class="text-end">上涨/下跌</th>
+                                    <th class="text-end">成交额(亿)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in industry_bottom %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ row.industry }}</td>
+                                    <td class="text-end {% if row.avg_pct_chg >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.avg_pct_chg) }}%
+                                    </td>
+                                    <td class="text-end">{{ row.advance_count }} / {{ row.decline_count }}</td>
+                                    <td class="text-end">{{ '%.2f'|format(row.total_amount / 10000) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-xl-6">
+            <div class="card brief-card h-100">
+                <div class="card-body">
+                    <h2 class="brief-section-title mb-2">主力净流入 TOP5</h2>
+                    <div class="brief-section-note mb-3">按 net_mf_amount 降序</div>
+                    <div class="table-wrap">
+                        <table class="table brief-table">
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>名称</th>
+                                    <th>行业</th>
+                                    <th class="text-end">净流入(万)</th>
+                                    <th class="text-end">涨跌幅</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in top_mf %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ row.name }}</td>
+                                    <td>{{ row.industry }}</td>
+                                    <td class="text-end {% if row.net_mf_amount >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.net_mf_amount) }}
+                                    </td>
+                                    <td class="text-end {% if row.pct_chg >= 0 %}up{% else %}down{% endif %}">
+                                        {{ '%.2f'|format(row.pct_chg) }}%
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card brief-card h-100">
+                <div class="card-body">
+                    <h2 class="brief-section-title mb-2">特殊形态统计</h2>
+                    <div class="brief-section-note mb-3">首板、连板、阳包阴和连续上涨统计</div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">首板数</div>
+                                    <div class="summary-value">{{ special_stats.first_limit_count }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">连板数</div>
+                                    <div class="summary-value">{{ special_stats.multi_limit_count }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">阳包阴数</div>
+                                    <div class="summary-value">{{ special_stats.bullish_engulfing_count }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">涨停 / 跌停</div>
+                                    <div class="summary-value">{{ special_stats.limit_up_count }} / {{ special_stats.limit_down_count }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 brief-block">
+                        连续上涨统计：2 连及以上 {{ special_stats.consec_up_2p_count }} 只，
+                        3 连及以上 {{ special_stats.consec_up_3p_count }} 只，
+                        5 连及以上 {{ special_stats.consec_up_5p_count }} 只。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyBriefText() {
+    const textBlock = document.getElementById('briefText');
+    const text = textBlock ? textBlock.innerText : '';
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+    } else {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+    }
+}
+</script>
+{% endblock %}

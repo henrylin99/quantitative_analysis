@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}财务健康度评分卡{% endblock %}
+
+{% block extra_css %}
+<style>
+.health-page {
+    padding: 20px 0 32px;
+}
+
+.health-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 18px;
+}
+
+.health-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+}
+
+.health-title {
+    margin: 14px 0 8px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.health-subtitle {
+    color: #94a3b8;
+    margin-bottom: 0;
+}
+
+.summary-card,
+.panel-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 16px;
+    box-shadow: 0 12px 36px rgba(2, 6, 23, 0.18);
+}
+
+.summary-label {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.summary-value {
+    color: #e2e8f0;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 4px 0 0;
+}
+
+.section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.section-note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.chart-box {
+    width: 100%;
+    height: 420px;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.health-table {
+    margin-bottom: 0;
+}
+
+.health-table thead th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    white-space: nowrap;
+}
+
+.health-table tbody td {
+    white-space: nowrap;
+    color: #e2e8f0;
+    border-top-color: rgba(51, 65, 85, 0.45);
+}
+
+.health-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.16);
+    color: #c7d2fe;
+    font-weight: 700;
+}
+
+.score-0 { background: rgba(71, 85, 105, 0.35); color: #cbd5e1; }
+.score-1 { background: rgba(14, 165, 233, 0.18); color: #7dd3fc; }
+.score-2 { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+.score-3 { background: rgba(250, 204, 21, 0.18); color: #fde68a; }
+.score-4 { background: rgba(249, 115, 22, 0.18); color: #fdba74; }
+.score-5 { background: rgba(248, 113, 113, 0.22); color: #fca5a5; }
+
+.up {
+    color: #f87171;
+}
+
+.down {
+    color: #34d399;
+}
+
+.error-banner {
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fecaca;
+    margin-bottom: 18px;
+}
+
+@media (max-width: 768px) {
+    .health-title {
+        font-size: 22px;
+    }
+
+    .chart-box {
+        height: 360px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid health-page">
+    {% if error %}
+    <div class="error-banner">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="health-hero">
+        <div class="health-kicker">
+            <i class="fas fa-heart-pulse"></i>
+            试用功能
+        </div>
+        <h1 class="health-title">财务健康度评分卡</h1>
+        <p class="health-subtitle">
+            数据来源：<span style="color:#cbd5e1;font-weight:600;">{{ summary.trade_date or '--' }}</span>
+            ，按毛利率、净利率、经营现金流、资产负债率和 ROE 五项规则打分，满分 5 分。
+        </p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">覆盖股票</div>
+                    <div class="summary-value">{{ summary.stock_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">平均得分</div>
+                    <div class="summary-value">{{ '%.2f'|format(summary.avg_score) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">满分股票</div>
+                    <div class="summary-value">{{ summary.full_score_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">3 分及以上</div>
+                    <div class="summary-value">{{ summary.qualified_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">最高 / 最低</div>
+                    <div class="summary-value">{{ summary.max_score }} / {{ summary.min_score }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="summary-label">ROE阈值</div>
+                    <div class="summary-value">10%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-5">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <h2 class="section-title mb-2">评分分布</h2>
+                    <div class="section-note mb-3">各分段股票数量饼图</div>
+                    <div id="scorePie" class="chart-box"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-7">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <h2 class="section-title mb-2">评分规则</h2>
+                    <div class="section-note mb-3">每项命中 1 分，满分 5 分</div>
+                    <div class="table-wrap">
+                        <table class="table health-table">
+                            <thead>
+                                <tr>
+                                    <th>项目</th>
+                                    <th>条件</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>毛利率</td>
+                                    <td>&gt; 30%</td>
+                                    <td>fin_gross_margin</td>
+                                </tr>
+                                <tr>
+                                    <td>净利率</td>
+                                    <td>&gt; 10%</td>
+                                    <td>fin_net_margin</td>
+                                </tr>
+                                <tr>
+                                    <td>经营现金流</td>
+                                    <td>&gt; 0</td>
+                                    <td>fin_n_cashflow_act</td>
+                                </tr>
+                                <tr>
+                                    <td>资产负债率</td>
+                                    <td>&lt; 60%</td>
+                                    <td>fin_debt_ratio</td>
+                                </tr>
+                                <tr>
+                                    <td>ROE</td>
+                                    <td>&gt; 10%</td>
+                                    <td>fin_n_income_attr_p / fin_total_hldr_eqy</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card panel-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                    <h2 class="section-title">全市场财务健康度排名</h2>
+                    <div class="section-note">ROE 的分母缺失、为 0 或低于阈值时不计分</div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table health-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>代码</th>
+                            <th>名称</th>
+                            <th>行业</th>
+                            <th class="text-end">总分</th>
+                            <th class="text-end">毛利率</th>
+                            <th class="text-end">净利率</th>
+                            <th class="text-end">经营现金流</th>
+                            <th class="text-end">资产负债率</th>
+                            <th class="text-end">ROE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in scored_rows %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ row.ts_code }}</td>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.industry }}</td>
+                            <td class="text-end">
+                                <span class="score-badge score-{{ row.health_score }}">{{ row.health_score }}</span>
+                            </td>
+                            <td class="text-end {% if row.score_gross_margin %}up{% endif %}">
+                                {{ '%.2f'|format(row.fin_gross_margin) }}%
+                            </td>
+                            <td class="text-end {% if row.score_net_margin %}up{% endif %}">
+                                {{ '%.2f'|format(row.fin_net_margin) }}%
+                            </td>
+                            <td class="text-end {% if row.score_cashflow %}up{% else %}down{% endif %}">
+                                {{ '{:,.2f}'.format(row.fin_n_cashflow_act) }}
+                            </td>
+                            <td class="text-end {% if row.score_debt_ratio %}up{% else %}down{% endif %}">
+                                {{ '%.2f'|format(row.fin_debt_ratio * 100) }}%
+                            </td>
+                            <td class="text-end {% if row.score_roe %}up{% else %}down{% endif %}">
+                                {% if row.roe_ratio is not none %}
+                                    {{ '%.2f'|format(row.roe_ratio * 100) }}%
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var chartEl = document.getElementById('scorePie');
+    if (!chartEl || !window.echarts) {
+        return;
+    }
+
+    var chart = echarts.init(chartEl, 'financial');
+    var distribution = {{ score_distribution | tojson }};
+
+    chart.setOption({
+        tooltip: {
+            trigger: 'item',
+            formatter: '{b}: {c} 只 ({d}%)'
+        },
+        legend: {
+            bottom: 0,
+            textStyle: { color: '#cbd5e1' }
+        },
+        series: [{
+            type: 'pie',
+            radius: ['38%', '68%'],
+            avoidLabelOverlap: true,
+            itemStyle: {
+                borderRadius: 8,
+                borderColor: '#0f172a',
+                borderWidth: 2
+            },
+            label: {
+                color: '#e2e8f0',
+                formatter: '{b}\n{d}%'
+            },
+            data: distribution.map(function(item) {
+                return {
+                    name: item.label,
+                    value: item.count
+                };
+            })
+        }]
+    });
+
+    window.addEventListener('resize', function() {
+        chart.resize();
+    });
+})();
+</script>
+{% endblock %}
