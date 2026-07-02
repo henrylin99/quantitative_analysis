@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}个股对比雷达图{% endblock %}
+
+{% block extra_css %}
+<style>
+.radar-page {
+    padding: 20px 0 32px;
+}
+
+.radar-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 18px;
+}
+
+.radar-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+}
+
+.radar-title {
+    margin: 14px 0 8px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.radar-subtitle {
+    color: #94a3b8;
+    margin-bottom: 0;
+}
+
+.panel-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 16px;
+    box-shadow: 0 12px 36px rgba(2, 6, 23, 0.18);
+}
+
+.section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.section-note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.radar-chart {
+    width: 100%;
+    height: 520px;
+}
+
+.form-help {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.code-input {
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid rgba(51, 65, 85, 0.9);
+}
+
+.code-input:focus {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.18);
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.radar-table {
+    margin-bottom: 0;
+}
+
+.radar-table thead th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    white-space: nowrap;
+}
+
+.radar-table tbody td {
+    white-space: nowrap;
+    color: #e2e8f0;
+    border-top-color: rgba(51, 65, 85, 0.45);
+}
+
+.radar-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.score-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.16);
+    color: #c7d2fe;
+    font-weight: 700;
+}
+
+.error-banner {
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fecaca;
+    margin-bottom: 18px;
+}
+
+@media (max-width: 768px) {
+    .radar-title {
+        font-size: 22px;
+    }
+
+    .radar-chart {
+        height: 380px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid radar-page">
+    {% if error %}
+    <div class="error-banner">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="radar-hero">
+        <div class="radar-kicker">
+            <i class="fas fa-bullseye"></i>
+            试用功能
+        </div>
+        <h1 class="radar-title">个股对比雷达图</h1>
+        <p class="radar-subtitle">
+            输入 2 到 4 只股票代码，用标准化得分对比估值、成长、技术和资金四个维度。
+        </p>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-4">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <h2 class="section-title mb-2">输入股票代码</h2>
+                    <div class="section-note mb-3">使用英文逗号分隔，支持 2~4 只股票</div>
+                    <form method="get" action="{{ url_for('main.stock_radar') }}">
+                        <div class="mb-3">
+                            <label class="form-label">股票代码</label>
+                            <input type="text" class="form-control code-input" name="ts_codes" value="{{ input_codes_text }}" placeholder="例如：000001.SZ,000002.SZ,300750.SZ">
+                        </div>
+                        <div class="form-help mb-3">
+                            当前对比口径为最新交易日数据，维度采用 Min-Max 标准化，估值指标已做反向处理。
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-chart-radar me-1"></i>生成对比
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-8">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <div>
+                            <h2 class="section-title">雷达图对比</h2>
+                            <div class="section-note">交易日：{{ summary.trade_date or '--' }}，当前输入 {{ summary.input_codes|length if summary.input_codes else 0 }} 只股票</div>
+                        </div>
+                    </div>
+                    <div id="radarChart" class="radar-chart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card panel-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                    <h2 class="section-title">维度明细</h2>
+                    <div class="section-note">展示原始值与四个维度标准化得分</div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table radar-table">
+                    <thead>
+                        <tr>
+                            <th>代码</th>
+                            <th>名称</th>
+                            <th>行业</th>
+                            <th class="text-end">估值</th>
+                            <th class="text-end">成长</th>
+                            <th class="text-end">技术</th>
+                            <th class="text-end">资金</th>
+                            <th class="text-end">PE_TTM</th>
+                            <th class="text-end">PB</th>
+                            <th class="text-end">营收</th>
+                            <th class="text-end">净利</th>
+                            <th class="text-end">RSI_6</th>
+                            <th class="text-end">MACD</th>
+                            <th class="text-end">换手率</th>
+                            <th class="text-end">主力净流入</th>
+                            <th class="text-end">量比</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in stock_rows %}
+                        <tr>
+                            <td>{{ row.ts_code }}</td>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.industry }}</td>
+                            <td class="text-end"><span class="score-pill">{{ '%.2f'|format(row.valuation_score or 0) }}</span></td>
+                            <td class="text-end"><span class="score-pill">{{ '%.2f'|format(row.growth_score or 0) }}</span></td>
+                            <td class="text-end"><span class="score-pill">{{ '%.2f'|format(row.technical_score or 0) }}</span></td>
+                            <td class="text-end"><span class="score-pill">{{ '%.2f'|format(row.moneyflow_score or 0) }}</span></td>
+                            <td class="text-end">{{ row.pe_ttm if row.pe_ttm is not none else '--' }}</td>
+                            <td class="text-end">{{ row.pb if row.pb is not none else '--' }}</td>
+                            <td class="text-end">{{ row.fin_revenue if row.fin_revenue is not none else '--' }}</td>
+                            <td class="text-end">{{ row.fin_n_income if row.fin_n_income is not none else '--' }}</td>
+                            <td class="text-end">{{ row.rsi_6 if row.rsi_6 is not none else '--' }}</td>
+                            <td class="text-end">{{ row.macd if row.macd is not none else '--' }}</td>
+                            <td class="text-end">{{ row.turnover_rate if row.turnover_rate is not none else '--' }}</td>
+                            <td class="text-end">{{ row.net_mf_amount if row.net_mf_amount is not none else '--' }}</td>
+                            <td class="text-end">{{ row.volume_ratio if row.volume_ratio is not none else '--' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var chartEl = document.getElementById('radarChart');
+    if (!chartEl || !window.echarts) {
+        return;
+    }
+
+    var axes = {{ radar_axes | tojson }};
+    var series = {{ radar_series | tojson }};
+    var chart = echarts.init(chartEl, 'financial');
+
+    chart.setOption({
+        tooltip: {
+            trigger: 'item'
+        },
+        legend: {
+            top: 8,
+            textStyle: { color: '#cbd5e1' }
+        },
+        radar: {
+            indicator: axes,
+            radius: '62%',
+            splitNumber: 5,
+            axisName: {
+                color: '#cbd5e1',
+                fontWeight: 600
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(51, 65, 85, 0.55)'
+                }
+            },
+            splitArea: {
+                areaStyle: {
+                    color: ['rgba(15, 23, 42, 0.2)', 'rgba(30, 41, 59, 0.2)']
+                }
+            },
+            axisLine: {
+                lineStyle: {
+                    color: 'rgba(51, 65, 85, 0.65)'
+                }
+            }
+        },
+        series: [{
+            type: 'radar',
+            symbolSize: 6,
+            data: series.map(function(item) {
+                return {
+                    name: item.name + ' (' + item.ts_code + ')',
+                    value: item.value,
+                    itemStyle: { color: undefined },
+                    lineStyle: { width: 2 },
+                    areaStyle: { opacity: 0.12 }
+                };
+            })
+        }]
+    });
+
+    window.addEventListener('resize', function() {
+        chart.resize();
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}主力资金流入流出统计{% endblock %}
+
+{% block extra_css %}
+<style>
+.moneyflow-page {
+    padding: 20px 0 32px;
+}
+
+.moneyflow-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 18px;
+    box-shadow: 0 16px 48px rgba(2, 6, 23, 0.24);
+}
+
+.moneyflow-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+    letter-spacing: 0.4px;
+}
+
+.moneyflow-title {
+    margin: 14px 0 8px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.moneyflow-subtitle {
+    color: #94a3b8;
+    margin-bottom: 0;
+}
+
+.moneyflow-date {
+    color: #cbd5e1;
+    font-weight: 600;
+}
+
+.stat-card {
+    height: 100%;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.stat-label {
+    color: #94a3b8;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.stat-value.up {
+    color: #f87171;
+}
+
+.stat-value.down {
+    color: #34d399;
+}
+
+.section-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 36px rgba(2, 6, 23, 0.18);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.65);
+}
+
+.section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.section-note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.chart-box {
+    height: 520px;
+    width: 100%;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.moneyflow-table {
+    margin-bottom: 0;
+}
+
+.moneyflow-table thead th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    white-space: nowrap;
+}
+
+.moneyflow-table tbody td {
+    white-space: nowrap;
+    color: #e2e8f0;
+    border-top-color: rgba(51, 65, 85, 0.45);
+}
+
+.moneyflow-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.moneyflow-table td.up {
+    color: #f87171;
+}
+
+.moneyflow-table td.down {
+    color: #34d399;
+}
+
+.industry-badge {
+    display: inline-block;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.error-banner {
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fecaca;
+}
+
+@media (max-width: 768px) {
+    .moneyflow-title {
+        font-size: 22px;
+    }
+
+    .chart-box {
+        height: 420px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid moneyflow-page">
+    {% if error %}
+    <div class="error-banner">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="moneyflow-hero">
+        <div class="moneyflow-kicker">
+            <i class="fas fa-bolt"></i>
+            试用功能
+        </div>
+        <h1 class="moneyflow-title">主力资金流入流出统计</h1>
+        <p class="moneyflow-subtitle">
+            数据来源：<span class="moneyflow-date">{{ summary.trade_date or '--' }}</span>
+            ，展示今天主力净流入前后 20 只个股，并按行业对比大单与特大单资金动向。
+        </p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">覆盖股票数</div>
+                    <p class="stat-value">{{ summary.stock_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">行业数量</div>
+                    <p class="stat-value">{{ summary.industry_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">主力净流入</div>
+                    <p class="stat-value {% if summary.total_net_mf_amount >= 0 %}up{% else %}down{% endif %}">
+                        {{ '%.2f'|format(summary.total_net_mf_amount / 10000) }} 亿
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">净流入 / 净流出</div>
+                    <p class="stat-value">{{ summary.positive_stock_count }} / {{ summary.negative_stock_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-card mb-4">
+        <div class="section-header">
+            <div>
+                <h2 class="section-title">行业主力动向</h2>
+                <div class="section-note">大单净额和特大单净额按行业汇总对比</div>
+            </div>
+            <div class="section-note">单位：万元</div>
+        </div>
+        <div id="industry-chart" class="chart-box"></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-xl-6">
+            <div class="section-card h-100">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">主力净流入 Top 20</h2>
+                        <div class="section-note">按 net_mf_amount 从高到低排序</div>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="table moneyflow-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>行业</th>
+                                <th class="text-end">净流入(万)</th>
+                                <th class="text-end">大单净额(万)</th>
+                                <th class="text-end">特大单净额(万)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in top_inflow %}
+                            <tr>
+                                <td>{{ row.ts_code }}</td>
+                                <td>{{ row.name }}</td>
+                                <td><span class="industry-badge">{{ row.industry }}</span></td>
+                                <td class="text-end up">{{ '%.2f'|format(row.net_mf_amount) }}</td>
+                                <td class="text-end {% if row.lg_net_amount >= 0 %}up{% else %}down{% endif %}">
+                                    {{ '%.2f'|format(row.lg_net_amount) }}
+                                </td>
+                                <td class="text-end {% if row.elg_net_amount >= 0 %}up{% else %}down{% endif %}">
+                                    {{ '%.2f'|format(row.elg_net_amount) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="section-card h-100">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">主力净流出 Bottom 20</h2>
+                        <div class="section-note">按 net_mf_amount 从低到高排序</div>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="table moneyflow-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>行业</th>
+                                <th class="text-end">净流入(万)</th>
+                                <th class="text-end">大单净额(万)</th>
+                                <th class="text-end">特大单净额(万)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in bottom_outflow %}
+                            <tr>
+                                <td>{{ row.ts_code }}</td>
+                                <td>{{ row.name }}</td>
+                                <td><span class="industry-badge">{{ row.industry }}</span></td>
+                                <td class="text-end down">{{ '%.2f'|format(row.net_mf_amount) }}</td>
+                                <td class="text-end {% if row.lg_net_amount >= 0 %}up{% else %}down{% endif %}">
+                                    {{ '%.2f'|format(row.lg_net_amount) }}
+                                </td>
+                                <td class="text-end {% if row.elg_net_amount >= 0 %}up{% else %}down{% endif %}">
+                                    {{ '%.2f'|format(row.elg_net_amount) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var industryRows = {{ industry_rows | tojson }};
+    var chartEl = document.getElementById('industry-chart');
+
+    if (!chartEl || !window.echarts) {
+        return;
+    }
+
+    var chart = echarts.init(chartEl, 'financial');
+    var industries = industryRows.map(function(row) { return row.industry || '未知行业'; });
+    var lgSeries = industryRows.map(function(row) { return Number(row.lg_net_amount || 0); });
+    var elgSeries = industryRows.map(function(row) { return Number(row.elg_net_amount || 0); });
+    var mfSeries = industryRows.map(function(row) { return Number(row.net_mf_amount || 0); });
+
+    chart.setOption({
+        grid: {
+            left: 70,
+            right: 24,
+            top: 40,
+            bottom: 110,
+            containLabel: true
+        },
+        legend: {
+            top: 4,
+            textStyle: { color: '#cbd5e1' }
+        },
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            valueFormatter: function(value) {
+                return Number(value || 0).toFixed(2) + ' 万';
+            }
+        },
+        xAxis: {
+            type: 'category',
+            data: industries,
+            axisLabel: {
+                color: '#94a3b8',
+                rotate: 28
+            },
+            axisLine: { lineStyle: { color: '#334155' } }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: {
+                color: '#94a3b8',
+                formatter: function(value) {
+                    return value.toFixed ? value.toFixed(0) : value;
+                }
+            },
+            splitLine: {
+                lineStyle: { color: 'rgba(51, 65, 85, 0.45)' }
+            }
+        },
+        series: [
+            {
+                name: '大单净额',
+                type: 'bar',
+                data: lgSeries,
+                barMaxWidth: 16,
+                itemStyle: {
+                    color: function(params) {
+                        return params.value >= 0 ? '#38bdf8' : '#f97316';
+                    }
+                }
+            },
+            {
+                name: '特大单净额',
+                type: 'bar',
+                data: elgSeries,
+                barMaxWidth: 16,
+                itemStyle: {
+                    color: function(params) {
+                        return params.value >= 0 ? '#22c55e' : '#ef4444';
+                    }
+                }
+            },
+            {
+                name: '主力净流入',
+                type: 'line',
+                smooth: true,
+                symbolSize: 8,
+                data: mfSeries,
+                lineStyle: { width: 2, color: '#f59e0b' },
+                itemStyle: { color: '#f59e0b' }
+            }
+        ]
+    });
+
+    window.addEventListener('resize', function() {
+        chart.resize();
+    });
+})();
+</script>
+{% endblock %}

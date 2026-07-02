@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block title %}个股全景展示{% endblock %}
+
+{% block extra_css %}
+<style>
+.panorama-page {
+    padding: 20px 0 32px;
+}
+
+.panorama-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 18px;
+}
+
+.panorama-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+}
+
+.panorama-title {
+    margin: 14px 0 8px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.panorama-subtitle {
+    color: #94a3b8;
+    margin-bottom: 0;
+}
+
+.panel-card,
+.summary-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 16px;
+    box-shadow: 0 12px 36px rgba(2, 6, 23, 0.18);
+}
+
+.summary-label {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.summary-value {
+    color: #e2e8f0;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 4px 0 0;
+}
+
+.section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.section-note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.chart-box {
+    width: 100%;
+    height: 340px;
+}
+
+.radar-box {
+    width: 100%;
+    height: 420px;
+}
+
+.tab-content .tab-pane {
+    padding-top: 16px;
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.metric-item {
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+.metric-label {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.metric-value {
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.16);
+    color: #c7d2fe;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.panorama-tabs .nav-link {
+    color: #94a3b8;
+}
+
+.panorama-tabs .nav-link.active {
+    color: #fff;
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.35);
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.panorama-table {
+    margin-bottom: 0;
+}
+
+.panorama-table thead th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    white-space: nowrap;
+}
+
+.panorama-table tbody td {
+    white-space: nowrap;
+    color: #e2e8f0;
+    border-top-color: rgba(51, 65, 85, 0.45);
+}
+
+.panorama-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.error-banner {
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fecaca;
+    margin-bottom: 18px;
+}
+
+.search-card .form-control {
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid rgba(51, 65, 85, 0.9);
+}
+
+.search-card .form-control:focus {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.18);
+}
+
+@media (max-width: 768px) {
+    .panorama-title {
+        font-size: 22px;
+    }
+
+    .chart-box,
+    .radar-box {
+        height: 300px;
+    }
+
+    .metric-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid panorama-page">
+    {% if error %}
+    <div class="error-banner">
+        <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <div class="panorama-hero">
+        <div class="panorama-kicker">
+            <i class="fas fa-layer-group"></i>
+            试用功能
+        </div>
+        <h1 class="panorama-title">个股全景展示</h1>
+        <p class="panorama-subtitle">
+            数据来源：<span style="color:#cbd5e1;font-weight:600;">{{ latest_trade_date or '--' }}</span>
+            ，聚合展示一只股票的市场位置、估值、财务、技术、资金和形态标签。
+        </p>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-4">
+            <div class="card panel-card search-card h-100">
+                <div class="card-body">
+                    <h2 class="section-title mb-2">快速切换</h2>
+                    <div class="section-note mb-3">输入股票代码查看最新交易日全景</div>
+                    <form method="get" action="{{ url_for('main.stock_panorama') }}">
+                        <div class="mb-3">
+                            <label class="form-label">股票代码</label>
+                            <input type="text" class="form-control" name="ts_code" value="{{ input_code }}" placeholder="例如：000001.SZ">
+                        </div>
+                        <button class="btn btn-primary w-100" type="submit">
+                            <i class="fas fa-binoculars me-1"></i>查看全景
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-8">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                        <div>
+                            <h2 class="section-title mb-2">市场快照</h2>
+                            {% if overview %}
+                            <div class="section-note">{{ overview.name }}（{{ overview.ts_code }}）· {{ overview.industry }} · {{ overview.area }}</div>
+                            {% endif %}
+                        </div>
+                        {% if overview %}
+                        <span class="pill">最新交易日 {{ overview.trade_date }}</span>
+                        {% endif %}
+                    </div>
+                    {% if overview %}
+                    <div class="row g-3">
+                        <div class="col-6 col-md-3">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">收盘价 / 涨跌幅</div>
+                                    <div class="summary-value">{{ overview.close }} / {{ overview.pct_chg }}%</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">成交额</div>
+                                    <div class="summary-value">{{ overview.amount }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">PE / PB</div>
+                                    <div class="summary-value">{{ overview.pe_ttm }} / {{ overview.pb }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card summary-card">
+                                <div class="card-body">
+                                    <div class="summary-label">PS / 股息率</div>
+                                    <div class="summary-value">{{ overview.ps_ttm }} / {{ overview.dv_ttm }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if overview %}
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-5">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <h2 class="section-title mb-2">四维全景雷达</h2>
+                    <div class="section-note mb-3">基于最新交易日的全市场分位数标准化</div>
+                    <div id="panoramaRadar" class="radar-box"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-7">
+            <div class="card panel-card h-100">
+                <div class="card-body">
+                    <ul class="nav nav-tabs panorama-tabs" id="panoramaTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#snapshot" type="button" role="tab">市场快照</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#financial" type="button" role="tab">估值与财务</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#technical" type="button" role="tab">技术面</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#moneyflow" type="button" role="tab">资金面</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#signals" type="button" role="tab">形态标签</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="snapshot" role="tabpanel">
+                            <div class="metric-grid">
+                                {% for item in status_panel %}
+                                <div class="metric-item">
+                                    <div class="metric-label">{{ item.label }}</div>
+                                    <div class="metric-value">{{ item.value if item.value is not none else '--' }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="financial" role="tabpanel">
+                            <div class="metric-grid">
+                                {% for item in financial_panel %}
+                                <div class="metric-item">
+                                    <div class="metric-label">{{ item.label }}</div>
+                                    <div class="metric-value">{{ item.value if item.value is not none else '--' }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="technical" role="tabpanel">
+                            <div class="metric-grid">
+                                {% for item in technical_panel %}
+                                <div class="metric-item">
+                                    <div class="metric-label">{{ item.label }}</div>
+                                    <div class="metric-value">{{ item.value if item.value is not none else '--' }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="moneyflow" role="tabpanel">
+                            <div class="metric-grid">
+                                {% for item in moneyflow_panel %}
+                                <div class="metric-item">
+                                    <div class="metric-label">{{ item.label }}</div>
+                                    <div class="metric-value">{{ item.value if item.value is not none else '--' }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="signals" role="tabpanel">
+                            <div class="metric-grid">
+                                <div class="metric-item">
+                                    <div class="metric-label">首板</div>
+                                    <div class="metric-value">{{ special_flags.pattern_first_limit }}</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-label">连板</div>
+                                    <div class="metric-value">{{ special_flags.pattern_multi_limit }}</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-label">阳包阴</div>
+                                    <div class="metric-value">{{ special_flags.pattern_bullish_engulfing }}</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-label">连续上涨天数</div>
+                                    <div class="metric-value">{{ special_flags.consec_up_days }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if overview %}
+    <div class="card panel-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                    <h2 class="section-title">关键数据明细</h2>
+                    <div class="section-note">用于快速核对单股核心字段</div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table panorama-table">
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>数值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in detail_rows %}
+                        <tr>
+                            <td>{{ item.label }}</td>
+                            <td>{{ item.value if item.value is not none else '--' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var radarEl = document.getElementById('panoramaRadar');
+    if (!radarEl || !window.echarts) {
+        return;
+    }
+
+    var chart = echarts.init(radarEl, 'financial');
+    var radar = {{ radar_chart | tojson }};
+    chart.setOption({
+        tooltip: {
+            trigger: 'item'
+        },
+        radar: {
+            indicator: radar.labels.map(function(label) {
+                return { name: label, max: 1 };
+            }),
+            radius: '68%',
+            splitNumber: 5,
+            axisName: {
+                color: '#cbd5e1',
+                fontWeight: 600
+            },
+            splitLine: {
+                lineStyle: { color: 'rgba(51, 65, 85, 0.55)' }
+            },
+            axisLine: {
+                lineStyle: { color: 'rgba(51, 65, 85, 0.65)' }
+            },
+            splitArea: {
+                areaStyle: {
+                    color: ['rgba(15, 23, 42, 0.2)', 'rgba(30, 41, 59, 0.2)']
+                }
+            }
+        },
+        series: [{
+            type: 'radar',
+            data: [{
+                value: radar.values,
+                name: '{{ overview.name if overview else "" }}'
+            }],
+            areaStyle: { opacity: 0.16 },
+            symbolSize: 7,
+            lineStyle: { width: 2 }
+        }]
+    });
+
+    window.addEventListener('resize', function() {
+        chart.resize();
+    });
+})();
+</script>
+{% endblock %}
