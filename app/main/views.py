@@ -860,6 +860,12 @@ def api_test():
     return render_template('api_test.html')
 
 
+@main_bp.route('/trial/feature-intro')
+def feature_intro():
+    """功能介绍：用通俗语言介绍大宽表的数据结构"""
+    return render_template('feature_intro.html')
+
+
 
 
 

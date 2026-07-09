@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}功能介绍 · 大宽表{% endblock %}
+
+{% block extra_css %}
+<style>
+.intro-page {
+    padding: 20px 24px 48px;
+    max-width: 1180px;
+    margin: 0 auto;
+}
+
+/* hero */
+.intro-hero {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 18px;
+    padding: 26px 28px;
+    margin-bottom: 18px;
+}
+.intro-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 12px;
+}
+.intro-hero h1 {
+    margin: 14px 0 8px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+.intro-lead {
+    color: #cbd5e1;
+    line-height: 1.8;
+    margin: 0;
+    font-size: 15px;
+}
+.intro-lead b {
+    color: #e2e8f0;
+}
+
+/* 区块标题 */
+.intro-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 26px 4px 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.22);
+}
+
+/* 概览卡片 */
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+.overview-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 14px;
+    padding: 18px 20px;
+    text-align: center;
+}
+.overview-card .num {
+    font-size: 22px;
+    font-weight: 700;
+    color: #818cf8;
+    margin-bottom: 4px;
+}
+.overview-card .lbl {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+/* 字段分组卡片 */
+.group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+.group-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 14px;
+    padding: 18px 20px;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.group-card:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+    transform: translateY(-2px);
+}
+.group-card .icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.14);
+    color: #a5b4fc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    margin-bottom: 12px;
+}
+.group-card h3 {
+    font-size: 15px;
+    color: #f1f5f9;
+    margin: 0 0 6px;
+}
+.group-card p {
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.7;
+    margin: 0 0 10px;
+}
+.group-card .fields {
+    font-size: 12px;
+    color: #64748b;
+}
+.group-card .fields b {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* 用法列表 */
+.usage-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    border-radius: 14px;
+    padding: 18px 22px;
+}
+.usage-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(51, 65, 85, 0.6);
+}
+.usage-item:last-child {
+    border-bottom: none;
+}
+.usage-item .ico {
+    color: #818cf8;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.usage-item .txt {
+    color: #cbd5e1;
+    font-size: 14px;
+    line-height: 1.7;
+}
+.usage-item .txt b {
+    color: #e2e8f0;
+}
+
+/* 小提示 */
+.tips-card {
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 14px;
+    padding: 18px 22px;
+}
+.tips-card h3 {
+    color: #fbbf24;
+    font-size: 15px;
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.tips-card ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #cbd5e1;
+    font-size: 13.5px;
+    line-height: 1.8;
+}
+
+.intro-footer {
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+    margin-top: 22px;
+}
+.intro-footer code {
+    color: #64748b;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+/* 说明与小字（购买 / 使用范围 / 风险提示） */
+.intro-notices {
+    margin-top: 18px;
+    padding: 16px 20px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    border-radius: 12px;
+    font-size: 12.5px;
+    line-height: 1.95;
+    color: #94a3b8;
+}
+.intro-notices .notice-line {
+    margin: 0 0 6px;
+}
+.intro-notices .notice-line:last-child {
+    margin-bottom: 0;
+}
+.intro-notices b {
+    color: #cbd5e1;
+    font-weight: 600;
+}
+.intro-notices .notice-risk b {
+    color: #f59e0b;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid intro-page">
+    <!-- Hero -->
+    <div class="intro-hero">
+        <span class="intro-kicker"><i class="fas fa-book"></i> 试用功能 · 功能介绍</span>
+        <h1>大宽表是什么？</h1>
+        <p class="intro-lead">
+            简单说，<b>「大宽表」就像一张超大号的股票成绩单</b>——每一行是一只股票在某一天的「体检报告」，每一列是一项指标。
+            你在本系统里<b>选股、看 K 线形态、分析资金流向</b>时，背后查的就是这张表。看懂这张表，就能更明白每个筛选条件到底在筛什么。
+        </p>
+    </div>
+
+    <!-- 概览 -->
+    <div class="overview-grid">
+        <div class="overview-card">
+            <div class="num">1 行</div>
+            <div class="lbl">= 一只股票 + 一天</div>
+        </div>
+        <div class="overview-card">
+            <div class="num">≈ 5500</div>
+            <div class="lbl">只 A 股全覆盖</div>
+        </div>
+        <div class="overview-card">
+            <div class="num">上百项</div>
+            <div class="lbl">指标列</div>
+        </div>
+        <div class="overview-card">
+            <div class="num">每天</div>
+            <div class="lbl">随行情更新</div>
+        </div>
+    </div>
+
+    <!-- 表里都有什么 -->
+    <div class="intro-section-title">表里都有什么？</div>
+    <div class="group-grid">
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-id-card"></i></div>
+            <h3>这是哪只股票</h3>
+            <p>告诉你这是哪只股票、属于哪个行业和地区、是哪一天的数据。</p>
+            <div class="fields"><b>代表字段：</b>股票代码、名称、行业、地区、日期</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-scale-balanced"></i></div>
+            <h3>公司多大、股票贵不贵</h3>
+            <p>看公司的「身价」和股票的「性价比」：市值多大、市盈率市净率高不高、股息率多少。</p>
+            <div class="fields"><b>代表字段：</b>总市值、市盈率、市净率、股息率</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-chart-line"></i></div>
+            <h3>今天股价怎么走</h3>
+            <p>当天的开盘、最高、最低、收盘价，涨了多少、成交有多活跃。</p>
+            <div class="fields"><b>代表字段：</b>收盘价、涨跌幅、成交量、成交额</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-right-left"></i></div>
+            <h3>主力资金进还是出</h3>
+            <p>大单、中单、小单谁在买谁在卖，整体资金是净流入还是净流出。</p>
+            <div class="fields"><b>代表字段：</b>大单买入、主力净流入</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-wave-square"></i></div>
+            <h3>技术指标怎么看</h3>
+            <p>常用的技术分析指标，帮你判断买卖时机和趋势强弱。</p>
+            <div class="fields"><b>代表字段：</b>MACD、KDJ、RSI、布林带</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-arrow-trend-up"></i></div>
+            <h3>是不是在走强</h3>
+            <p>有没有创近期新高、连涨几天、量能放没放大——判断股票是不是正在变强。</p>
+            <div class="fields"><b>代表字段：</b>创 20 日新高、连续上涨、量比</div>
+        </div>
+        <div class="group-card">
+            <div class="icon"><i class="fas fa-shapes"></i></div>
+            <h3>K 线图形有没有信号</h3>
+            <p>系统提前算好的 K 线形态，比如均线金叉、双底、红三兵，可以直接拿来筛选。</p>
+            <div class="fields"><b>代表字段：</b>均线金叉、双底、红三兵</div>
+        </div>
+    </div>
+
+    <!-- 这张表怎么帮你 -->
+    <div class="intro-section-title">这张表怎么帮你？</div>
+    <div class="usage-card">
+        <div class="usage-item">
+            <div class="ico"><i class="fas fa-filter"></i></div>
+            <div class="txt"><b>选股筛选：</b>按「贵不贵」「市值多大」「涨多少」「资金流向」等条件，一键筛出符合要求的股票。</div>
+        </div>
+        <div class="usage-item">
+            <div class="ico"><i class="fas fa-crosshairs"></i></div>
+            <div class="txt"><b>形态选股：</b>想找「均线金叉」「突破新高」的股票？直接按 K 线形态筛选，不用自己一个个看图。</div>
+        </div>
+        <div class="usage-item">
+            <div class="ico"><i class="fas fa-th-large"></i></div>
+            <div class="txt"><b>其他试用功能：</b>板块热力图、资金流统计等功能，背后用的也是这张表。</div>
+        </div>
+        <div class="usage-item">
+            <div class="ico"><i class="fas fa-arrows-rotate"></i></div>
+            <div class="txt"><b>数据每天更新：</b>在「数据管理」里下载最新行情后，刷新页面就能用上最新数据。</div>
+        </div>
+    </div>
+
+    <!-- 小提示 -->
+    <div class="tips-card">
+        <h3><i class="fas fa-circle-info"></i> 使用小提示</h3>
+        <ul>
+            <li>表里的数据是<b>当天收盘后</b>的快照，交易时段内可能还看不到当天的结果。</li>
+            <li>部分技术指标依赖上游数据是否下载完整；如果某个指标全是 0，多半是数据还没准备好，不是系统出错。</li>
+            <li>表里的字段会随版本增加，以页面上实际能用的为准。</li>
+        </ul>
+    </div>
+
+    <!-- 说明与小字 -->
+    <div class="intro-notices">
+        <p class="notice-line">因数据需要额外购买和开发、训练、计算，成本较高，如需使用，需要单独购买，每个月58元，了解详情请加 QQ群：<b>58390760</b>。</p>
+        <p class="notice-line">数据可直接在开源项目上使用，也可以在<b>openclaw</b>或<b>hermes</b>使用，提高复盘的效率。</p>
+        <p class="notice-line notice-risk">量化是提高效率的工具，不是投资的圣杯，数据仅供参考，请勿作为直接的投资标准，<b>股市有风险，入市需谨慎</b>。</p>
+    </div>
+
+    <div class="intro-footer">
+        想看完整的技术字段清单？请参考 <code>docs/宽表数据字典.md</code>
+    </div>
+</div>
+{% endblock %}
