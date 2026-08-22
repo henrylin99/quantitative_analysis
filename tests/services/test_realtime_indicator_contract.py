@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -25,18 +26,34 @@ class _FakeRealtimeIndicator:
         return True, "ok"
 
 
-def test_indicator_engine_reads_minute_history_from_parquet(tmp_path, monkeypatch):
-    minute_dir = Path(tmp_path) / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
-    minute_dir.mkdir(parents=True)
+def _write_minute_bars(tmp_path, ts_code, n_bars, base_dt=None):
+    """在动态的最近交易日写入分钟 bar。
+
+    引擎按 datetime.now() - lookback_days 过滤，测试数据必须落在
+    当前时间附近——固定历史日期的 fixture 会随时间腐烂而失效。
+    """
+    if base_dt is None:
+        yesterday = datetime.now() - timedelta(days=1)
+        base_dt = yesterday.replace(hour=9, minute=31, second=0, microsecond=0)
+
+    day_dir = (
+        Path(tmp_path)
+        / "stock_minute"
+        / "1min"
+        / f"year={base_dt.year}"
+        / f"month={base_dt.month:02d}"
+        / f"day={base_dt.day:02d}"
+    )
+    day_dir.mkdir(parents=True, exist_ok=True)
+
     rows = []
-    for idx in range(20):
-        minute = 31 + idx
-        close = 10.1 + idx * 0.1
+    for idx in range(n_bars):
+        close = 10.0 + idx * 0.1
         rows.append(
             {
-                "ts_code": "000001.SZ",
+                "ts_code": ts_code,
                 "period_type": "1min",
-                "datetime": f"2026-06-04T09:{minute:02d}:00",
+                "datetime": base_dt + timedelta(minutes=idx),
                 "open": close - 0.1,
                 "high": close + 0.1,
                 "low": close - 0.2,
@@ -45,7 +62,12 @@ def test_indicator_engine_reads_minute_history_from_parquet(tmp_path, monkeypatc
                 "amount": (1000 + idx * 100) * close,
             }
         )
-    pd.DataFrame(rows).to_parquet(minute_dir / "data.parquet", index=False)
+    pd.DataFrame(rows).to_parquet(day_dir / "data.parquet", index=False)
+    return base_dt
+
+
+def test_indicator_engine_reads_minute_history_from_parquet(tmp_path, monkeypatch):
+    _write_minute_bars(tmp_path, "000001.SZ", 20)
 
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
@@ -62,27 +84,7 @@ def test_indicator_engine_reads_minute_history_from_parquet(tmp_path, monkeypatc
 
 
 def test_indicator_engine_persists_ma_rows_with_sub_names(tmp_path, monkeypatch):
-    minute_dir = Path(tmp_path) / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
-    minute_dir.mkdir(parents=True)
-    rows = []
-    base_time = pd.Timestamp("2026-06-04 09:31:00")
-    for idx in range(30):
-        dt = base_time + pd.Timedelta(minutes=idx)
-        close = 10.0 + idx * 0.2
-        rows.append(
-            {
-                "ts_code": "000001.SZ",
-                "period_type": "1min",
-                "datetime": dt,
-                "open": close - 0.1,
-                "high": close + 0.1,
-                "low": close - 0.2,
-                "close": close,
-                "volume": 1000 + idx * 100,
-                "amount": (1000 + idx * 100) * close,
-            }
-        )
-    pd.DataFrame(rows).to_parquet(minute_dir / "data.parquet", index=False)
+    _write_minute_bars(tmp_path, "000001.SZ", 30)
 
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 

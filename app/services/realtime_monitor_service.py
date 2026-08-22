@@ -19,43 +19,38 @@ class RealtimeMonitorService:
     DEFAULT_PERIOD_TYPE = "5min"
     
     def __init__(self):
-        self.sector_mapping = self._initialize_sector_mapping()
         self.data_reader = ParquetDataReader()
         self.minute_reader = self.data_reader.get_minute_reader()
+        # 板块映射依赖 data_reader 的 stock_basic，必须在它初始化之后构建
+        self.sector_mapping = self._initialize_sector_mapping()
     
     def _initialize_sector_mapping(self):
-        """初始化板块映射"""
-        return {
+        """初始化板块映射：优先用 stock_basic 的真实行业字段。
+
+        旧实现是 28 个手工挑选的 4 股列表，存在大量错分
+        （如五粮液在"医药"、海康威司重复在"电子"和"通信"），
+        计算出的"板块表现"不可信。
+        """
+        fallback = {
             '银行': ['000001.SZ', '600000.SH', '600036.SH', '601988.SH'],
-            '房地产': ['000002.SZ', '600048.SH', '000069.SZ', '600383.SH'],
-            '钢铁': ['600019.SH', '000898.SZ', '600581.SH', '000709.SZ'],
-            '煤炭': ['600188.SH', '601088.SH', '000983.SZ', '600123.SH'],
-            '有色金属': ['600362.SH', '000831.SZ', '002460.SZ', '600111.SH'],
-            '石油石化': ['600028.SH', '000656.SZ', '600688.SH', '000301.SZ'],
-            '电力': ['600886.SH', '000027.SZ', '600795.SH', '000875.SZ'],
-            '汽车': ['600104.SH', '000625.SZ', '002594.SZ', '600066.SH'],
-            '机械': ['000157.SZ', '002008.SZ', '600031.SH', '000528.SZ'],
-            '电子': ['000725.SZ', '002415.SZ', '600584.SH', '000021.SZ'],
-            '医药': ['000858.SZ', '600276.SH', '000423.SZ', '600867.SH'],
             '食品饮料': ['000568.SZ', '600519.SH', '000596.SZ', '600887.SH'],
-            '纺织服装': ['600177.SH', '002029.SZ', '000902.SZ', '600398.SH'],
-            '轻工制造': ['000488.SZ', '002572.SZ', '600978.SH', '000726.SZ'],
-            '商贸零售': ['600694.SH', '000759.SZ', '002024.SZ', '600361.SH'],
-            '交通运输': ['600026.SH', '000089.SZ', '600115.SH', '000039.SZ'],
-            '休闲服务': ['000978.SZ', '600138.SH', '000430.SZ', '600258.SH'],
-            '综合': ['600643.SH', '000039.SZ', '600663.SH', '000042.SZ'],
-            '建筑材料': ['000401.SZ', '600585.SH', '000877.SZ', '600801.SH'],
-            '建筑装饰': ['000090.SZ', '002271.SZ', '600170.SH', '000065.SZ'],
-            '电气设备': ['000400.SZ', '002202.SZ', '600406.SH', '000012.SZ'],
-            '国防军工': ['000768.SZ', '002013.SZ', '600150.SH', '000099.SZ'],
-            '计算机': ['000977.SZ', '002405.SZ', '600588.SH', '000034.SZ'],
-            '传媒': ['000156.SZ', '002027.SZ', '600633.SH', '000917.SZ'],
-            '通信': ['000063.SZ', '002415.SZ', '600050.SH', '000070.SZ'],
-            '公用事业': ['000826.SZ', '600008.SH', '000939.SZ', '600874.SH'],
-            '农林牧渔': ['000876.SZ', '002714.SZ', '600598.SH', '000735.SZ'],
-            '化工': ['000792.SZ', '002648.SZ', '600309.SH', '000059.SZ'],
-            '非银金融': ['000166.SZ', '002736.SZ', '600030.SH', '000776.SZ']
+            '电子': ['000725.SZ', '002415.SH', '600584.SH', '000021.SZ'],
         }
+        try:
+            stock_basic = self.data_reader.get_stock_basic()
+            if stock_basic.empty or "industry" not in stock_basic.columns:
+                logger.warning("stock_basic 缺少行业字段，板块映射退化为默认列表")
+                return fallback
+            df = stock_basic.dropna(subset=["industry", "ts_code"])
+            mapping = {}
+            for industry, group in df.groupby("industry"):
+                mapping[str(industry)] = group["ts_code"].astype(str).tolist()
+            if not mapping:
+                return fallback
+            return mapping
+        except Exception as e:
+            logger.error(f"构建板块映射失败，退化为默认列表: {e}")
+            return fallback
 
     def _minute_frame(
         self,
@@ -100,12 +95,17 @@ class RealtimeMonitorService:
             minute_df = self._minute_frame(period_type=period_type, start_time=start_time, end_time=end_time, ts_codes=stock_codes)
             latest_rows = self._latest_rows(minute_df)
 
+            # 一次批量预取 昨收/换手率，避免每只股票各读一遍全量数据
+            current_date = end_time.strftime('%Y%m%d')
+            prev_close_map = self._daily_prev_close_map(stock_codes, current_date)
+            turnover_map = self._daily_turnover_map(stock_codes, current_date)
+
             quotes = []
             for _, latest_data in latest_rows.iterrows():
                 ts_code = latest_data["ts_code"]
                 try:
                     current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
-                    prev_close = self._get_previous_close(ts_code, current_time, period_type)
+                    prev_close = self._get_previous_close(ts_code, current_time, period_type, prev_close_map)
 
                     change_pct = 0.0
                     if prev_close and prev_close > 0:
@@ -125,7 +125,7 @@ class RealtimeMonitorService:
                         'change_pct': change_pct,
                         'volume_ratio': volume_ratio,
                         'update_time': current_time.isoformat(),
-                        'turnover_rate': self._calculate_turnover_rate(ts_code, latest_data["volume"])
+                        'turnover_rate': self._calculate_turnover_rate(ts_code, latest_data["volume"], turnover_map)
                     })
                 except Exception as e:
                     logger.error(f"获取 {ts_code} 行情数据失败: {str(e)}")
@@ -166,7 +166,11 @@ class RealtimeMonitorService:
                 }
 
             sector_performance = []
-            
+
+            # 批量预取昨收，避免逐股逐板块重复读全量数据
+            sector_codes = list(set(latest_rows["ts_code"].astype(str)))
+            prev_close_map = self._daily_prev_close_map(sector_codes, end_time.strftime('%Y%m%d'))
+
             for sector_name, stock_codes in self.sector_mapping.items():
                 try:
                     sector_rows = latest_rows[latest_rows["ts_code"].isin(stock_codes)].copy()
@@ -179,7 +183,7 @@ class RealtimeMonitorService:
 
                     for _, latest_data in sector_rows.iterrows():
                         current_time = pd.to_datetime(latest_data["datetime"]).to_pydatetime()
-                        prev_close = self._get_previous_close(latest_data["ts_code"], current_time, self.DEFAULT_PERIOD_TYPE)
+                        prev_close = self._get_previous_close(latest_data["ts_code"], current_time, self.DEFAULT_PERIOD_TYPE, prev_close_map)
                         if prev_close and prev_close > 0:
                             change_pct = (latest_data["close"] - prev_close) / prev_close * 100
                             sector_changes.append(change_pct)
@@ -454,18 +458,95 @@ class RealtimeMonitorService:
             # 返回默认股票列表
             return ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH', '000858.SZ']
     
-    def _get_previous_close(self, ts_code: str, current_time: datetime, period_type: str) -> Optional[float]:
-        """获取前一交易日收盘价"""
+    def _daily_prev_close_map(self, ts_codes: List[str], current_date: str,
+                              lookback_days: int = 20) -> Dict[str, float]:
+        """批量获取昨收：一次读日线，返回 {ts_code: 昨收}。
+
+        当日 bar 的 pre_close 就是昨收；当日尚无日线（盘中）时，
+        取最近一根前日 bar 的 close。
+        """
+        result: Dict[str, float] = {}
         try:
-            prev_time = current_time - timedelta(hours=1)
-            df = self._minute_frame(period_type=period_type, end_time=prev_time, ts_codes=[ts_code])
+            if not ts_codes:
+                return result
+            start = (datetime.strptime(current_date, '%Y%m%d') - timedelta(days=lookback_days)).strftime('%Y%m%d')
+            daily = self.data_reader.get_daily(ts_codes=list(ts_codes), start_date=start)
+            if daily.empty or "ts_code" not in daily.columns:
+                return result
+            daily = daily.copy()
+            if "trade_date" in daily.columns:
+                daily["td"] = daily["trade_date"].astype(str).str.replace("-", "", regex=False)
+            else:
+                return result
+            daily = daily.sort_values(["ts_code", "td"])
+            for ts_code, group in daily.groupby("ts_code"):
+                prior_or_same = group[group["td"] <= current_date]
+                if prior_or_same.empty:
+                    continue
+                last = prior_or_same.iloc[-1]
+                if last["td"] == current_date and "pre_close" in group.columns:
+                    pc = last.get("pre_close")
+                    if pc is not None and not pd.isna(pc) and float(pc) > 0:
+                        result[str(ts_code)] = float(pc)
+                        continue
+                close = last.get("close")
+                if close is not None and not pd.isna(close) and float(close) > 0:
+                    result[str(ts_code)] = float(close)
+            return result
+        except Exception as e:
+            logger.error(f"批量获取昨收失败: {e}")
+            return result
+
+    def _daily_turnover_map(self, ts_codes: List[str], current_date: str,
+                            lookback_days: int = 10) -> Dict[str, float]:
+        """批量获取最近可得的真实换手率（来自 daily_basic），缺数据返回空映射。"""
+        result: Dict[str, float] = {}
+        try:
+            if not ts_codes:
+                return result
+            start = (datetime.strptime(current_date, '%Y%m%d') - timedelta(days=lookback_days)).strftime('%Y%m%d')
+            basic = self.data_reader.get_daily_basic(ts_codes=list(ts_codes), start_date=start)
+            if basic.empty or "ts_code" not in basic.columns or "turnover_rate" not in basic.columns:
+                return result
+            basic = basic.copy()
+            basic["td"] = basic["trade_date"].astype(str).str.replace("-", "", regex=False)
+            basic = basic[basic["td"] <= current_date].sort_values(["ts_code", "td"])
+            for ts_code, group in basic.groupby("ts_code"):
+                last = group.iloc[-1]
+                value = last.get("turnover_rate")
+                if value is not None and not pd.isna(value):
+                    result[str(ts_code)] = float(value)
+            return result
+        except Exception as e:
+            logger.error(f"批量获取换手率失败: {e}")
+            return result
+
+    def _get_previous_close(self, ts_code: str, current_time: datetime, period_type: str,
+                            prev_close_map: Optional[Dict[str, float]] = None) -> Optional[float]:
+        """获取昨收价（前一交易日收盘价）。
+
+        优先用预取的日线 昨收 map（当日 pre_close 或最近前日 close）；
+        无日线数据时退回分钟序列的最近收盘（此时返回值语义是
+        "最近一次分钟收盘"而非严格昨收，调用方需容忍）。
+        """
+        try:
+            if prev_close_map and ts_code in prev_close_map:
+                return prev_close_map[ts_code]
+
+            current_date = current_time.strftime('%Y%m%d')
+            daily_map = self._daily_prev_close_map([ts_code], current_date)
+            if ts_code in daily_map:
+                return daily_map[ts_code]
+
+            # 日线缺失时的退化路径：最近一根分钟 bar 的 close
+            df = self._minute_frame(period_type=period_type, end_time=current_time, ts_codes=[ts_code])
             if df.empty:
                 return None
             latest = self._latest_rows(df)
             if latest.empty:
                 return None
             return float(latest.iloc[0]["close"])
-            
+
         except Exception as e:
             logger.error(f"获取 {ts_code} 前收盘价失败: {str(e)}")
             return None
@@ -497,16 +578,23 @@ class RealtimeMonitorService:
             logger.error(f"计算 {ts_code} 成交量比失败: {str(e)}")
             return 1.0
     
-    def _calculate_turnover_rate(self, ts_code: str, volume: float) -> float:
-        """计算换手率（简化版本）"""
+    def _calculate_turnover_rate(self, ts_code: str, volume: float,
+                                 turnover_map: Optional[Dict[str, float]] = None) -> Optional[float]:
+        """换手率：来自 daily_basic 的真实值；无数据时返回 None 而不是编造。
+
+        旧实现 `min(20.0, volume/1000000*0.1)` 是拍脑袋的估算值，
+        却以真实数据的形态展示给用户，对量化产品不可接受。
+        """
+        if turnover_map and ts_code in turnover_map:
+            return turnover_map[ts_code]
+
         try:
-            # 这里应该根据股票的流通股本计算，简化处理返回一个估算值
-            # 实际应用中需要获取股票的流通股本数据
-            return min(20.0, volume / 1000000 * 0.1)  # 简化计算
-            
+            current_date = datetime.now().strftime('%Y%m%d')
+            daily_map = self._daily_turnover_map([ts_code], current_date)
+            return daily_map.get(ts_code)
         except Exception as e:
-            logger.error(f"计算 {ts_code} 换手率失败: {str(e)}")
-            return 0.0
+            logger.error(f"获取 {ts_code} 换手率失败: {str(e)}")
+            return None
     
     def _get_stock_name(self, ts_code: str) -> str:
         """获取股票名称"""

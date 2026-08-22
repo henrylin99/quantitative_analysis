@@ -112,10 +112,10 @@ class MinuteDataSyncService:
             rs = bs.query_history_k_data_plus(
                 bs_code,
                 "date,time,code,open,high,low,close,volume,amount",
-                start_date=start_date, 
+                start_date=start_date,
                 end_date=end_date,
-                frequency=frequency, 
-                adjustflag="3"  # 后复权
+                frequency=frequency,
+                adjustflag="1"  # 后复权（Baostock: 1=后复权 2=前复权 3=不复权）
             )
             
             if rs.error_code != '0':
@@ -150,46 +150,56 @@ class MinuteDataSyncService:
         """
         if df.empty:
             return df
-            
+
+        # 处理时间字段：解析失败的行直接丢弃（返回 None 供 dropna 过滤），
+        # 不能用 datetime.now() 伪造时间戳——那会让"最新bar/数据延迟"等
+        # 所有下游计算都基于假时间
+        df = df.copy()
+        df['datetime'] = df['time'].apply(self._parse_time_string)
+        bad_time_count = int(df['datetime'].isna().sum())
+        if bad_time_count:
+            logger.warning(f"丢弃 {bad_time_count} 条时间戳无法解析的记录")
+            df = df.dropna(subset=['datetime'])
+        if df.empty:
+            return df
+
         try:
-            # 处理时间字段
-            df['datetime'] = df['time'].apply(self._parse_time_string)
-            
             # 转换数据类型
             numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
             for col in numeric_columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-            
+
             # 添加周期类型
             df['period_type'] = period_type
-            
+
             # 分钟线链路统一存储 Baostock 代码格式
             df['ts_code'] = df['code'].apply(self.convert_ts_code_to_bs_code)
-            
+
             # 计算涨跌幅等字段
             df = self._calculate_technical_fields(df)
-            
+
             # 删除不需要的列
             df = df.drop(['date', 'time', 'code'], axis=1, errors='ignore')
-            
+
             # 去除空值行
             df = df.dropna(subset=['open', 'high', 'low', 'close'])
-            
+
             return df
-            
+
         except Exception as e:
+            # 预处理失败就整体失败，不能把处理了一半的数据落盘
             logger.error(f"预处理DataFrame异常: {e}")
-            return df
-    
-    def _parse_time_string(self, time_str: str) -> datetime:
+            raise
+
+    def _parse_time_string(self, time_str: str) -> Optional[datetime]:
         """
-        解析时间字符串
-        格式: YYYYMMDDHHMMSS000 -> datetime
+        解析时间字符串，格式: YYYYMMDDHHMMSS000 -> datetime。
+        解析失败返回 None（由调用方丢弃该行），而不是伪造当前时间。
         """
         try:
             # 取前14位：YYYYMMDDHHMMSS
             time_str = str(time_str)[:14]
-            
+
             # 解析各部分
             year = time_str[:4]
             month = time_str[4:6]
@@ -197,15 +207,15 @@ class MinuteDataSyncService:
             hour = time_str[8:10]
             minute = time_str[10:12]
             second = time_str[12:14]
-            
+
             # 构建datetime对象
             return datetime(
                 int(year), int(month), int(day),
                 int(hour), int(minute), int(second)
             )
-        except Exception as e:
-            logger.error(f"解析时间字符串失败: {time_str}, 错误: {e}")
-            return datetime.now()
+        except (ValueError, TypeError) as e:
+            logger.warning(f"丢弃无法解析的时间字符串: {time_str}, 错误: {e}")
+            return None
     
     def _calculate_technical_fields(self, df: pd.DataFrame) -> pd.DataFrame:
         """

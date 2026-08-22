@@ -4,6 +4,7 @@
 """
 
 from app.extensions import db
+from app.utils.time_utils import now_local, now_local_iso
 from datetime import datetime
 from sqlalchemy import Index, Text
 import json
@@ -23,8 +24,8 @@ class ReportTemplate(db.Model):
     is_active = db.Column(db.Boolean, default=True, comment='是否启用')
     is_default = db.Column(db.Boolean, default=False, comment='是否默认模板')
     created_by = db.Column(db.String(50), comment='创建者')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     # 索引
     __table_args__ = (
@@ -112,7 +113,7 @@ class ReportTemplate(db.Model):
         if 'created_by' in fields:
             template.created_by = fields['created_by']
 
-        template.updated_at = datetime.utcnow()
+        template.updated_at = now_local()
         return persist_changes(template)
 
     @classmethod
@@ -184,7 +185,7 @@ class RealtimeReport(db.Model):
     generation_time = db.Column(db.Float, comment='生成耗时(秒)')
     error_message = db.Column(db.Text, comment='错误信息')
     generated_by = db.Column(db.String(50), comment='生成者')
-    generated_at = db.Column(db.DateTime, default=datetime.utcnow, comment='生成时间')
+    generated_at = db.Column(db.DateTime, default=now_local, comment='生成时间')
     expires_at = db.Column(db.DateTime, comment='过期时间')
     
     # 关联
@@ -358,7 +359,7 @@ class RealtimeReport(db.Model):
     def get_recent_reports(cls, days=7, limit=20):
         """获取最近的报告"""
         from datetime import timedelta
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = now_local() - timedelta(days=days)
         return cls.query.filter(cls.generated_at >= cutoff_date)\
                        .order_by(cls.generated_at.desc())\
                        .limit(limit).all()
@@ -415,8 +416,8 @@ class ReportSubscription(db.Model):
     last_sent_at = db.Column(db.DateTime, comment='最后发送时间')
     next_send_at = db.Column(db.DateTime, comment='下次发送时间')
     created_by = db.Column(db.String(50), comment='创建者')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     # 关联
     template = db.relationship('ReportTemplate', backref='subscriptions')
@@ -501,7 +502,7 @@ class ReportSubscription(db.Model):
         if 'next_send_at' in fields:
             subscription.next_send_at = fields['next_send_at']
 
-        subscription.updated_at = datetime.utcnow()
+        subscription.updated_at = now_local()
         return persist_changes(subscription)
 
     @classmethod
@@ -514,7 +515,7 @@ class ReportSubscription(db.Model):
     @classmethod
     def get_pending_subscriptions(cls):
         """获取待发送的订阅"""
-        now = datetime.utcnow()
+        now = now_local()
         return cls.query.filter(
             cls.is_active == True,
             cls.next_send_at <= now
@@ -558,7 +559,7 @@ class ReportSubscription(db.Model):
 
     def update_send_time(self):
         """更新发送时间"""
-        self.last_sent_at = datetime.utcnow()
+        self.last_sent_at = now_local()
         # 根据调度类型计算下次发送时间
         if self.schedule_type == 'daily':
             from datetime import timedelta

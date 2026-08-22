@@ -7,6 +7,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from app.utils.time_utils import now_local, now_local_iso
 from typing import List, Dict, Optional
 import logging
 
@@ -24,7 +25,7 @@ _portfolio_repo = PortfolioRepository(_state_store)
 # ── 辅助函数（替代 SQLite Model 实例方法，操作 dict）────────────
 
 def _now_iso():
-    return datetime.utcnow().isoformat()
+    return now_local_iso()
 
 
 def _calc_pnl_pct(pos: dict) -> float:

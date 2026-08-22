@@ -17,18 +17,29 @@ migration.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from datetime import datetime
+from app.utils.time_utils import now_local, now_local_iso
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 from loguru import logger
 
+try:
+    import fcntl
+except ImportError:  # 非 POSIX 平台没有跨进程文件锁，退化为无锁
+    fcntl = None
+
+
+class StateStoreError(RuntimeError):
+    """状态存储读写失败（文件损坏/IO错误）。"""
+
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return now_local_iso()
 
 
 def _as_iso(value: Any) -> Optional[str]:
@@ -93,16 +104,46 @@ class ParquetStateStore:
             df = pd.read_parquet(path)
             return df
         except Exception as exc:
-            logger.warning(f"读取 Parquet 状态表失败 {path}: {exc}")
-            return pd.DataFrame()
+            # 读损坏时必须抛错：若返回空表，随后的 read-modify-write 会把
+            # 已有数据全部静默清空（比读失败严重得多）
+            raise StateStoreError(f"读取 Parquet 状态表失败 {path}: {exc}") from exc
 
     def write_frame(self, name: str, df: pd.DataFrame) -> None:
+        """原子写入：先写临时文件再 rename，读方要么看到旧表要么看到新表，
+        不会观察到写了一半的 parquet。"""
         path = self.path_for(name)
         path.parent.mkdir(parents=True, exist_ok=True)
         frame = df.copy()
         if not frame.empty:
             frame = frame.reset_index(drop=True)
-        frame.to_parquet(path, index=False)
+        tmp_path = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+        try:
+            frame.to_parquet(tmp_path, index=False)
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+
+    @contextlib.contextmanager
+    def locked(self, name: str):
+        """以独占文件锁包裹一段 read-modify-write，跨进程互斥。
+
+        web 进程与 Celery worker 会并发更新同一状态表；
+        flock 保证同一时刻只有一个进程在做读-改-写。
+        注意：不要在 locked 内嵌套调用另一个 locked（同进程会重入死锁）。
+        """
+        path = self.path_for(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = path.with_suffix(f"{path.suffix}.lock")
+        fh = open(lock_path, "a+")
+        try:
+            if fcntl is not None:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            fh.close()
 
     def next_integer_id(self, name: str, column: str = "id") -> int:
         df = self.read_frame(name)

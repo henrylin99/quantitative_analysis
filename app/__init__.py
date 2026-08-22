@@ -10,15 +10,28 @@ from app.utils.logger import setup_logger
 
 def create_app(config_name='default'):
     """应用工厂函数"""
+    from config import config as config_map
+
+    if config_name not in config_map:
+        raise ValueError(
+            f"未知的配置名: {config_name!r}，可选值: {sorted(config_map.keys())}"
+        )
+
     app = Flask(__name__)
-    
+
     # 加载配置
-    app.config.from_object(config[config_name])
-    
+    app.config.from_object(config_map[config_name])
+
+    # 生产环境强制校验（SECRET_KEY 等），配置不完整直接失败而不是带病启动
+    validator = getattr(config_map[config_name], 'validate', None)
+    if callable(validator):
+        validator(app.config)
+
     # 初始化扩展
     db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*", async_mode='eventlet')
-    CORS(app)
+    cors_origins = app.config.get('CORS_ORIGINS', '*')
+    socketio.init_app(app, cors_allowed_origins=cors_origins)
+    CORS(app, origins=cors_origins)
     
     # 设置日志
     setup_logger(app.config['LOG_LEVEL'], app.config['LOG_FILE'])

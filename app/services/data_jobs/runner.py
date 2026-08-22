@@ -21,7 +21,13 @@ class ScriptRunner:
         script_path: str,
         params: Optional[Dict[str, Any]] = None,
         env: Optional[Dict[str, str]] = None,
+        timeout: Optional[int] = None,
     ) -> subprocess.CompletedProcess:
+        """执行数据脚本。
+
+        timeout: 秒。默认取环境变量 DATA_JOB_TIMEOUT（缺省 3600 秒）。
+        超时会杀死子进程并返回 returncode=124 的结果，而不是让 worker 永久挂起。
+        """
         ok, msg = self.validate_script(script_path)
         if not ok:
             raise FileNotFoundError(msg)
@@ -64,11 +70,30 @@ class ScriptRunner:
                     continue
                 env_key = f"DATA_JOB_PARAM_{str(key).upper()}"
                 merged_env[env_key] = str(value)
-        return subprocess.run(
-            ["python", str(full_path)],
-            cwd=str(self.project_root),
-            env=merged_env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+
+        if timeout is None:
+            try:
+                timeout = int(os.environ.get("DATA_JOB_TIMEOUT", 3600))
+            except (TypeError, ValueError):
+                timeout = 3600
+
+        try:
+            return subprocess.run(
+                ["python", str(full_path)],
+                cwd=str(self.project_root),
+                env=merged_env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # 超时视为任务失败（returncode=124 约定与 shell 一致），让上层
+            # 走正常的失败落盘流程，而不是把异常抛给 worker 日志后无人知晓
+            timed_out_text = f"script timed out after {timeout}s and was killed"
+            return subprocess.CompletedProcess(
+                args=["python", str(full_path)],
+                returncode=124,
+                stdout=(exc.stdout or "") if isinstance(exc.stdout, str) else "",
+                stderr=f"{(exc.stderr or '') if isinstance(exc.stderr, str) else ''}\n{timed_out_text}".strip(),
+            )

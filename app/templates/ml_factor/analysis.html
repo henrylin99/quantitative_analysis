@@ -276,11 +276,11 @@ async function loadPortfolioPerformance() {
         // 更新投资组合数
         document.getElementById('portfolio-count').textContent = data.portfolio_count || 0;
         
-        // 更新关键指标
-        document.getElementById('annual-return').textContent = (data.annual_return || 0).toFixed(2) + '%';
-        document.getElementById('max-drawdown').textContent = (data.max_drawdown || 0).toFixed(2) + '%';
-        document.getElementById('sharpe-ratio').textContent = (data.sharpe_ratio || 0).toFixed(2);
-        document.getElementById('win-rate').textContent = (data.win_rate || 0).toFixed(1) + '%';
+        // 更新关键指标（后端无法计算的指标返回 null，显示为"—"而不是误导性的 0）
+        document.getElementById('annual-return').textContent = data.annual_return == null ? '—' : (data.annual_return || 0).toFixed(2) + '%';
+        document.getElementById('max-drawdown').textContent = data.max_drawdown == null ? '—' : (data.max_drawdown || 0).toFixed(2) + '%';
+        document.getElementById('sharpe-ratio').textContent = data.sharpe_ratio == null ? '—' : (data.sharpe_ratio || 0).toFixed(2);
+        document.getElementById('win-rate').textContent = data.win_rate == null ? '—' : (data.win_rate || 0).toFixed(1) + '%';
         
         // 绘制投资组合表现图表
         drawPortfolioPerformanceChart(data.performance_data);

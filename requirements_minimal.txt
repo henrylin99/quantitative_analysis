@@ -4,9 +4,19 @@ click>=8.1.3
 Flask-RESTful>=0.3.10
 Flask-CORS>=4.0.0
 
+# WebSocket
+Flask-SocketIO>=5.3.0
+# SOCKETIO_ASYNC_MODE=eventlet 时才需要；生产用 gunicorn -k eventlet 时也依赖
+eventlet>=0.33.0
+
 # 数据库相关
 SQLAlchemy>=2.0.0
 Flask-SQLAlchemy>=3.0.0
+Flask-Migrate>=4.0.0
+
+# 任务队列（worker 容器必需）
+celery>=5.3.0
+redis>=5.0.0
 
 # 数据处理核心
 pandas>=2.0.0
@@ -36,4 +46,7 @@ matplotlib>=3.7.0
 cvxpy>=1.4.0
 
 # 并行计算
-joblib>=1.3.0 
+joblib>=1.3.0
+
+# 生产 WSGI 服务器
+gunicorn>=21.0.0

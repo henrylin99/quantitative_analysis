@@ -59,7 +59,10 @@ class WebSocketPushService:
         
         # 缓存上次推送时间
         self.last_push_times = {}
-    
+        # 循环代数：stop→start 后旧循环醒来发现自己已过时就会退出，
+        # 防止两个循环同时推送（每条数据推两遍）
+        self._loop_generation = 0
+
     def start_push_service(self):
         """启动推送服务"""
         if self.is_running:
@@ -67,30 +70,32 @@ class WebSocketPushService:
             return
 
         self.is_running = True
+        self._loop_generation += 1
+        generation = self._loop_generation
         from app.extensions import socketio
-        socketio.start_background_task(target=self._push_loop)
+        socketio.start_background_task(target=self._push_loop, generation=generation)
         logger.info("WebSocket推送服务已启动")
 
     def stop_push_service(self):
         """停止推送服务"""
         self.is_running = False
         logger.info("WebSocket推送服务已停止")
-    
-    def _push_loop(self):
-        """推送循环"""
+
+    def _push_loop(self, generation: int):
+        """推送循环（只处理属于自己代数的推送任务）"""
         from app.extensions import socketio as _sio
-        while self.is_running:
+        while self.is_running and generation == self._loop_generation:
             try:
                 current_time = datetime.now()
 
-                # 检查各类数据是否需要推送
-                for data_type, config in self.push_config.items():
-                    if not config['enabled']:
+                # 检查各类数据是否需要推送（拷贝快照，避免与配置更新并发修改冲突）
+                for data_type, config in list(self.push_config.items()):
+                    if not config.get('enabled'):
                         continue
 
                     last_push = self.last_push_times.get(data_type)
                     if (not last_push or
-                        (current_time - last_push).total_seconds() >= config['interval']):
+                        (current_time - last_push).total_seconds() >= config.get('interval', 60)):
 
                         self._push_data_type(data_type)
                         self.last_push_times[data_type] = current_time

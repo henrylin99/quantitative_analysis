@@ -467,6 +467,31 @@ class FactorEngine:
         
         return pd.DataFrame()
     
+    def _point_in_time_stamp(self, *report_rows) -> Optional[str]:
+        """财务因子的打点日期：取所用报告的公告日（ann_date/f_ann_date）中最晚的一个。
+
+        报告期 end_date（如年报的 12-31）比实际公告日早数月，直接用 end_date
+        打点会让回测提前"看到"业绩（未来函数），因此必须用公告日；
+        同一报表的 ann_date 与 f_ann_date 不一致时取孰晚（更保守），
+        公告日缺失时退回 end_date。
+        """
+        stamps = []
+        for row in report_rows:
+            if row is None:
+                continue
+            candidates = []
+            for col in ('f_ann_date', 'ann_date'):
+                val = row.get(col) if hasattr(row, 'get') else None
+                if val is not None and not pd.isna(val) and str(val).strip():
+                    candidates.append(str(val))
+            if candidates:
+                stamps.append(max(candidates))
+            else:
+                end_val = row.get('end_date') if hasattr(row, 'get') else None
+                if end_val is not None and not pd.isna(end_val) and str(end_val).strip():
+                    stamps.append(str(end_val))
+        return max(stamps) if stamps else None
+
     def _roe_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """ROE因子（TTM）"""
         if 'income' not in data or 'balance' not in data:
@@ -490,10 +515,14 @@ class FactorEngine:
                 
                 if avg_equity and avg_equity > 0:
                     roe_ttm = ttm_profit / avg_equity
-                    
-                    # 使用最新报告期对应的交易日期
-                    latest_date = stock_income.iloc[0]['end_date']
-                    
+
+                    # 打点用公告日（利润表与资产负债表孰晚），报告期 end_date 会导致未来函数
+                    latest_date = self._point_in_time_stamp(
+                        stock_income.iloc[0], stock_balance.iloc[0]
+                    )
+                    if latest_date is None:
+                        continue
+
                     result_list.append({
                         'ts_code': ts_code,
                         'trade_date': latest_date,
@@ -529,9 +558,13 @@ class FactorEngine:
                 
                 if avg_assets and avg_assets > 0:
                     roa_ttm = ttm_profit / avg_assets
-                    
-                    latest_date = stock_income.iloc[0]['end_date']
-                    
+
+                    latest_date = self._point_in_time_stamp(
+                        stock_income.iloc[0], stock_balance.iloc[0]
+                    )
+                    if latest_date is None:
+                        continue
+
                     result_list.append({
                         'ts_code': ts_code,
                         'trade_date': latest_date,
@@ -563,9 +596,11 @@ class FactorEngine:
                 
                 if previous_ttm and previous_ttm > 0:
                     revenue_growth = (current_ttm - previous_ttm) / previous_ttm
-                    
-                    latest_date = stock_data.iloc[0]['end_date']
-                    
+
+                    latest_date = self._point_in_time_stamp(stock_data.iloc[0])
+                    if latest_date is None:
+                        continue
+
                     result_list.append({
                         'ts_code': ts_code,
                         'trade_date': latest_date,
@@ -596,9 +631,11 @@ class FactorEngine:
                 
                 if previous_ttm and previous_ttm > 0:
                     profit_growth = (current_ttm - previous_ttm) / previous_ttm
-                    
-                    latest_date = stock_data.iloc[0]['end_date']
-                    
+
+                    latest_date = self._point_in_time_stamp(stock_data.iloc[0])
+                    if latest_date is None:
+                        continue
+
                     result_list.append({
                         'ts_code': ts_code,
                         'trade_date': latest_date,
@@ -797,33 +834,34 @@ class FactorEngine:
             logger.error(f"计算所有因子失败: {e}")
             return pd.DataFrame()
     
-    def _calculate_factor_stats(self, df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
-        """计算因子的百分位排名和Z分数"""
+    def _calculate_factor_stats(self, df: pd.DataFrame, trade_date: str = None) -> pd.DataFrame:
+        """计算因子的百分位排名和Z分数（按因子+交易日的截面）。
+
+        横截面统计必须限定在单一 trade_date 内：跨日期池化会让历史某天的
+        z-score/rank 混入未来日期的分布（未来函数）。trade_date 参数保留以
+        兼容旧调用方，实际分组以数据自身的 trade_date 列为准。
+        """
         try:
-            result_list = []
-            
-            for factor_id in df['factor_id'].unique():
-                factor_data = df[df['factor_id'] == factor_id].copy()
-                
-                if len(factor_data) > 1:
-                    # 计算百分位排名
-                    factor_data['percentile_rank'] = factor_data['factor_value'].rank(pct=True) * 100
-                    
-                    # 计算Z分数
-                    mean_val = factor_data['factor_value'].mean()
-                    std_val = factor_data['factor_value'].std()
-                    if std_val > 0:
-                        factor_data['z_score'] = (factor_data['factor_value'] - mean_val) / std_val
-                    else:
-                        factor_data['z_score'] = 0
-                
-                result_list.append(factor_data)
-            
-            if result_list:
-                return pd.concat(result_list, ignore_index=True)
-            
-            return df
-            
+            if df.empty:
+                return df
+
+            result = df.copy()
+            # 列始终存在，避免不同批次的 schema 漂移
+            result['percentile_rank'] = np.nan
+            result['z_score'] = np.nan
+
+            group_cols = ['factor_id', 'trade_date']
+            result['percentile_rank'] = result.groupby(group_cols)['factor_value'].rank(pct=True) * 100
+            group_std = result.groupby(group_cols)['factor_value'].transform('std')
+            group_mean = result.groupby(group_cols)['factor_value'].transform('mean')
+            result['z_score'] = np.where(
+                group_std.fillna(0) > 0,
+                (result['factor_value'] - group_mean) / group_std.replace(0, np.nan),
+                0.0,
+            )
+
+            return result
+
         except Exception as e:
             logger.error(f"计算因子统计量失败: {e}")
             return df

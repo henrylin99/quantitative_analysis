@@ -33,11 +33,16 @@ class Config:
     SQLALCHEMY_DATABASE_URI = SQLITE_DATABASE_URI
     SQLALCHEMY_ENGINE_OPTIONS = _build_sqlalchemy_engine_options(SQLALCHEMY_DATABASE_URI)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+
     # Flask配置
     SECRET_KEY = os.getenv('SECRET_KEY', '')
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
-    
+
+    # 跨域与 SocketIO：生产环境应通过环境变量收紧 CORS_ORIGINS，
+    # SOCKETIO_ASYNC_MODE=eventlet 时必须在入口先 monkey_patch
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+    SOCKETIO_ASYNC_MODE = os.getenv('SOCKETIO_ASYNC_MODE', 'threading')
+
     # Redis配置
     REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
     REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
@@ -101,9 +106,27 @@ class ProductionConfig(Config):
     DEBUG = False
     DATA_JOB_EXECUTION_MODE = os.getenv('DATA_JOB_EXECUTION_MODE', 'celery')
 
+    @staticmethod
+    def validate(app_config):
+        """生产环境启动前强制校验，配置不完整时快速失败。"""
+        secret = (app_config.get('SECRET_KEY') or '').strip()
+        if not secret or secret in ('change-this-secret', 'dev', 'production'):
+            raise RuntimeError(
+                "生产环境必须设置真实的 SECRET_KEY（环境变量 SECRET_KEY），"
+                "当前为空或仍为示例值"
+            )
+
+
+class TestingConfig(Config):
+    """测试环境配置"""
+    TESTING = True
+    DEBUG = True
+
+
 # 配置字典
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
+    'testing': TestingConfig,
     'default': DevelopmentConfig
-} 
+}

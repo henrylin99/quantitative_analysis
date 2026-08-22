@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.utils.time_utils import now_local, now_local_iso
 from typing import Any, Dict, Optional
 
 from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
@@ -48,7 +49,7 @@ class DataJobService:
             if duplicate_run is not None:
                 raise ValueError(f"duplicate running job: {duplicate_run.id}")
 
-        snapshot_tag = datetime.utcnow().strftime("%Y-%m-%d")
+        snapshot_tag = now_local().strftime("%Y-%m-%d")
         try:
             run = self.state_store.create_run(
                 job_type,

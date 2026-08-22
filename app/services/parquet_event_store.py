@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from app.utils.time_utils import now_local, now_local_iso
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -286,7 +287,7 @@ class ParquetEventStore:
         }
 
     def cleanup_old_indicators(self, days_to_keep: int = 30) -> int:
-        cutoff = datetime.utcnow() - pd.Timedelta(days=days_to_keep)
+        cutoff = now_local() - pd.Timedelta(days=days_to_keep)
         frame = self._read_event_frame("indicators")
         if frame.empty or "datetime" not in frame.columns:
             return 0
@@ -336,7 +337,7 @@ class ParquetEventStore:
         limit: int = 20,
         status: Optional[str] = "ACTIVE",
     ) -> pd.DataFrame:
-        frame = self._filter_frame("signals", start_time=since, end_time=datetime.utcnow())
+        frame = self._filter_frame("signals", start_time=since, end_time=now_local())
         if frame.empty:
             return frame
         if status and "status" in frame.columns:
@@ -346,7 +347,7 @@ class ParquetEventStore:
         return frame.sort_values("datetime", ascending=False).head(limit).reset_index(drop=True)
 
     def get_signal_performance(self, strategy_name: Optional[str] = None, days: int = 30) -> Dict[str, Any]:
-        end_time = datetime.utcnow()
+        end_time = now_local()
         start_time = end_time - pd.Timedelta(days=days)
         frame = self.get_signals_by_time_range(start_time, end_time, strategy_name=strategy_name)
         if frame.empty:
@@ -447,7 +448,7 @@ class ParquetEventStore:
         mask = frame["id"] == signal_id
         if not mask.any():
             return False
-        now = datetime.utcnow()
+        now = now_local()
         frame.loc[mask, "status"] = status
         frame.loc[mask, "updated_at"] = now
         if executed_price is not None:
@@ -465,14 +466,14 @@ class ParquetEventStore:
         frame = self._read_event_frame("signals")
         if frame.empty or "datetime" not in frame.columns:
             return 0
-        cutoff = datetime.utcnow() - pd.Timedelta(hours=hours)
+        cutoff = now_local() - pd.Timedelta(hours=hours)
         mask = pd.to_datetime(frame["datetime"], errors="coerce") < cutoff
         if "status" in frame.columns:
             mask = mask & (frame["status"].fillna("") == "ACTIVE")
         expired_count = int(mask.sum())
         if expired_count:
             frame.loc[mask, "status"] = "EXPIRED"
-            frame.loc[mask, "updated_at"] = datetime.utcnow()
+            frame.loc[mask, "updated_at"] = now_local()
             self._rewrite_event_frame("signals", frame)
         return expired_count
 
