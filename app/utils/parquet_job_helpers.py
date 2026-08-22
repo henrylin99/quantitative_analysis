@@ -74,3 +74,31 @@ def resolve_trade_dates(default_latest_only: bool = True) -> Tuple[List[str], bo
 
     dates = [d for d in available if start_date <= d <= end_date]
     return dates, full_refresh
+
+
+def _default_data_root() -> str:
+    """与 parquet_writer.save_to_parquet 一致的数据根目录解析。"""
+    return os.getenv(
+        "DATA_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
+    )
+
+
+def latest_partition_date(rel_table: str, data_dir: Optional[str] = None) -> Optional[str]:
+    """扫描 Hive 分区目录，返回某数据集的最新分区日期（YYYYMMDD）。
+
+    rel_table 形如 "daily_history/daily" 或 "income_statement"。
+    """
+    from pathlib import Path
+    import re
+
+    root = Path(data_dir) if data_dir else Path(_default_data_root())
+    table_dir = root / rel_table
+    if not table_dir.exists():
+        return None
+    dates = []
+    for match in table_dir.rglob("day=*"):
+        found = re.search(r"year=(\d{4}).*month=(\d{2}).*day=(\d{2})", str(match))
+        if found:
+            dates.append("".join(found.groups()))
+    return max(dates) if dates else None
