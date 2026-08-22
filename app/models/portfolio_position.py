@@ -4,6 +4,7 @@
 """
 
 from app.extensions import db
+from app.utils.time_utils import now_local, now_local_iso
 from datetime import datetime
 from sqlalchemy import Index
 from app.services.persistence import persist_changes, persist_new
@@ -31,8 +32,8 @@ class PortfolioPosition(db.Model):
     stop_loss_price = db.Column(db.Float, comment='止损价格')
     take_profit_price = db.Column(db.Float, comment='止盈价格')
     is_active = db.Column(db.Boolean, default=True, comment='是否活跃')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     # 复合索引
     __table_args__ = (
@@ -72,7 +73,7 @@ class PortfolioPosition(db.Model):
         self.current_price = current_price
         self.market_value = self.position_size * current_price
         self.unrealized_pnl = (current_price - self.avg_cost) * self.position_size
-        self.updated_at = datetime.utcnow()
+        self.updated_at = now_local()
         persist_changes(self)
 
     def update_risk_limits(self, stop_loss_price=None, take_profit_price=None):
@@ -81,7 +82,7 @@ class PortfolioPosition(db.Model):
             self.stop_loss_price = stop_loss_price
         if take_profit_price is not None:
             self.take_profit_price = take_profit_price
-        self.updated_at = datetime.utcnow()
+        self.updated_at = now_local()
         persist_changes(self)
 
     @classmethod
@@ -158,7 +159,7 @@ class PortfolioPosition(db.Model):
             position.market_value = position.position_size * position.current_price
             position.unrealized_pnl = (position.current_price - position.avg_cost) * position.position_size
 
-        position.updated_at = datetime.utcnow()
+        position.updated_at = now_local()
         persist_changes(position)
         return position
 
@@ -168,7 +169,7 @@ class PortfolioPosition(db.Model):
         if not position:
             return False
         position.is_active = False
-        position.updated_at = datetime.utcnow()
+        position.updated_at = now_local()
         persist_changes(position)
         return True
 

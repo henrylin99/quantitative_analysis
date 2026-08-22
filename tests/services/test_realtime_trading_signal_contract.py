@@ -1,6 +1,6 @@
-from pathlib import Path
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -9,10 +9,23 @@ from app.services.parquet_event_store import ParquetEventStore
 
 
 def _write_minute_parquet(tmp_path: Path):
-    minute_dir = tmp_path / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
-    minute_dir.mkdir(parents=True)
+    """在动态的最近交易日写入分钟 bar。
+
+    信号引擎按 datetime.now() - lookback_days 过滤数据，固定历史
+    日期的 fixture 会随时间腐烂而失效，因此这里用"昨天"生成数据。
+    """
+    yesterday = datetime.now() - timedelta(days=1)
+    base_time = yesterday.replace(hour=9, minute=31, second=0, microsecond=0)
+    day_dir = (
+        tmp_path
+        / "stock_minute"
+        / "1min"
+        / f"year={base_time.year}"
+        / f"month={base_time.month:02d}"
+        / f"day={base_time.day:02d}"
+    )
+    day_dir.mkdir(parents=True)
     rows = []
-    base_time = datetime(2026, 6, 4, 9, 31)
     closes = [5.0] * 48 + [5.0, 8.0]
     for idx, close in enumerate(closes):
         dt = base_time + timedelta(minutes=idx)
@@ -29,11 +42,12 @@ def _write_minute_parquet(tmp_path: Path):
                 "amount": (1000 + idx * 20) * close,
             }
         )
-    pd.DataFrame(rows).to_parquet(minute_dir / "data.parquet", index=False)
+    pd.DataFrame(rows).to_parquet(day_dir / "data.parquet", index=False)
+    return base_time
 
 
 def test_trading_signal_engine_generates_ma_crossover_from_parquet(tmp_path, monkeypatch):
-    _write_minute_parquet(tmp_path)
+    base_time = _write_minute_parquet(tmp_path)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     engine = RealtimeTradingSignalEngine()
     engine.indicator_engine.default_params["MA"]["periods"] = [5, 10]
@@ -52,8 +66,8 @@ def test_trading_signal_engine_generates_ma_crossover_from_parquet(tmp_path, mon
     stored = ParquetEventStore().get_indicators_by_time_range(
         ts_code="000001.SZ",
         period_type="1min",
-        start_time=datetime(2026, 6, 4, 0, 0),
-        end_time=datetime(2026, 6, 5, 0, 0),
+        start_time=base_time.replace(hour=0, minute=0),
+        end_time=(base_time + timedelta(days=1)).replace(hour=0, minute=0),
     )
     assert "sub_name" in stored.columns
     assert {"MA5", "MA10"}.issubset(set(stored["sub_name"].dropna().astype(str).unique()))

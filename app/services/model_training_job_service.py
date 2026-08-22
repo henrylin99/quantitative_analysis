@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime
+from app.utils.time_utils import now_local, now_local_iso
 from threading import Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
@@ -39,7 +40,7 @@ class ModelTrainingJobService:
             "logs": logs,
             "result": None,
             "error": None,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": now_local_iso(),
             "started_at": None,
             "finished_at": None,
         }
@@ -61,7 +62,7 @@ class ModelTrainingJobService:
                 snapshot["progress"] = progress
                 snapshot["step"] = step
                 if snapshot["started_at"] is None:
-                    snapshot["started_at"] = datetime.utcnow().isoformat()
+                    snapshot["started_at"] = now_local_iso()
                 if log_message:
                     snapshot["logs"].append(log_message)
 
@@ -88,7 +89,7 @@ class ModelTrainingJobService:
                     snapshot["step"] = "训练失败"
                     snapshot["error"] = result.get("error", "训练失败")
                     snapshot["logs"].append(f"训练失败: {snapshot['error']}")
-                snapshot["finished_at"] = datetime.utcnow().isoformat()
+                snapshot["finished_at"] = now_local_iso()
         except Exception as exc:
             with self._lock:
                 snapshot = self.job_store[job_id]
@@ -97,4 +98,4 @@ class ModelTrainingJobService:
                 snapshot["step"] = "训练失败"
                 snapshot["error"] = str(exc)
                 snapshot["logs"].append(f"训练异常: {exc}")
-                snapshot["finished_at"] = datetime.utcnow().isoformat()
+                snapshot["finished_at"] = now_local_iso()

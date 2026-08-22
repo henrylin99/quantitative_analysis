@@ -22,10 +22,23 @@ class _BlockedRealtimeIndicator:
 
 
 def _write_minute_parquet(root: Path) -> None:
-    minute_dir = root / "stock_minute" / "1min" / "year=2026" / "month=06" / "day=04"
+    """在动态的最近交易日写入分钟 bar。
+
+    计算链路按 datetime.now() - lookback_days 过滤数据，固定历史
+    日期的 fixture 会随时间腐烂而失效，因此用"昨天"生成数据。
+    """
+    yesterday = datetime.now() - timedelta(days=1)
+    base_time = yesterday.replace(hour=9, minute=31, second=0, microsecond=0)
+    minute_dir = (
+        root
+        / "stock_minute"
+        / "1min"
+        / f"year={base_time.year}"
+        / f"month={base_time.month:02d}"
+        / f"day={base_time.day:02d}"
+    )
     minute_dir.mkdir(parents=True, exist_ok=True)
 
-    base_time = datetime(2026, 6, 4, 9, 31)
     rows = []
     for idx in range(60):
         dt = base_time + timedelta(minutes=idx)

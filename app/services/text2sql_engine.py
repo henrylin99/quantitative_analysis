@@ -6,6 +6,7 @@ Text2SQL核心引擎
 import logging
 import os
 import re
+import sqlite3
 import time
 import traceback
 from typing import Dict, List, Any, Optional, Set
@@ -15,7 +16,7 @@ from flask import request
 from sqlalchemy import text
 from app.extensions import db
 from app.services.nlp_processor import NLPProcessor
-from app.services.sql_generator import SQLGenerator
+from app.services.sql_generator import SQLGenerator, validate_readonly_sql
 from app.services.llm_service import get_llm_service
 from app.models.text2sql_metadata import QueryHistory
 
@@ -238,7 +239,7 @@ class Text2SQLEngine:
             return enhanced_sql
             
         except Exception as e:
-            print(f"大模型增强失败: {e}")
+            logger.warning(f"大模型增强失败: {e}")
             return None
 
 
@@ -304,28 +305,39 @@ class QueryExecutor:
     # ---- public ----
 
     def execute(self, sql: str) -> Dict[str, Any]:
-        """执行SQL查询"""
+        """执行SQL查询。
+
+        安全约束（chokepoint，规则生成/模板/LLM 增强的 SQL 都经过这里）:
+        - 只允许单条只读 SELECT（详见 validate_readonly_sql）
+        - 查询在独立的只读 SQLite 连接上执行，与应用主库
+          （query_history/query_templates 等应用数据）物理隔离，
+          即使校验被绕过也无法读写应用数据
+        """
         try:
             if not sql:
                 return {'success': False, 'error': 'SQL为空'}
 
-            # 确保 SQL 引用的数据表已从 Parquet 加载到 SQLite
+            readonly_ok, readonly_error = validate_readonly_sql(sql)
+            if not readonly_ok:
+                logger.warning(f"拒绝执行非只读SQL: {readonly_error}; sql={sql[:200]}")
+                return {'success': False, 'error': f'仅允许只读SELECT查询: {readonly_error}'}
+
+            # 确保 SQL 引用的数据表已从 Parquet 加载到查询库
             self._ensure_data_tables(sql)
 
-            # 执行查询
-            result = db.session.execute(text(sql))
+            conn = self._open_readonly_connection()
+            try:
+                cursor = conn.execute(sql)
+                columns = [desc[0] for desc in (cursor.description or [])]
+                rows = cursor.fetchmany(self.max_result_count + 1)
+            finally:
+                conn.close()
 
-            # 获取列名
-            columns = list(result.keys())
-
-            # 获取数据
-            rows = result.fetchall()
-
-            # 检查结果数量限制
+            # 检查结果数量限制（fetchmany 多取一条用于判断超限）
             if len(rows) > self.max_result_count:
                 return {
                     'success': False,
-                    'error': f'查询结果过多({len(rows)}条)，请添加更多筛选条件'
+                    'error': f'查询结果过多(超过{self.max_result_count}条)，请添加更多筛选条件'
                 }
 
             # 转换为字典列表
@@ -350,17 +362,14 @@ class QueryExecutor:
                 'row_count': len(data)
             }
 
-        except Exception as e:
+        except sqlite3.OperationalError as e:
             error_msg = str(e)
-
-            # 处理常见的数据库错误
             if 'no such table' in error_msg.lower():
                 error_msg = '数据表不存在，请检查数据库配置'
             elif 'no such column' in error_msg.lower():
                 error_msg = '字段不存在，请检查查询条件'
-            elif 'syntax error' in error_msg.lower():
-                error_msg = 'SQL语法错误'
-
+            elif 'readonly' in error_msg.lower():
+                error_msg = '仅允许只读SELECT查询'
             return {
                 'success': False,
                 'error': error_msg,
@@ -368,6 +377,32 @@ class QueryExecutor:
                 'columns': [],
                 'row_count': 0
             }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'data': [],
+                'columns': [],
+                'row_count': 0
+            }
+
+    # ---- private: 查询库连接 ----
+
+    def _query_db_path(self) -> str:
+        """text2sql 查询库路径：与应用主库隔离的独立 SQLite 文件。"""
+        from flask import current_app
+        data_dir = current_app.config.get('DATA_DIR', 'data')
+        if not os.path.isabs(data_dir):
+            data_dir = os.path.join(current_app.root_path, '..', data_dir)
+        return os.path.join(data_dir, 'text2sql_query.db')
+
+    def _open_readonly_connection(self) -> sqlite3.Connection:
+        """以只读模式打开查询库（URI mode=ro，写操作会被 SQLite 本身拒绝）。"""
+        path = self._query_db_path()
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+            sqlite3.connect(path).close()  # 确保文件存在
+        return sqlite3.connect(f'file:{path}?mode=ro', uri=True)
 
     # ---- private: Parquet → SQLite 桥接 ----
 
@@ -472,13 +507,12 @@ class QueryExecutor:
             # NaN → None（SQLite 不支持 NaN）
             df = df.where(pd.notnull(df), None)
 
-            # 写入 SQLite（通过 raw_connection 使用底层 sqlite3 连接，
-            # 兼容 SQLAlchemy 2.0 + Pandas 3.x）
-            raw_conn = db.engine.raw_connection()
+            # 写入隔离的查询库（不是应用主库），生成的 SQL 只能触达行情数据
+            conn = sqlite3.connect(self._query_db_path())
             try:
-                df.to_sql(table_name, raw_conn, if_exists='replace', index=False)
+                df.to_sql(table_name, conn, if_exists='replace', index=False)
             finally:
-                raw_conn.close()
+                conn.close()
 
             self._loaded_tables.add(table_name)
             # 按 (虚拟表名, 文件路径) 记录 mtime，同一文件的不同虚拟表独立追踪
@@ -487,7 +521,6 @@ class QueryExecutor:
 
         except Exception as e:
             logger.error(f"Failed to load '{table_name}' from Parquet: {e}")
-            db.session.rollback()
 
 
 class ResultFormatter:

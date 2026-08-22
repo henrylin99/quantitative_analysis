@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split, cross_val_score, TimeSerie
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score, precision_score, recall_score
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
+from sklearn.pipeline import Pipeline
 import xgboost as xgb
 import lightgbm as lgb
 
@@ -320,10 +321,14 @@ class MLModelManager:
             
             # 删除包含缺失值的行
             merged_df = merged_df.dropna()
-            
+
             if merged_df.empty:
                 raise ValueError("合并后数据为空")
-            
+
+            # 按时间排序，保证后续 shuffle=False 的切分是时间上的前后切分，
+            # 而不是按 ts_code 字典序切分（透视表默认按 ts_code 排序）
+            merged_df = merged_df.sort_values(['trade_date', 'ts_code']).reset_index(drop=True)
+
             # 分离特征和目标变量
             feature_columns = model_def["factor_list"]
             X = merged_df[feature_columns]
@@ -419,16 +424,31 @@ class MLModelManager:
             if X.empty or y.empty:
                 raise ValueError("训练数据为空")
             
-            # 特征工程
-            report(35.0, "特征工程", "正在执行特征工程...")
-            X_processed, feature_names = self._feature_engineering(X, y, model_def["training_config"])
-            
-            # 分割训练集和测试集
+            # 分割训练集和测试集（先切分，再做特征工程，避免拟合统计量泄漏到测试集）
             report(50.0, "拆分训练集", "正在拆分训练集和测试集...")
             test_size = model_def["training_config"].get('test_size', 0.2)
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_processed, y, test_size=test_size, random_state=42, shuffle=False
+            X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, shuffle=False
             )
+
+            # 特征工程：scaler/特征选择只在训练集上 fit
+            report(35.0, "特征工程", "正在执行特征工程...")
+            preprocessor = self._build_preprocessor(model_def["training_config"], X_train_raw.shape[1])
+            if preprocessor is not None:
+                X_train = pd.DataFrame(
+                    preprocessor.fit_transform(X_train_raw, y_train),
+                    index=X_train_raw.index
+                )
+                X_test = pd.DataFrame(
+                    preprocessor.transform(X_test_raw),
+                    index=X_test_raw.index
+                )
+                selector = preprocessor.named_steps.get('selector')
+                feature_mask = selector.get_support() if selector is not None else np.ones(X.shape[1], dtype=bool)
+                feature_names = X.columns[feature_mask].tolist()
+            else:
+                X_train, X_test = X_train_raw, X_test_raw
+                feature_names = X.columns.tolist()
             
             # 创建模型
             report(65.0, "创建模型", f"正在创建模型: {model_def['model_type']}")
@@ -455,7 +475,7 @@ class MLModelManager:
                 'train_mae': mean_absolute_error(y_train, y_pred_train),
                 'test_mae': mean_absolute_error(y_test, y_pred_test),
                 'feature_count': len(feature_names),
-                'sample_count': len(X_processed)
+                'sample_count': len(X)
             }
             
             # 特征重要性
@@ -463,27 +483,37 @@ class MLModelManager:
                 feature_importance = dict(zip(feature_names, model.feature_importances_))
                 metrics['feature_importance'] = feature_importance
             
-            # 交叉验证
+            # 交叉验证：把预处理放进 Pipeline，cross_val_score 会在每折内
+            # 重新 fit scaler/selector，避免用全量数据拟合造成的泄漏
             if model_def["training_config"].get('validation_method') == 'time_series_split':
                 cv_folds = model_def["training_config"].get('cv_folds', 5)
                 tscv = TimeSeriesSplit(n_splits=cv_folds)
-                cv_scores = cross_val_score(model, X_processed, y, cv=tscv, scoring='r2')
+                cv_model = self._create_model(model_def["model_type"], model_def["model_params"])
+                cv_preprocessor = self._build_preprocessor(model_def["training_config"], X.shape[1])
+                if cv_preprocessor is not None:
+                    cv_estimator = Pipeline([
+                        ('preprocessor', cv_preprocessor),
+                        ('model', cv_model),
+                    ])
+                else:
+                    cv_estimator = cv_model
+                cv_scores = cross_val_score(cv_estimator, X, y, cv=tscv, scoring='r2')
                 metrics['cv_mean'] = cv_scores.mean()
                 metrics['cv_std'] = cv_scores.std()
-            
+
             # 保存模型
             report(95.0, "保存模型", "正在保存模型和元数据...")
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
-            
+
             joblib.dump(model, model_path)
-            if hasattr(self, '_scaler') and self._scaler is not None:
-                joblib.dump(self._scaler, scaler_path)
-            
+            # 保存的是本次训练 fit 出的预处理器，而不是复用上一次训练残留在实例上的状态
+            if preprocessor is not None:
+                joblib.dump(preprocessor, scaler_path)
+                self.scalers[model_id] = preprocessor
+
             # 缓存模型
             self.models[model_id] = model
-            if hasattr(self, '_scaler'):
-                self.scalers[model_id] = self._scaler
             
             logger.info(f"模型训练完成: {model_id}, 测试R²: {test_score:.4f}")
             report(100.0, "训练完成", "训练任务已完成")
@@ -500,46 +530,25 @@ class MLModelManager:
                 'error': str(e)
             }
     
-    def _feature_engineering(self, X: pd.DataFrame, y: pd.Series, config: dict) -> Tuple[pd.DataFrame, List[str]]:
-        """特征工程"""
-        try:
-            X_processed = X.copy()
-            
-            # 特征缩放
-            scaling_method = config.get('scaling_method', 'robust')
-            if scaling_method == 'standard':
-                self._scaler = StandardScaler()
-            elif scaling_method == 'robust':
-                self._scaler = RobustScaler()
-            else:
-                self._scaler = None
-            
-            if self._scaler is not None:
-                X_processed = pd.DataFrame(
-                    self._scaler.fit_transform(X_processed),
-                    columns=X_processed.columns,
-                    index=X_processed.index
-                )
-            
-            # 特征选择
-            if config.get('feature_selection', False):
-                k = config.get('feature_selection_k', 20)
-                k = min(k, X_processed.shape[1])  # 确保k不超过特征数量
-                
-                selector = SelectKBest(score_func=f_regression, k=k)
-                X_selected = selector.fit_transform(X_processed, y)
-                
-                selected_features = X_processed.columns[selector.get_support()].tolist()
-                X_processed = pd.DataFrame(X_selected, columns=selected_features, index=X_processed.index)
-            
-            feature_names = X_processed.columns.tolist()
-            
-            logger.info(f"特征工程完成: {len(feature_names)} 特征")
-            return X_processed, feature_names
-            
-        except Exception as e:
-            logger.error(f"特征工程失败: {e}")
-            return X, X.columns.tolist()
+    def _build_preprocessor(self, config: dict, n_features: int) -> Optional[Pipeline]:
+        """构建特征预处理 Pipeline（scaler + 特征选择）。
+
+        返回的 Pipeline 未 fit，由调用方在训练数据上 fit；
+        不再在 self 上保存任何拟合状态，避免并发训练互相污染。
+        """
+        steps = []
+
+        scaling_method = config.get('scaling_method', 'robust')
+        if scaling_method == 'standard':
+            steps.append(('scaler', StandardScaler()))
+        elif scaling_method == 'robust':
+            steps.append(('scaler', RobustScaler()))
+
+        if config.get('feature_selection', False):
+            k = min(config.get('feature_selection_k', 20), n_features)
+            steps.append(('selector', SelectKBest(score_func=f_regression, k=k)))
+
+        return Pipeline(steps) if steps else None
     
     def _create_model(self, model_type: str, model_params: dict):
         """创建模型实例"""
@@ -609,21 +618,23 @@ class MLModelManager:
                 ts_codes=ts_codes,
             )
             
-            # 如果指定日期没有数据，使用最新可用数据
+            # 如果指定日期没有数据，使用最新可用数据，并在结果中如实标注实际使用的日期
+            effective_date = trade_date
             if factor_data.empty:
                 logger.warning(f"指定日期 {trade_date} 没有因子数据，使用最新可用数据")
                 factor_data = self.factor_repo.get_values(
                     factor_ids=model_def["factor_list"],
                     ts_codes=ts_codes,
                 )
-                
+
                 if factor_data.empty:
                     logger.warning(f"未找到任何因子数据")
                     return pd.DataFrame()
-                
+
                 # 使用最新日期的数据
                 latest_date = factor_data['trade_date'].max()
                 factor_data = factor_data[factor_data['trade_date'] == latest_date]
+                effective_date = str(latest_date)
                 logger.info(f"使用最新日期 {latest_date} 的因子数据进行预测")
             
             # 透视表
@@ -634,13 +645,15 @@ class MLModelManager:
                 aggfunc='first'
             )
             
-            # 确保所有需要的因子都存在
+            # 确保所有需要的因子都存在：缺因子说明当日数据不满足模型输入，
+            # 填 0 会让股票拿到"中位数"特征参与排名，产出误导性信号，宁可不预测
             missing_factors = set(model_def["factor_list"]) - set(feature_df.columns)
             if missing_factors:
-                logger.warning(f"缺少因子: {missing_factors}")
-                # 用0填充缺失的因子
-                for factor in missing_factors:
-                    feature_df[factor] = 0
+                logger.error(
+                    f"预测中止: 因子数据缺少 {sorted(missing_factors)}，"
+                    f"模型 {model_id} 需要 {model_def['factor_list']}"
+                )
+                return pd.DataFrame()
             
             # 按照训练时的顺序排列特征
             feature_df = feature_df[model_def["factor_list"]]
@@ -670,14 +683,15 @@ class MLModelManager:
             # 构建结果DataFrame
             result_df = pd.DataFrame({
                 'ts_code': feature_df.index,
-                'trade_date': trade_date,
+                'trade_date': effective_date,
                 'model_id': model_id,
                 'predicted_return': predictions
             })
             
-            # 计算概率分数（归一化预测值）
-            if len(predictions) > 1:
-                result_df['probability_score'] = (predictions - predictions.min()) / (predictions.max() - predictions.min())
+            # 计算概率分数（归一化预测值），预测值全相等时范围为 0，避免除零产生 NaN
+            pred_range = predictions.max() - predictions.min()
+            if len(predictions) > 1 and pred_range > 0:
+                result_df['probability_score'] = (predictions - predictions.min()) / pred_range
             else:
                 result_df['probability_score'] = 0.5
             

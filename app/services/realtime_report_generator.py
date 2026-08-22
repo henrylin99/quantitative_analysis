@@ -5,6 +5,7 @@
 
 import logging
 from datetime import datetime, timedelta
+from app.utils.time_utils import now_local, now_local_iso
 from typing import Dict, List, Optional, Any
 import pandas as pd
 import numpy as np
@@ -82,7 +83,7 @@ class RealtimeReportGenerator:
             生成结果
         """
         try:
-            start_time = datetime.utcnow()
+            start_time = now_local()
             
             # 验证报告类型
             if report_type not in self.report_types:
@@ -113,7 +114,7 @@ class RealtimeReportGenerator:
             report_content = self._generate_report_content(report_type, template, report_data)
 
             # 更新报告
-            generation_time = (datetime.utcnow() - start_time).total_seconds()
+            generation_time = (now_local() - start_time).total_seconds()
             report.update_generation_result(
                 report_content=report_content,
                 report_data=report_data,
@@ -177,7 +178,7 @@ class RealtimeReportGenerator:
     def _collect_report_data(self, report_type: str, parameters: Dict) -> Dict[str, Any]:
         """收集报告数据"""
         data = {
-            'generated_at': datetime.utcnow().isoformat(),
+            'generated_at': now_local_iso(),
             'report_type': report_type,
             'parameters': parameters
         }
@@ -268,7 +269,7 @@ class RealtimeReportGenerator:
             'metrics': metrics,
             'holdings': holdings_data,
             'position_count': len(positions),
-            'analysis_date': datetime.utcnow().isoformat()
+            'analysis_date': now_local_iso()
         }
     
     def _collect_risk_data(self, portfolio_id: str) -> Dict[str, Any]:
@@ -319,15 +320,15 @@ class RealtimeReportGenerator:
             },
             'sector_exposure': sector_exposure,
             'risk_alerts': alert_list,
-            'analysis_date': datetime.utcnow().isoformat()
+            'analysis_date': now_local_iso()
         }
     
     def _collect_signal_data(self) -> Dict[str, Any]:
         """收集交易信号数据"""
         # 获取最近的交易信号
         recent_signals = self._load_recent_signals(
-            start_time=datetime.utcnow() - timedelta(days=7),
-            end_time=datetime.utcnow(),
+            start_time=now_local() - timedelta(days=7),
+            end_time=now_local(),
             period_type='5min',
             limit=100,
         )
@@ -369,7 +370,7 @@ class RealtimeReportGenerator:
                 'period_type': '5min'
             },
             'recent_signals': [signal.to_dict() for signal in recent_signals[:20]],  # 最近20个信号
-            'analysis_date': datetime.utcnow().isoformat()
+            'analysis_date': now_local_iso()
         }
 
     def _count_indicators_in_range(self, start_time: datetime, end_time: datetime, period_type: Optional[str] = None) -> int:
@@ -469,7 +470,7 @@ class RealtimeReportGenerator:
         """生成报告内容"""
         content = {
             'title': f"{self.report_types[report_type]} - {datetime.now().strftime('%Y年%m月%d日')}",
-            'generated_at': datetime.utcnow().isoformat(),
+            'generated_at': now_local_iso(),
             'report_type': report_type,
             'sections': []
         }
@@ -977,7 +978,7 @@ class RealtimeReportGenerator:
                 'success': True,
                 'data': {
                     'portfolio_id': portfolio_id,
-                    'test_date': datetime.utcnow().isoformat(),
+                    'test_date': now_local_iso(),
                     'original_value': original_value,
                     'scenarios': stress_results,
                     'worst_case': min(stress_results, key=lambda x: x['pnl_percentage']),

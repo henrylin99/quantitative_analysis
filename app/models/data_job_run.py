@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.extensions import db
+from app.utils.time_utils import now_local
 
 
 class DataJobRun(db.Model):
@@ -20,12 +21,12 @@ class DataJobRun(db.Model):
     result_json = db.Column(db.JSON)
     error_message = db.Column(db.Text)
     log_text = db.Column(db.Text)
-    queued_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    queued_at = db.Column(db.DateTime, nullable=False, default=now_local)
     started_at = db.Column(db.DateTime)
     finished_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_local)
     updated_at = db.Column(
-        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        db.DateTime, nullable=False, default=now_local, onupdate=datetime.utcnow
     )
 
     def to_dict(self):

@@ -48,6 +48,8 @@ htmlcov/
 
 # Docs & images
 images/
-*.html
 *.md
 !README.md
+# 只排除仓库根目录的静态 HTML（介绍页），保留 app/templates/ 下的 Jinja 模板
+/project_introduction.html
+/*.html

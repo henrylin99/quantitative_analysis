@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""应用启动入口。
+
+SOCKETIO_ASYNC_MODE=eventlet 时必须先 monkey_patch 再导入应用模块
+（阻塞调用依赖补丁协作），因此这段逻辑放在所有 app 导入之前。
+"""
 
 import os
+
+if os.getenv('SOCKETIO_ASYNC_MODE', 'threading') == 'eventlet':
+    import eventlet
+
+    eventlet.monkey_patch()
+
 from app import create_app
 from app.extensions import socketio
 from startup_runtime import build_health_report, build_health_summary_lines, build_startup_report, inspect_parquet_data_assets
 
-# 创建Flask应用实例
+# 创建Flask应用实例（FLASK_ENV 可选值见 config.py: development/production/testing）
 app = create_app(os.getenv('FLASK_ENV', 'default'))
 
 
@@ -36,12 +47,15 @@ if __name__ == '__main__':
         tag = "⚠️" if need_update else "✅"
         print(f"  {tag} 大宽表: {reason}")
 
-    # 开发环境下运行，使用SocketIO
+    is_debug = bool(app.config.get('DEBUG'))
+    if is_debug:
+        print("⚠️  以 DEBUG 模式运行开发服务器，请勿用于生产环境")
+
     socketio.run(
         app,
         host='0.0.0.0',
-        port=5000,
-        debug=False,
+        port=int(os.getenv('PORT', 5000)),
+        debug=is_debug,
         use_reloader=False,
         allow_unsafe_werkzeug=True
     )

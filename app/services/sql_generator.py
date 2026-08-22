@@ -4,9 +4,54 @@ SQL生成引擎
 """
 
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from app.models.text2sql_metadata import QueryTemplate
 from app.extensions import db
+
+# 只读校验中禁止出现的写操作/连接管理关键字（REPLACE 函数是合法的字符串函数，
+# 只单独禁止 REPLACE INTO 写入语法）
+_READONLY_FORBIDDEN_KEYWORDS = (
+    'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'ATTACH', 'DETACH',
+    'PRAGMA', 'VACUUM', 'REINDEX', 'ANALYZE', 'GRANT', 'REVOKE', 'TRUNCATE',
+    'BEGIN', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'RELEASE',
+)
+
+
+def validate_readonly_sql(sql: str) -> Tuple[bool, Optional[str]]:
+    """只读 SELECT 校验：生成 SQL（规则/模板/LLM）执行前的统一 chokepoint。
+
+    规则:
+    - 去掉注释后必须仍是单条语句
+    - 首个关键字必须是 SELECT 或 WITH（CTE）
+    - 全文不得出现任何写操作关键字（含 WITH ... INSERT 这类变体）
+
+    该校验与"只读数据库连接"配合使用，共同构成防线；单靠关键字黑名单
+    并不充分，因此执行器还应以只读模式连接隔离的查询库。
+    """
+    if not sql or not sql.strip():
+        return False, 'SQL为空'
+
+    # 去掉行注释与块注释，防止用注释藏关键字或拼接第二条语句
+    cleaned = re.sub(r'--[^\n]*', ' ', sql)
+    cleaned = re.sub(r'/\*.*?\*/', ' ', cleaned, flags=re.S)
+    cleaned = cleaned.strip().rstrip(';').strip()
+
+    if not cleaned:
+        return False, 'SQL为空'
+    if ';' in cleaned:
+        return False, '不允许执行多条语句'
+
+    first_keyword = re.match(r'[A-Za-z]+', cleaned)
+    if not first_keyword or first_keyword.group(0).upper() not in ('SELECT', 'WITH'):
+        return False, '仅允许 SELECT 查询'
+
+    for keyword in _READONLY_FORBIDDEN_KEYWORDS:
+        if re.search(rf'\b{keyword}\b', cleaned, re.IGNORECASE):
+            return False, f'检测到禁止的SQL关键字: {keyword}'
+    if re.search(r'\bREPLACE\s+INTO\b', cleaned, re.IGNORECASE):
+        return False, '检测到禁止的SQL关键字: REPLACE INTO'
+
+    return True, None
 
 
 class SQLGenerator:
@@ -93,25 +138,19 @@ class SQLGenerator:
         """验证SQL语法"""
         if not sql:
             return {'valid': False, 'error': 'SQL为空'}
-        
+
+        readonly_ok, readonly_error = validate_readonly_sql(sql)
+        if not readonly_ok:
+            return {'valid': False, 'error': readonly_error}
+
         # 基本的SQL关键字检查
         required_keywords = ['SELECT', 'FROM']
         sql_upper = sql.upper()
-        
+
         for keyword in required_keywords:
             if keyword not in sql_upper:
                 return {'valid': False, 'error': f'缺少必要的SQL关键字: {keyword}'}
-        
-        # 检查是否有潜在的SQL注入
-        dangerous_patterns = [
-            r';\s*DROP\s+', r';\s*DELETE\s+', r';\s*UPDATE\s+',
-            r';\s*INSERT\s+', r';\s*ALTER\s+', r';\s*CREATE\s+'
-        ]
-        
-        for pattern in dangerous_patterns:
-            if re.search(pattern, sql_upper):
-                return {'valid': False, 'error': '检测到潜在的危险SQL操作'}
-        
+
         return {'valid': True}
     
     def _generate_explanation(self, intent: str, entities: Dict[str, Any]) -> str:

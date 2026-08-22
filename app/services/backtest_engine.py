@@ -4,8 +4,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import json
 from loguru import logger
-import warnings
-warnings.filterwarnings('ignore')
 
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
@@ -80,76 +78,88 @@ class BacktestEngine:
             
             # 生成交易日期
             trade_dates = self._generate_trade_dates(start_date, end_date, rebalance_frequency)
-            
+            # 完整交易日历，用于把信号日的调仓推迟到下一个交易日执行
+            calendar_dates = self.data_reader.get_trade_dates(start_date, end_date)
+
             # 初始化回测状态
             portfolio_values = []
             positions = {}
             cash = initial_capital
             total_value = initial_capital
             last_prices = {}
-            
+
             # 记录每日数据
             daily_returns = []
             daily_positions = []
             daily_turnover = []
-            
+
             for i, trade_date in enumerate(trade_dates):
                 logger.info(f"处理交易日: {trade_date}")
-                
+
                 try:
-                    # 获取当日选股结果
+                    # 获取当日选股结果（信号在 t 日收盘后产生）
                     selected_stocks = self._get_stock_selection(strategy_config, trade_date)
-                    
+
                     if not selected_stocks:
                         logger.warning(f"日期 {trade_date} 没有选出股票")
                         continue
-                    
+
                     # 组合优化
                     target_weights = self._get_target_weights(
                         selected_stocks, strategy_config.get('optimization', {})
                     )
-                    
-                    # 获取当前持仓 + 目标持仓的价格（首次建仓时 positions 为空）
+
+                    # t+1 执行：信号日收盘后才能观察到的信息，只能在下一个交易日成交
+                    exec_date = self._next_trade_date(calendar_dates, trade_date)
+                    if exec_date is None:
+                        logger.info(f"信号日 {trade_date} 之后没有可执行的交易日，跳过")
+                        continue
+
                     all_codes = list(set(list(positions.keys()) + list(target_weights.keys())))
-                    current_prices = self._get_current_prices(trade_date, all_codes)
-                    if current_prices:
-                        last_prices = current_prices.copy()
+                    exec_prices, tradability = self._get_execution_snapshot(exec_date, all_codes)
+
+                    # 估值价格：当日无行情的持仓（停牌）沿用最近已知价格，而不是按 0 计
+                    valuation_prices = dict(last_prices)
+                    valuation_prices.update(exec_prices)
+                    last_prices = valuation_prices
                     current_portfolio_value = self._calculate_portfolio_value(
-                        positions, current_prices, cash
+                        positions, valuation_prices, cash
                     )
-                    
-                    # 执行再平衡
+
+                    # 执行再平衡（停牌/涨跌停限制在内部处理）
                     new_positions, new_cash, turnover, _cost_breakdown = self._rebalance_portfolio(
-                        positions, cash, target_weights, current_prices, 
+                        positions, cash, target_weights, exec_prices, tradability,
                         current_portfolio_value,
                         commission_rate=float(strategy_config.get('commission_rate', 0.001)),
                         slippage_rate=float(strategy_config.get('slippage_rate', 0.0)),
                     )
-                    
-                    # 更新状态
+
+                    # 更新状态：交易成本从组合价值中扣除
                     positions = new_positions
                     cash = new_cash
-                    total_value = current_portfolio_value
-                    
-                    # 记录数据
+                    total_value = current_portfolio_value - _cost_breakdown['total_cost']
+
+                    # 记录数据（净值曲线以实际成交日计）
                     portfolio_values.append({
-                        'date': trade_date,
+                        'date': exec_date,
                         'total_value': total_value,
                         'cash': cash,
                         'positions_value': total_value - cash
                     })
-                    
+
                     daily_positions.append(positions.copy())
                     daily_turnover.append(turnover)
-                    
-                    # 计算日收益率
-                    if i > 0:
-                        daily_return = (total_value - portfolio_values[i-1]['total_value']) / portfolio_values[i-1]['total_value']
-                        daily_returns.append(daily_return)
-                    
+
                 except Exception as e:
                     logger.error(f"处理交易日 {trade_date} 时出错: {e}")
                     continue
+
+            # 逐期收益率：基于实际记录的净值序列计算，避免跳过的日期错位
+            for prev, cur in zip(portfolio_values[:-1], portfolio_values[1:]):
+                if prev['total_value']:
+                    daily_returns.append(
+                        (cur['total_value'] - prev['total_value']) / prev['total_value']
+                    )
 
             # 获取基准收益
             benchmark_returns = self._get_benchmark_returns(
@@ -162,6 +172,7 @@ class BacktestEngine:
             performance_metrics = self._calculate_performance_metrics(
                 portfolio_values, daily_returns, start_date, end_date,
                 benchmark_returns=benchmark_returns,
+                initial_capital=initial_capital,
             )
             execution_assumptions = self._build_execution_assumptions(strategy_config)
             trade_constraints = self._build_trade_constraints(strategy_config)
@@ -305,23 +316,104 @@ class BacktestEngine:
             weight = 1.0 / len(selected_stocks)
             return {stock['ts_code']: weight for stock in selected_stocks}
     
-    def _get_current_prices(self, trade_date: str, ts_codes: List[str]) -> Dict[str, float]:
-        """获取当前价格"""
+    def _next_trade_date(self, calendar_dates: List[str], signal_date: str) -> Optional[str]:
+        """返回严格晚于 signal_date 的第一个交易日"""
+        for date in calendar_dates:
+            if date > signal_date:
+                return date
+        return None
+
+    def _get_stock_names(self, ts_codes: List[str]) -> Dict[str, str]:
+        """获取股票名称（用于识别 ST 的 5% 涨跌停幅度）"""
         try:
             if not ts_codes:
                 return {}
+            df = self.data_reader.get_stock_basic()
+            df = df[df["ts_code"].isin(set(ts_codes))]
+            return {row["ts_code"]: str(row.get("name") or "") for _, row in df.iterrows()}
+        except Exception as e:
+            logger.warning(f"获取股票名称失败（ST 判定退化为板块规则）: {e}")
+            return {}
+
+    def _limit_pct(self, ts_code: str, stock_names: Dict[str, str]) -> float:
+        """返回该股票的涨跌停幅度（小数）。
+
+        北交所 30%，创业板/科创板 20%，ST 5%，主板默认 10%。
+        """
+        prefix = ts_code.split('.')[0]
+        if prefix.startswith(('300', '301', '688', '689')):
+            return 0.20
+        if prefix.startswith(('8', '4', '92')):
+            return 0.30
+        name = stock_names.get(ts_code, '')
+        if 'ST' in name.upper():
+            return 0.05
+        return 0.10
+
+    def _get_execution_snapshot(self, exec_date: str,
+                                ts_codes: List[str]) -> Tuple[Dict[str, float], Dict[str, Dict[str, bool]]]:
+        """获取执行日的价格与可交易性。
+
+        返回:
+            prices: {ts_code: close}
+            tradability: {ts_code: {'can_buy': bool, 'can_sell': bool}}
+                当日无行情 → 停牌，买不了也卖不掉
+                涨停 → 不能买入；跌停 → 不能卖出
+        """
+        prices: Dict[str, float] = {}
+        tradability: Dict[str, Dict[str, bool]] = {}
+        try:
+            if not ts_codes:
+                return prices, tradability
 
             df = self.data_reader.get_daily(
-                ts_codes=ts_codes, start_date=trade_date, end_date=trade_date
+                ts_codes=ts_codes, start_date=exec_date, end_date=exec_date
             )
             if df.empty:
-                return {}
+                return prices, tradability
 
-            return {row["ts_code"]: float(row["close"]) for _, row in df.iterrows()}
-            
+            # 名称信息用于 ST 判定，尽量批量取一次
+            names: Dict[str, str] = {}
+            try:
+                basic = self.data_reader.get_stock_basic()
+                basic = basic[basic["ts_code"].isin(set(ts_codes))]
+                names = {row["ts_code"]: str(row.get("name") or "") for _, row in basic.iterrows()}
+            except Exception as e:
+                logger.warning(f"获取股票名称失败（ST 判定退化为板块规则）: {e}")
+
+            for _, row in df.iterrows():
+                ts_code = row["ts_code"]
+                close = float(row["close"])
+                if close <= 0:
+                    continue
+                prices[ts_code] = close
+
+                pct_chg = row.get("pct_chg")
+                pre_close = row.get("pre_close")
+                try:
+                    if pct_chg is not None and not pd.isna(pct_chg):
+                        chg = float(pct_chg) / 100.0
+                    elif pre_close is not None and not pd.isna(pre_close) and float(pre_close) > 0:
+                        chg = close / float(pre_close) - 1.0
+                    else:
+                        chg = None
+                except (TypeError, ValueError):
+                    chg = None
+
+                limit = self._limit_pct(ts_code, names)
+                # 留 0.2% 的舍入容差，避免 9.99% 这类未涨停被误判
+                limit_up = chg is not None and chg >= limit - 0.002
+                limit_down = chg is not None and chg <= -(limit - 0.002)
+                tradability[ts_code] = {
+                    'can_buy': not limit_up,
+                    'can_sell': not limit_down,
+                }
+
+            return prices, tradability
+
         except Exception as e:
-            logger.error(f"获取当前价格失败: {e}")
-            return {}
+            logger.error(f"获取执行日行情失败: {exec_date}, 错误: {e}")
+            return prices, tradability
     
     def _calculate_portfolio_value(self, positions: Dict[str, int], 
                                  prices: Dict[str, float], cash: float) -> float:
@@ -346,52 +438,70 @@ class BacktestEngine:
             'total_cost': commission + slippage,
         }
 
-    def _rebalance_portfolio(self, current_positions: Dict[str, int], 
+    def _rebalance_portfolio(self, current_positions: Dict[str, int],
                            current_cash: float, target_weights: Dict[str, float],
-                           prices: Dict[str, float], total_value: float,
+                           prices: Dict[str, float], tradability: Dict[str, Dict[str, bool]],
+                           total_value: float,
                            commission_rate: float, slippage_rate: float) -> Tuple[Dict[str, int], float, float, Dict[str, float]]:
-        """执行组合再平衡"""
+        """执行组合再平衡。
+
+        交易约束:
+        - 当日无行情（停牌）或涨停的股票不能买入
+        - 当日无行情或跌停的股票不能卖出，原有持仓继续保留在账上
+        """
         try:
             new_positions = {}
-            turnover = 0.0
-            
+
             # 计算目标持仓
             for ts_code, weight in target_weights.items():
-                if ts_code in prices and prices[ts_code] > 0:
-                    target_value = total_value * weight
-                    target_shares = int(target_value / prices[ts_code] / 100) * 100  # 按手数调整
-                    new_positions[ts_code] = target_shares
-            
+                price = prices.get(ts_code)
+                trade_flags = tradability.get(ts_code, {})
+                if price is None or price <= 0:
+                    continue  # 停牌，无法买入
+                if not trade_flags.get('can_buy', True):
+                    continue  # 涨停，无法买入
+                target_value = total_value * weight
+                target_shares = int(target_value / price / 100) * 100  # 按手数调整
+                new_positions[ts_code] = target_shares
+
+            # 无法卖出的旧持仓保留（停牌/跌停），不能从账上凭空消失
+            for ts_code, shares in current_positions.items():
+                if ts_code in new_positions:
+                    continue
+                price = prices.get(ts_code)
+                trade_flags = tradability.get(ts_code, {})
+                if price is None or price <= 0 or not trade_flags.get('can_sell', True):
+                    if shares > 0:
+                        new_positions[ts_code] = shares
+
             # 计算交易成本和换手率
             total_trade_value = 0.0
             for ts_code in set(list(current_positions.keys()) + list(new_positions.keys())):
                 current_shares = current_positions.get(ts_code, 0)
                 new_shares = new_positions.get(ts_code, 0)
-                price = prices.get(ts_code, 0)
-                
-                if price > 0:
-                    trade_value = abs(new_shares - current_shares) * price
-                    total_trade_value += trade_value
-            
+                price = prices.get(ts_code)
+
+                if price is not None and price > 0:
+                    total_trade_value += abs(new_shares - current_shares) * price
+
             turnover = total_trade_value / total_value if total_value > 0 else 0
             cost_breakdown = self._apply_trade_costs(total_trade_value, commission_rate, slippage_rate)
             transaction_costs = cost_breakdown['total_cost']
-            
+
             # 计算新的现金余额
             new_cash = current_cash
             for ts_code in set(list(current_positions.keys()) + list(new_positions.keys())):
                 current_shares = current_positions.get(ts_code, 0)
                 new_shares = new_positions.get(ts_code, 0)
-                price = prices.get(ts_code, 0)
-                
-                if price > 0:
-                    trade_value = (new_shares - current_shares) * price
-                    new_cash -= trade_value
-            
+                price = prices.get(ts_code)
+
+                if price is not None and price > 0:
+                    new_cash -= (new_shares - current_shares) * price
+
             new_cash -= transaction_costs
-            
+
             return new_positions, new_cash, turnover, cost_breakdown
-            
+
         except Exception as e:
             logger.error(f"组合再平衡失败: {e}")
             return current_positions, current_cash, 0.0, self._apply_trade_costs(0.0, commission_rate, slippage_rate)
@@ -399,25 +509,35 @@ class BacktestEngine:
     def _calculate_performance_metrics(self, portfolio_values: List[Dict[str, Any]],
                                      daily_returns: List[float],
                                      start_date: str, end_date: str,
-                                     benchmark_returns: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                     benchmark_returns: List[Dict[str, Any]] = None,
+                                     initial_capital: float = None) -> Dict[str, Any]:
         """计算回测指标"""
         try:
             if not portfolio_values or not daily_returns:
                 return {}
-            
-            # 基本指标
-            initial_value = portfolio_values[0]['total_value']
+
+            # 基本指标：total_return 统一以初始资金为基准，与响应负载口径一致
+            initial_value = initial_capital if initial_capital else portfolio_values[0]['total_value']
             final_value = portfolio_values[-1]['total_value']
             total_return = (final_value - initial_value) / initial_value
-            
+
             # 年化收益率
             days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
             years = days / 365.25
             annualized_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
-            
+
+            # 每期收益率对应的实际频率（日/周/月调仓各不相同），
+            # 用观测到的净值点数 / 回测年数估计"每年期数"，而不是一律按 252 个交易日年化
+            value_dates = pd.to_datetime([pv['date'] for pv in portfolio_values])
+            if len(value_dates) > 1 and years > 0:
+                periods_per_year = (len(portfolio_values) - 1) / years
+            else:
+                periods_per_year = 252.0
+
             # 波动率
             returns_array = np.array(daily_returns)
-            volatility = np.std(returns_array) * np.sqrt(252)  # 年化波动率
+            ddof = 1 if len(returns_array) > 1 else 0
+            volatility = np.std(returns_array, ddof=ddof) * np.sqrt(periods_per_year)  # 年化波动率
             
             # 夏普比率 (假设无风险利率为3%)
             risk_free_rate = 0.03
@@ -447,8 +567,8 @@ class BacktestEngine:
             # CVaR (95%) - 超过 VaR 损失的均值
             cvar_95 = float(np.mean(returns_array[returns_array <= var_95])) if np.any(returns_array <= var_95) else var_95
 
-            # Beta
-            beta = self._calc_beta(daily_returns, benchmark_returns)
+            # Beta：组合逐期收益 vs 基准在同日期窗口内的累计收益
+            beta = self._calc_beta(portfolio_values, daily_returns, benchmark_returns)
 
             # Alpha 和信息比率
             alpha = None
@@ -482,18 +602,47 @@ class BacktestEngine:
             logger.error(f"计算回测指标失败: {e}")
             return {}
 
-    def _calc_beta(self, daily_returns: List[float], benchmark_returns: List[Dict[str, Any]]) -> Optional[float]:
-        """计算 Beta：组合日收益 vs 基准日收益的协方差 / 基准方差。"""
+    def _calc_beta(self, portfolio_values: List[Dict[str, Any]],
+                   daily_returns: List[float],
+                   benchmark_returns: List[Dict[str, Any]]) -> Optional[float]:
+        """计算 Beta：组合逐期收益 vs 基准在相同日期窗口内的累计收益。
+
+        组合收益的每一期是 [date_{i-1}, date_i] 的区间收益，因此基准日收益
+        必须按同样的窗口复合，直接按位置截断对齐会把不相关日期的收益混在一起。
+        """
         try:
-            if not daily_returns or not benchmark_returns:
+            if len(portfolio_values) < 2 or not daily_returns or not benchmark_returns:
                 return None
-            bench_daily = [r.get('daily_return', 0) for r in benchmark_returns if r.get('daily_return') is not None]
-            # 对齐长度（取较短的）
-            n = min(len(daily_returns), len(bench_daily))
-            if n < 2:
+
+            bench_records = []
+            for row in benchmark_returns:
+                ret = row.get('daily_return')
+                if ret is None:
+                    continue
+                bench_records.append((pd.to_datetime(row['date']).normalize(), float(ret)))
+            bench_records.sort(key=lambda item: item[0])
+            if not bench_records:
                 return None
-            port = np.array(daily_returns[:n])
-            bench = np.array(bench_daily[:n])
+
+            bench_dates = np.array([r[0] for r in bench_records])
+            bench_rets = np.array([r[1] for r in bench_records])
+
+            port_dates = [pd.to_datetime(pv['date']).normalize() for pv in portfolio_values]
+            window_bench_returns = []
+            aligned_port_returns = []
+            for prev_date, cur_date, port_ret in zip(port_dates[:-1], port_dates[1:], daily_returns):
+                mask = (bench_dates > prev_date) & (bench_dates <= cur_date)
+                segment = bench_rets[mask]
+                if len(segment) == 0:
+                    continue
+                compounded = np.prod(1.0 + segment) - 1.0
+                window_bench_returns.append(compounded)
+                aligned_port_returns.append(port_ret)
+
+            if len(window_bench_returns) < 2:
+                return None
+            port = np.array(aligned_port_returns)
+            bench = np.array(window_bench_returns)
             cov_matrix = np.cov(port, bench)
             bench_var = np.var(bench, ddof=1)
             if bench_var == 0:
@@ -726,15 +875,22 @@ class BacktestEngine:
             'commission_rate': float(strategy_config.get('commission_rate', 0.001)),
             'slippage_rate': float(strategy_config.get('slippage_rate', 0.0)),
             'benchmark_index': strategy_config.get('benchmark_index', '000300.SH'),
-            'rebalance_policy': strategy_config.get('rebalance_policy', 'close_to_close'),
+            'execution_price': 'next_trade_day_close',
         }
 
     def _build_trade_constraints(self, strategy_config: Dict[str, Any]) -> Dict[str, Any]:
+        """回测实际执行的交易约束（供前端展示，与引擎行为一致）。
+
+        - 停牌（当日无行情）：不买入，持仓保留
+        - 涨停不买入、跌停不卖出（ST 5%，创业板/科创板 20%，北交所 30%，主板 10%）
+        - 信号 t 日产生，t+1 收盘成交
+        """
         return {
             'max_position_count': int(strategy_config.get('top_n', 50)),
             'min_trade_weight': float(strategy_config.get('min_trade_weight', 0.0)),
-            'suspend_policy': strategy_config.get('suspend_policy', 'skip'),
-            'limit_up_down_policy': strategy_config.get('limit_up_down_policy', 'skip'),
+            'suspend_policy': 'no_buy_keep_position',
+            'limit_up_down_policy': 'enforced_at_execution',
+            'execution_timing': 't_plus_1_close',
         }
 
     def _normalize_benchmark_returns(self, benchmark_returns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

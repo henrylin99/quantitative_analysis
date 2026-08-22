@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from app.utils.time_utils import now_local, now_local_iso
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ from app.services.parquet_state_store import ParquetStateStore
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return now_local_iso()
 
 
 def _to_python(value: Any) -> Any:
@@ -126,31 +127,33 @@ class ParquetDataJobStateStore:
         snapshot_tag: Optional[str] = None,
         progress_message: Optional[str] = None,
     ) -> DataJobRunRecord:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        now = _now_iso()
-        run_id = int(self.store.next_integer_id(self.TABLE_RUNS))
-        record = {
-            "id": run_id,
-            "job_type": job_type,
-            "status": "pending",
-            "progress": 0.0,
-            "progress_message": progress_message,
-            "params_json": _json_text(params or {}),
-            "source_name": source_name,
-            "source_mode": source_mode,
-            "snapshot_tag": snapshot_tag,
-            "result_json": None,
-            "error_message": None,
-            "log_text": None,
-            "queued_at": now,
-            "started_at": None,
-            "finished_at": None,
-            "created_at": now,
-            "updated_at": now,
-        }
-        df = pd.concat([df, pd.DataFrame([record])], ignore_index=True) if not df.empty else pd.DataFrame([record])
-        self.store.write_frame(self.TABLE_RUNS, df)
-        return self._row_to_record(pd.Series(record))
+        # web 进程提交与 worker 写状态会并发竞争这张表，整个读-改-写持锁执行
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            now = _now_iso()
+            run_id = int(self.store.next_integer_id(self.TABLE_RUNS))
+            record = {
+                "id": run_id,
+                "job_type": job_type,
+                "status": "pending",
+                "progress": 0.0,
+                "progress_message": progress_message,
+                "params_json": _json_text(params or {}),
+                "source_name": source_name,
+                "source_mode": source_mode,
+                "snapshot_tag": snapshot_tag,
+                "result_json": None,
+                "error_message": None,
+                "log_text": None,
+                "queued_at": now,
+                "started_at": None,
+                "finished_at": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True) if not df.empty else pd.DataFrame([record])
+            self.store.write_frame(self.TABLE_RUNS, df)
+            return self._row_to_record(pd.Series(record))
 
     def find_active_duplicate(self, job_type: str, params: Dict[str, Any]) -> Optional[DataJobRunRecord]:
         runs = self.list_runs(limit=1000)
@@ -189,69 +192,72 @@ class ParquetDataJobStateStore:
         error_message: Optional[str] = None,
         progress_message: Optional[str] = None,
     ) -> DataJobRunRecord:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        if df.empty or "id" not in df.columns:
-            return run
-        mask = pd.to_numeric(df["id"], errors="coerce") == int(run.id)
-        if not mask.any():
-            return run
-        now = _now_iso()
-        df.loc[mask, "status"] = status
-        if progress is not None:
-            df.loc[mask, "progress"] = float(progress)
-            run.progress = float(progress)
-        if error_message is not None:
-            df.loc[mask, "error_message"] = error_message
-            run.error_message = error_message
-        if progress_message is not None:
-            df.loc[mask, "progress_message"] = progress_message
-            run.progress_message = progress_message
-        if status == "running" and not run.started_at:
-            df.loc[mask, "started_at"] = now
-            run.started_at = now
-        if status in {"success", "failed", "cancelled"}:
-            df.loc[mask, "finished_at"] = now
-            run.finished_at = now
-        df.loc[mask, "updated_at"] = now
-        run.status = status
-        run.updated_at = now
-        self.store.write_frame(self.TABLE_RUNS, df)
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            if df.empty or "id" not in df.columns:
+                return run
+            mask = pd.to_numeric(df["id"], errors="coerce") == int(run.id)
+            if not mask.any():
+                return run
+            now = _now_iso()
+            df.loc[mask, "status"] = status
+            if progress is not None:
+                df.loc[mask, "progress"] = float(progress)
+                run.progress = float(progress)
+            if error_message is not None:
+                df.loc[mask, "error_message"] = error_message
+                run.error_message = error_message
+            if progress_message is not None:
+                df.loc[mask, "progress_message"] = progress_message
+                run.progress_message = progress_message
+            if status == "running" and not run.started_at:
+                df.loc[mask, "started_at"] = now
+                run.started_at = now
+            if status in {"success", "failed", "cancelled"}:
+                df.loc[mask, "finished_at"] = now
+                run.finished_at = now
+            df.loc[mask, "updated_at"] = now
+            run.status = status
+            run.updated_at = now
+            self.store.write_frame(self.TABLE_RUNS, df)
         return self.get_run(run.id) or run
 
     def save_run(self, run: DataJobRunRecord) -> DataJobRunRecord:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        if df.empty or "id" not in df.columns:
-            return run
-        mask = pd.to_numeric(df["id"], errors="coerce") == int(run.id)
-        if not mask.any():
-            return run
-        payload = run.to_dict()
-        payload["updated_at"] = _now_iso()
-        payload["params_json"] = _json_text(payload.get("params_json"))
-        if payload.get("result_json") is not None:
-            payload["result_json"] = _json_text(payload.get("result_json"))
-        for key, value in payload.items():
-            df.loc[mask, key] = [value]
-        self.store.write_frame(self.TABLE_RUNS, df)
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            if df.empty or "id" not in df.columns:
+                return run
+            mask = pd.to_numeric(df["id"], errors="coerce") == int(run.id)
+            if not mask.any():
+                return run
+            payload = run.to_dict()
+            payload["updated_at"] = _now_iso()
+            payload["params_json"] = _json_text(payload.get("params_json"))
+            if payload.get("result_json") is not None:
+                payload["result_json"] = _json_text(payload.get("result_json"))
+            for key, value in payload.items():
+                df.loc[mask, key] = [value]
+            self.store.write_frame(self.TABLE_RUNS, df)
         return self.get_run(run.id) or run
 
     def upsert_cursor(self, job_type: str, cursor_key: str, cursor_value: str) -> DataJobCursorRecord:
-        df = self.store.read_frame(self.TABLE_CURSORS)
-        now = _now_iso()
-        record = {
-            "job_type": job_type,
-            "cursor_key": cursor_key,
-            "cursor_value": cursor_value,
-            "updated_at": now,
-        }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            mask = (df["job_type"] == job_type) & (df["cursor_key"] == cursor_key)
-            df = df[~mask]
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_CURSORS, df)
-        return DataJobCursorRecord(**record)
+        with self.store.locked(self.TABLE_CURSORS):
+            df = self.store.read_frame(self.TABLE_CURSORS)
+            now = _now_iso()
+            record = {
+                "job_type": job_type,
+                "cursor_key": cursor_key,
+                "cursor_value": cursor_value,
+                "updated_at": now,
+            }
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                mask = (df["job_type"] == job_type) & (df["cursor_key"] == cursor_key)
+                df = df[~mask]
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_CURSORS, df)
+            return DataJobCursorRecord(**record)
 
     def _row_to_record(self, row: pd.Series) -> DataJobRunRecord:
         params = _to_python(row.get("params_json")) or {}
@@ -301,7 +307,6 @@ class ParquetDataJobStateStore:
 
     def _normalize_state_files(self) -> None:
         self._normalize_runs_file()
-        self._normalize_cursors_file()
 
     def _normalize_runs_file(self) -> None:
         path = self.store.path_for(self.TABLE_RUNS)
@@ -325,47 +330,39 @@ class ParquetDataJobStateStore:
             return
         self.store.write_frame(self.TABLE_RUNS, normalized)
 
-    def _normalize_cursors_file(self) -> None:
-        path = self.store.path_for(self.TABLE_CURSORS)
-        if not path.exists():
-            return
-        df = self.store.read_frame(self.TABLE_CURSORS)
-        if df.empty:
-            return
-        if df.equals(df.copy()):
-            return
-
     def prune_superseded_failures(self) -> int:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        if df.empty or "id" not in df.columns or "job_type" not in df.columns:
-            return 0
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            if df.empty or "id" not in df.columns or "job_type" not in df.columns:
+                return 0
 
-        work_df = df.copy()
-        work_df["id"] = pd.to_numeric(work_df["id"], errors="coerce")
-        if "status" not in work_df.columns:
-            return 0
-        if "params_json" in work_df.columns:
-            work_df["__params_key"] = work_df["params_json"].apply(
-                lambda value: json.dumps(_normalize_json_payload(value) or {}, ensure_ascii=True, sort_keys=True)
-            )
-        else:
-            work_df["__params_key"] = "{}"
+            work_df = df.copy()
+            work_df["id"] = pd.to_numeric(work_df["id"], errors="coerce")
+            if "status" not in work_df.columns:
+                return 0
+            if "params_json" in work_df.columns:
+                work_df["__params_key"] = work_df["params_json"].apply(
+                    lambda value: json.dumps(_normalize_json_payload(value) or {}, ensure_ascii=True, sort_keys=True)
+                )
+            else:
+                work_df["__params_key"] = "{}"
 
-        drop_ids: list[int] = []
-        success_groups = work_df[work_df["status"] == "success"].groupby(["job_type", "__params_key"], dropna=False)
-        for (job_type, params_key), group in success_groups:
-            latest_success_id = group["id"].max()
-            failed_mask = (
-                (work_df["job_type"] == job_type)
-                & (work_df["status"] == "failed")
-                & (work_df["__params_key"] == params_key)
-                & (work_df["id"] < latest_success_id)
-            )
-            drop_ids.extend(work_df.loc[failed_mask, "id"].dropna().astype(int).tolist())
+            drop_ids: list[int] = []
+            success_groups = work_df[work_df["status"] == "success"].groupby(["job_type", "__params_key"], dropna=False)
+            for (job_type, params_key), group in success_groups:
+                latest_success_id = group["id"].max()
+                failed_mask = (
+                    (work_df["job_type"] == job_type)
+                    & (work_df["status"] == "failed")
+                    & (work_df["__params_key"] == params_key)
+                    & (work_df["id"] < latest_success_id)
+                )
+                drop_ids.extend(work_df.loc[failed_mask, "id"].dropna().astype(int).tolist())
 
-        if not drop_ids:
-            return 0
+            if not drop_ids:
+                return 0
 
-        filtered = work_df[~work_df["id"].isin(set(drop_ids))].reset_index(drop=True)
-        self.store.write_frame(self.TABLE_RUNS, filtered)
-        return len(drop_ids)
+            filtered = work_df[~work_df["id"].isin(set(drop_ids))].reset_index(drop=True)
+            filtered = filtered.drop(columns=["__params_key"])
+            self.store.write_frame(self.TABLE_RUNS, filtered)
+            return len(drop_ids)

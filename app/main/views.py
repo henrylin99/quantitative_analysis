@@ -848,25 +848,10 @@ def data_management():
         initialization_status=inspect_data_management_status(),
     )
 
-@main_bp.route('/test-simple-chart')
-def test_simple_chart():
-    """简单图表测试页面"""
-    with open('test_simple_chart.html', 'r', encoding='utf-8') as f:
-        return f.read()
-
-@main_bp.route('/api-test')
-def api_test():
-    """API测试页面"""
-    return render_template('api_test.html')
-
 
 @main_bp.route('/trial/feature-intro')
 def feature_intro():
     """功能介绍：用通俗语言介绍大宽表的数据结构"""
     return render_template('feature_intro.html')
-
-
-
-
 
  

@@ -4,6 +4,7 @@
 """
 
 from app.extensions import db
+from app.utils.time_utils import now_local, now_local_iso
 from datetime import datetime
 from sqlalchemy import Index
 from app.services.persistence import persist_changes, persist_new, remove_instance
@@ -25,7 +26,7 @@ class RiskAlert(db.Model):
     portfolio_weight = db.Column(db.Float, comment='组合权重')
     is_active = db.Column(db.Boolean, default=True, comment='是否活跃')
     is_resolved = db.Column(db.Boolean, default=False, comment='是否已解决')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
     resolved_at = db.Column(db.DateTime, comment='解决时间')
     
     # 复合索引
@@ -76,7 +77,7 @@ class RiskAlert(db.Model):
         """解决预警"""
         self.is_resolved = True
         self.is_active = False
-        self.resolved_at = datetime.utcnow()
+        self.resolved_at = now_local()
         persist_changes(self)
 
     def update_alert(self, **fields):
@@ -95,7 +96,7 @@ class RiskAlert(db.Model):
         alert = cls.get_by_id(alert_id)
         if not alert:
             return None
-        alert.update_alert(is_active=False, is_resolved=True, resolved_at=datetime.utcnow())
+        alert.update_alert(is_active=False, is_resolved=True, resolved_at=now_local())
         return alert
     
     @classmethod
@@ -154,7 +155,7 @@ class RiskAlert(db.Model):
     def get_recent_alerts(cls, minutes=10, active_only=True, limit=10):
         from datetime import timedelta
 
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = now_local() - timedelta(minutes=minutes)
         query = cls.query.filter(cls.created_at >= cutoff)
         if active_only:
             query = query.filter_by(is_active=True)

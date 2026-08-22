@@ -6,6 +6,7 @@ Text2SQL API接口
 import logging
 from flask import Blueprint, request, jsonify, render_template
 from app.services.text2sql_engine import get_text2sql_engine
+from app.services.sql_generator import validate_readonly_sql
 from app.models.text2sql_metadata import QueryHistory, QueryTemplate, BusinessDictionary
 
 # 创建蓝图
@@ -151,7 +152,12 @@ def create_query_template():
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'error': f'缺少必要字段: {field}'}), 400
-        
+
+        # 模板 SQL 会被直接执行，写入前必须通过只读 SELECT 校验
+        readonly_ok, readonly_error = validate_readonly_sql(data['sql_template'])
+        if not readonly_ok:
+            return jsonify({'error': f'模板SQL不合法: {readonly_error}'}), 400
+
         # 检查模板ID是否已存在
         existing_template = QueryTemplate.get_by_id(data['template_id'])
         if existing_template:
@@ -188,12 +194,18 @@ def update_query_template(template_id):
         data = request.get_json()
         if not data:
             return jsonify({'error': '请求数据为空'}), 400
-        
+
+        # 更新的模板 SQL 同样需要只读校验
+        new_sql_template = data.get('sql_template', template.sql_template)
+        readonly_ok, readonly_error = validate_readonly_sql(new_sql_template)
+        if not readonly_ok:
+            return jsonify({'error': f'模板SQL不合法: {readonly_error}'}), 400
+
         template = QueryTemplate.update_template_by_id(
             template_id,
             template_name=data.get('template_name', template.template_name),
             intent_pattern=data.get('intent_pattern', template.intent_pattern),
-            sql_template=data.get('sql_template', template.sql_template),
+            sql_template=new_sql_template,
             parameters=data.get('parameters', template.parameters),
             is_active=data.get('is_active', template.is_active),
         )

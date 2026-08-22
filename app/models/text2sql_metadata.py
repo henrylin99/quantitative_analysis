@@ -4,6 +4,7 @@ Text2SQL元数据模型
 """
 
 from app.extensions import db
+from app.utils.time_utils import now_local
 from datetime import datetime
 import json
 from app.services.persistence import persist_changes, persist_new, remove_instance
@@ -18,8 +19,8 @@ class TableMetadata(db.Model):
     description = db.Column(db.Text, comment='表描述')
     business_domain = db.Column(db.String(50), comment='业务域(技术面、基本面、资金面等)')
     is_active = db.Column(db.Boolean, default=True, comment='是否激活')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     # 关联字段元数据
     fields = db.relationship('FieldMetadata', backref='table', lazy='dynamic', cascade='all, delete-orphan')
@@ -49,8 +50,8 @@ class FieldMetadata(db.Model):
     business_meaning = db.Column(db.Text, comment='业务含义')
     synonyms = db.Column(db.JSON, comment='同义词列表')
     is_active = db.Column(db.Boolean, default=True, comment='是否激活')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     def to_dict(self):
         """转换为字典"""
@@ -79,8 +80,8 @@ class QueryTemplate(db.Model):
     parameters = db.Column(db.JSON, comment='参数定义')
     usage_count = db.Column(db.Integer, default=0, comment='使用次数')
     is_active = db.Column(db.Boolean, default=True, comment='是否激活')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     def to_dict(self):
         """转换为字典"""
@@ -157,7 +158,7 @@ class QueryHistory(db.Model):
     template_used = db.Column(db.String(50), comment='使用的模板ID')
     user_ip = db.Column(db.String(45), comment='用户IP')
     user_agent = db.Column(db.String(500), comment='用户代理')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
     
     def to_dict(self):
         """转换为字典"""
@@ -233,8 +234,8 @@ class BusinessDictionary(db.Model):
     mapping_field = db.Column(db.String(100), comment='映射字段')
     mapping_table = db.Column(db.String(100), comment='映射表')
     is_active = db.Column(db.Boolean, default=True, comment='是否激活')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=now_local, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local, comment='更新时间')
     
     def to_dict(self):
         """转换为字典"""

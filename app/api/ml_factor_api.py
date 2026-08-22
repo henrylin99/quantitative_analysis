@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+from app.utils.time_utils import now_local, now_local_iso
 from loguru import logger
 import pandas as pd
 import numpy as np
@@ -111,7 +112,7 @@ def _get_latest_scoring_trade_date():
     except Exception as e:
         logger.warning(f"读取业务表最新交易日期失败: {e}")
 
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    return now_local().strftime("%Y-%m-%d")
 
 
 def _get_latest_prediction_trade_date():
@@ -128,149 +129,13 @@ def _get_latest_prediction_trade_date():
     return None
 
 
-def _build_model_performance_summary():
-    manager = get_ml_manager()
-    models = manager.get_model_list()
-    performance_data = []
-    comparison_data = []
-    best_r2 = 0.0
-
-    for model in models:
-        model_id = model.get("model_id")
-        metrics = manager.evaluate_model(model_id, model.get("created_at", "1970-01-01")[:10], datetime.utcnow().strftime("%Y-%m-%d"))
-        if "error" in metrics:
-            continue
-
-        r2_score = float(metrics.get("r2") or 0.0)
-        mae_score = float(metrics.get("mae") or 0.0)
-        best_r2 = max(best_r2, r2_score)
-        performance_data.append({
-            "date": model.get("created_at", datetime.utcnow().isoformat())[:10],
-            "train_r2": float(metrics.get("r2") or 0.0),
-            "test_r2": float(metrics.get("r2") or 0.0),
-            "mae": mae_score,
-        })
-        comparison_data.append({
-            "model_type": model.get("model_type"),
-            "r2_score": r2_score,
-            "mae_score": mae_score,
-        })
-
-    return {
-        "total_models": len(models),
-        "best_r2": best_r2,
-        "performance_data": performance_data,
-        "comparison_data": comparison_data,
-    }
-
-
-def _build_factor_effectiveness_summary():
-    definitions = get_factor_engine().get_factor_list(is_active=True)
-    importance_data = []
-    factor_stats = []
-    active_factors = 0
-
-    for factor in definitions:
-        if not factor.get("is_active", True):
-            continue
-        active_factors += 1
-        factor_id = factor["factor_id"]
-        exposure = get_factor_engine().get_factor_exposure(
-            factor_id, get_factor_engine().data_reader.get_stock_business_latest_date() or datetime.utcnow().strftime("%Y-%m-%d")
-        )
-        if exposure.empty:
-            importance = 0.0
-            correlation = 0.0
-        else:
-            series = pd.to_numeric(exposure.get("z_score", exposure.get("factor_value")), errors="coerce")
-            importance = float(series.abs().mean()) if not series.empty else 0.0
-            correlation = float(series.corr(pd.Series(range(len(series))))) if len(series) > 1 else 0.0
-
-        importance_data.append({
-            "factor_name": factor.get("factor_name", factor_id),
-            "importance": importance,
-            "correlation": correlation,
-        })
-        factor_stats.append({
-            "factor_name": factor.get("factor_name", factor_id),
-            "importance": importance,
-            "correlation": correlation,
-        })
-
-    importance_data.sort(key=lambda item: item["importance"], reverse=True)
-    return {
-        "active_factors": active_factors,
-        "importance_data": importance_data,
-        "factor_stats": factor_stats,
-    }
-
-
-def _build_portfolio_performance_summary():
-    portfolio_ids = _portfolio_repo.list_portfolio_ids(active_only=True)
-    performance_data = []
-    portfolio_metrics = []
-    all_sector_distribution = {}
-    annual_returns = []
-    max_drawdowns = []
-    sharpe_ratios = []
-    win_rates = []
-
-    for portfolio_id in portfolio_ids:
-        metrics = _portfolio_repo.calculate_metrics(portfolio_id)
-        if not metrics:
-            continue
-        portfolio_metrics.append(metrics)
-        annual_return = float(metrics.get("total_pnl_percentage") or 0.0)
-        max_drawdown = float(metrics.get("max_position_weight") or 0.0)
-        sharpe_ratio = float(metrics.get("portfolio_var_1d") or 0.0)
-        win_rate = 0.0
-        annual_returns.append(annual_return)
-        max_drawdowns.append(max_drawdown)
-        sharpe_ratios.append(sharpe_ratio)
-        win_rates.append(win_rate)
-        performance_data.append({
-            "date": portfolio_id,
-            "portfolio_return": annual_return,
-            "benchmark_return": 0.0,
-        })
-        for sector, weight in (metrics.get("sector_distribution") or {}).items():
-            all_sector_distribution[sector] = all_sector_distribution.get(sector, 0.0) + float(weight or 0.0)
-
-    return {
-        "portfolio_count": len(portfolio_ids),
-        "annual_return": float(np.mean(annual_returns)) if annual_returns else 0.0,
-        "max_drawdown": float(np.mean(max_drawdowns)) if max_drawdowns else 0.0,
-        "sharpe_ratio": float(np.mean(sharpe_ratios)) if sharpe_ratios else 0.0,
-        "win_rate": float(np.mean(win_rates) * 100) if win_rates else 0.0,
-        "performance_data": performance_data,
-        "sector_distribution": all_sector_distribution,
-        "portfolio_metrics": portfolio_metrics,
-    }
-
-
-def _build_risk_analysis_summary():
-    portfolio_summary = _build_portfolio_performance_summary()
-    risk_data = [
-        {"name": name, "value": value}
-        for name, value in sorted(portfolio_summary["sector_distribution"].items(), key=lambda item: item[1], reverse=True)
-    ]
-    return {
-        "risk_data": risk_data,
-    }
-
-
-def _build_analysis_report():
-    model_summary = _build_model_performance_summary()
-    factor_summary = _build_factor_effectiveness_summary()
-    portfolio_summary = _build_portfolio_performance_summary()
-    risk_summary = _build_risk_analysis_summary()
-    return {
-        "generated_at": datetime.utcnow().isoformat(),
-        "model_performance": model_summary,
-        "factor_effectiveness": factor_summary,
-        "portfolio_performance": portfolio_summary,
-        "risk_analysis": risk_summary,
-    }
+from app.services.ml_dashboard import (
+    build_analysis_report as _build_analysis_report,
+    build_factor_effectiveness_summary as _build_factor_effectiveness_summary,
+    build_model_performance_summary as _build_model_performance_summary,
+    build_portfolio_performance_summary as _build_portfolio_performance_summary,
+    build_risk_analysis_summary as _build_risk_analysis_summary,
+)
 
 
 @ml_factor_bp.route('/analysis/model-performance', methods=['GET'])
@@ -349,7 +214,7 @@ def export_analysis_report():
     try:
         report = _build_analysis_report()
         payload = json.dumps(convert_numpy_types(report), ensure_ascii=False, indent=2)
-        filename = f"ml_factor_analysis_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        filename = f"ml_factor_analysis_report_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
         response = Response(payload, mimetype='application/json')
         response.headers['Content-Disposition'] = f'attachment; filename={filename}'
         return response
@@ -664,11 +529,12 @@ def predict_with_model():
                 'predictions': predictions_dict
             })
         else:
+            # 保存失败必须如实报告为失败，而不是 success: true 混过去
             return jsonify({
-                'success': True,
+                'success': False,
                 'message': f"预测完成但保存失败: {len(predictions)} 只股票",
                 'predictions': predictions_dict
-            })
+            }), 500
         
     except Exception as e:
         logger.error(f"模型预测失败: {e}")
@@ -1310,7 +1176,7 @@ def create_portfolio_position():
 
         existing_position = _portfolio_repo.get_position_by_stock(portfolio_id, ts_code)
         if existing_position:
-            return jsonify({'success': False, 'message': '该股票持仓已存在'}), 200
+            return jsonify({'success': False, 'message': '该股票持仓已存在'}), 409
 
         position = _portfolio_repo.upsert_position(
             {
