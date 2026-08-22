@@ -48,6 +48,7 @@ def create_app(config_name='default'):
     from app.api.realtime_report import realtime_report_bp
     from app.api.websocket_api import websocket_api_bp
     from app.api.data_jobs_api import data_jobs_bp
+    from app.api.ai_assistant_api import ai_assistant_bp
     from app.routes.ml_factor_routes import ml_factor_routes
     from app.routes.realtime_analysis_routes import realtime_analysis_routes
     from app.routes.heatmap import heatmap_routes
@@ -64,6 +65,7 @@ def create_app(config_name='default'):
     app.register_blueprint(realtime_report_bp, url_prefix='/api/realtime-analysis/reports')
     app.register_blueprint(websocket_api_bp, url_prefix='/api/websocket')
     app.register_blueprint(data_jobs_bp)
+    app.register_blueprint(ai_assistant_bp)
     app.register_blueprint(ml_factor_routes)
     app.register_blueprint(realtime_analysis_routes)
     app.register_blueprint(heatmap_routes)

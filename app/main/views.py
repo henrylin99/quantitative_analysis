@@ -37,6 +37,12 @@ def backtest():
     return render_template('backtest.html')
 
 
+@main_bp.route('/ai-workbench')
+def ai_workbench():
+    """AI 智能工作台页面"""
+    return render_template('ai_workbench.html')
+
+
 @main_bp.route('/trial/market-brief')
 def market_brief():
     """每日市场简报生成器"""
