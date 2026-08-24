@@ -23,11 +23,20 @@ class PortfolioOptimizer:
             'black_litterman': self._black_litterman_optimization,
         }
     
-    def optimize_portfolio(self, expected_returns: pd.Series, 
+    def optimize_portfolio(self, expected_returns: pd.Series,
                           risk_model: pd.DataFrame = None,
                           method: str = 'mean_variance',
-                          constraints: Dict[str, Any] = None) -> Dict[str, Any]:
-        """优化投资组合"""
+                          constraints: Dict[str, Any] = None,
+                          as_of_date: str = None,
+                          annualize_cov: bool = False) -> Dict[str, Any]:
+        """优化投资组合。
+
+        as_of_date: 风险模型估计的截止日期。回测必须传入调仓日，
+        否则协方差会用 datetime.now() 之后的数据估计，构成前视偏差。
+        annualize_cov: 协方差按日频×252 年化。expected_returns 为年化
+        口径（如预期收益映射）时必须开启，否则目标函数中收益项与风险项
+        量纲相差三个数量级，优化退化为只看收益的角点解。
+        """
         try:
             if expected_returns.empty:
                 return {'error': '预期收益率数据为空'}
@@ -53,7 +62,11 @@ class PortfolioOptimizer:
             
             # 获取风险模型
             if risk_model is None:
-                risk_model = self._estimate_risk_model(expected_returns.index.tolist())
+                risk_model = self._estimate_risk_model(
+                    expected_returns.index.tolist(),
+                    as_of_date=as_of_date,
+                    annualize=annualize_cov,
+                )
             
             # 检查优化方法
             if method not in self.optimization_methods:
@@ -382,12 +395,21 @@ class PortfolioOptimizer:
             return None
     
     def _estimate_risk_model(self, ts_codes: List[str],
-                            lookback_days: int = 252) -> pd.DataFrame:
-        """估计风险模型（协方差矩阵）"""
+                            lookback_days: int = 252,
+                            as_of_date: str = None,
+                            annualize: bool = False) -> pd.DataFrame:
+        """估计风险模型（协方差矩阵）。
+
+        as_of_date 缺省时才允许用当前日期（实盘/在线优化场景）；
+        回测路径必须显式传调仓日，保证每个历史时点只用当时可得数据。
+        """
         try:
-            # 获取历史价格数据
-            end_date = datetime.now().date()
-            start_date = end_date - pd.Timedelta(days=lookback_days + 50)
+            # 获取历史价格数据：lookback_days 是交易日，按 ~1.6 倍换算日历天数
+            if as_of_date is not None:
+                end_date = pd.to_datetime(as_of_date).date()
+            else:
+                end_date = datetime.now().date()
+            start_date = end_date - pd.Timedelta(days=int(lookback_days * 1.6))
 
             reader = ParquetDataReader()
             price_data = reader.get_daily(
@@ -408,8 +430,11 @@ class PortfolioOptimizer:
                 aggfunc='first'
             )
             
-            # 计算收益率
-            returns = price_pivot.pct_change().dropna()
+            # 价格先 ffill 再算收益：停牌日直接记 0 收益会同时压低方差和相关性，
+            # 让 Ledoit-Wolf 估计出虚假的低风险资产
+            price_pivot = price_pivot.ffill()
+            returns = price_pivot.pct_change()
+            returns = returns.dropna(how="all")
             
             # 只保留有足够数据的股票
             min_observations = min(60, len(returns) // 2)
@@ -420,9 +445,17 @@ class PortfolioOptimizer:
                 # 如果数据不足，使用单位矩阵
                 return pd.DataFrame(np.eye(len(ts_codes)), index=ts_codes, columns=ts_codes)
             
+            # 剩余零星缺失用当日截面中位数填充（接近市场典型波动），
+            # 而不是填 0 制造"零方差"假象
+            returns = returns.apply(lambda s: s.fillna(s.median()))
+            returns = returns.dropna(how="any")
+
             # 使用Ledoit-Wolf收缩估计器
             lw = LedoitWolf()
-            cov_matrix = lw.fit(returns.fillna(0)).covariance_
+            cov_matrix = lw.fit(returns.values).covariance_
+
+            if annualize:
+                cov_matrix = cov_matrix * 252.0
             
             # 转换为DataFrame
             risk_model = pd.DataFrame(cov_matrix, index=returns.columns, columns=returns.columns)

@@ -69,7 +69,9 @@ def test_scaler_fit_on_train_portion_only(tmp_path):
     y = pd.Series([0.0] * n)
 
     with _patch_definition(manager), patch.object(
-        manager, "prepare_training_data", return_value=(X, y)
+        manager,
+        "prepare_training_data",
+        return_value=(X, y, pd.Series(pd.to_datetime(["2026-01-01"] * len(y)))),
     ):
         result = manager.train_model("m1", "2026-01-01", "2026-12-31")
     assert result["success"], result.get("error")
@@ -109,7 +111,11 @@ def test_feature_selection_applied_consistently_at_predict(tmp_path):
                 "validation_method": None,
             },
         },
-    ), patch.object(manager, "prepare_training_data", return_value=(X, y)):
+    ), patch.object(
+        manager,
+        "prepare_training_data",
+        return_value=(X, y, pd.Series(pd.to_datetime(["2026-06-01"] * len(y)))),
+    ):
         result = manager.train_model("m1", "2026-01-01", "2026-12-31")
     assert result["success"], result.get("error")
     # 训练只保留了 1 个特征

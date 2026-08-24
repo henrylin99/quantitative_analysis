@@ -226,6 +226,10 @@ class FactorRepository:
         else:
             combined = pd.concat([df, frame], ignore_index=True)
         combined = self._dedupe_values(combined)
+        # 数值列统一 float32：因子值精度足够，库体积与读取内存约省一半
+        for column in ("factor_value", "z_score", "percentile_rank"):
+            if column in combined.columns:
+                combined[column] = pd.to_numeric(combined[column], errors="coerce").astype("float32")
         self.store.write_frame(self.TABLE_VALUES, combined)
         return len(frame)
 
@@ -242,7 +246,10 @@ class FactorRepository:
             return df
 
         if "trade_date" in df.columns:
-            df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+            # 库内 trade_date 是 YYYYMMDD 字符串、YYYY-MM-DD 字符串与
+            # Timestamp 混存（历史写入口径不一），必须 format='mixed'：
+            # 默认格式推断会把第二种格式静默变成 NaT 然后被 dropna 丢掉
+            df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
             df = df.dropna(subset=["trade_date"])
 
         start_dt = pd.to_datetime(start_date, errors="coerce") if start_date is not None else None
@@ -279,7 +286,14 @@ class FactorRepository:
         key_cols = [c for c in ["ts_code", "trade_date", "factor_id"] if c in df.columns]
         if not key_cols:
             return df
-        for column in ["trade_date", "created_at"]:
+        # trade_date 归一化为 Timestamp 后再去重：库内 YYYYMMDD 与
+        # YYYY-MM-DD 两种字符串并存时按字符串去重会让同一天的记录都保留，
+        # 读取端出现重复行
+        if "trade_date" in df.columns:
+            normalized = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+            if normalized.notna().any():
+                df = df.assign(trade_date=normalized.where(normalized.notna(), df["trade_date"]))
+        for column in ["created_at"]:
             if column in df.columns:
                 df[column] = df[column].astype(str)
         df = df.sort_values(key_cols + [c for c in ["created_at"] if c in df.columns]).reset_index(drop=True)
@@ -395,7 +409,13 @@ class ModelRepository:
         key_cols = [c for c in ["ts_code", "trade_date", "model_id"] if c in df.columns]
         if not key_cols:
             return df
-        for column in ["trade_date", "created_at"]:
+        # 与 _dedupe_values 同理：trade_date 归一化后再去重，
+        # 混格式字符串比较会保留旧行
+        if "trade_date" in df.columns:
+            normalized = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+            if normalized.notna().any():
+                df = df.assign(trade_date=normalized.where(normalized.notna(), df["trade_date"]))
+        for column in ["created_at"]:
             if column in df.columns:
                 df[column] = df[column].astype(str)
         df = df.sort_values(key_cols + [c for c in ["created_at"] if c in df.columns]).reset_index(drop=True)

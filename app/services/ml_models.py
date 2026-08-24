@@ -269,8 +269,12 @@ class MLModelManager:
             logger.error(f"创建模型定义失败: {model_id}, 错误: {e}")
             return False
     
-    def prepare_training_data(self, model_id: str, start_date: str, end_date: str) -> Tuple[pd.DataFrame, pd.Series]:
-        """准备训练数据"""
+    def prepare_training_data(self, model_id: str, start_date: str, end_date: str) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+        """准备训练数据。
+
+        第三个返回值是与 X 行对齐的 trade_date 序列，供训练侧计算
+        时间切分的 embargo 样本数。
+        """
         try:
             # 获取模型定义
             model_def = self._get_model_definition(model_id)
@@ -335,11 +339,11 @@ class MLModelManager:
             y = merged_df['target']
             
             logger.info(f"准备训练数据完成: {len(X)} 样本, {len(feature_columns)} 特征")
-            return X, y
-            
+            return X, y, merged_df["trade_date"]
+
         except Exception as e:
             logger.error(f"准备训练数据失败: {model_id}, 错误: {e}")
-            return pd.DataFrame(), pd.Series()
+            return pd.DataFrame(), pd.Series(), pd.Series(dtype="datetime64[ns]")
     
     def _calculate_target_returns(self, feature_df: pd.DataFrame, target_type: str) -> pd.DataFrame:
         """计算目标变量（未来收益率）"""
@@ -366,7 +370,9 @@ class MLModelManager:
             price_end_date = max_date + timedelta(days=period + 10)
 
             reader = ParquetDataReader()
-            price_data = reader.get_daily(
+            # 标签必须用后复权价：不复权 close 在除权除息日有假缺口，
+            # 模型会学出"回避即将分红的股票"这类伪规律
+            price_data = reader.get_return_prices(
                 ts_codes=ts_codes,
                 start_date=min_date.strftime("%Y-%m-%d"),
                 end_date=price_end_date.strftime("%Y-%m-%d"),
@@ -420,16 +426,40 @@ class MLModelManager:
             
             # 准备训练数据
             report(15.0, "准备训练数据", "正在准备训练数据...")
-            X, y = self.prepare_training_data(model_id, start_date, end_date)
+            X, y, trade_dates_series = self.prepare_training_data(model_id, start_date, end_date)
             if X.empty or y.empty:
                 raise ValueError("训练数据为空")
             
             # 分割训练集和测试集（先切分，再做特征工程，避免拟合统计量泄漏到测试集）
             report(50.0, "拆分训练集", "正在拆分训练集和测试集...")
             test_size = model_def["training_config"].get('test_size', 0.2)
-            X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-                X, y, test_size=test_size, random_state=42, shuffle=False
-            )
+            n = len(X)
+            split_idx = int(n * (1 - test_size))
+
+            # purge/embargo：标签是 shift(-target_period) 的未来收益，
+            # 训练集尾部样本的标签窗口会伸进测试期，相邻样本强相关会造成
+            # 测试指标乐观污染。按"目标期数 × 每日平均样本数"切除边界样本
+            embargo_rows = 0
+            try:
+                target_period = self._target_period(model_def["target_type"])
+                n_days = max(1, trade_dates_series.nunique())
+                samples_per_day = max(1, n // n_days)
+                # 上限取训练侧的 10%：极端数据（如日期去重后只剩一天）下
+                # 不设上限会把训练集清空
+                embargo_rows = min(
+                    target_period * samples_per_day,
+                    max(0, split_idx // 10),
+                )
+            except Exception as e:
+                logger.warning(f"计算 embargo 样本数失败，跳过 purge: {e}")
+
+            train_end_idx = split_idx - embargo_rows
+            X_train_raw = X.iloc[:train_end_idx]
+            y_train = y.iloc[:train_end_idx]
+            X_test_raw = X.iloc[split_idx:]
+            y_test = y.iloc[split_idx:]
+            if embargo_rows > 0:
+                logger.info(f"时间切分 purge: 剔除 {embargo_rows} 条标签窗口跨越边界的训练样本")
 
             # 特征工程：scaler/特征选择只在训练集上 fit
             report(35.0, "特征工程", "正在执行特征工程...")
@@ -497,7 +527,9 @@ class MLModelManager:
                     ])
                 else:
                     cv_estimator = cv_model
-                cv_scores = cross_val_score(cv_estimator, X, y, cv=tscv, scoring='r2')
+                # CV 只在训练段上跑：在全量数据上跑会与留出集共享样本，
+                # 报告的 cv_mean 口径不纯
+                cv_scores = cross_val_score(cv_estimator, X_train_raw, y_train, cv=tscv, scoring='r2')
                 metrics['cv_mean'] = cv_scores.mean()
                 metrics['cv_std'] = cv_scores.std()
 
@@ -514,7 +546,27 @@ class MLModelManager:
 
             # 缓存模型
             self.models[model_id] = model
-            
+
+            # 把训练窗口持久化到模型定义：预测侧据此拒绝生成训练区间内的
+            # in-sample 预测，防止拿模型见过的样本喂给回测
+            try:
+                updated_config = dict(model_def.get("training_config") or {})
+                updated_config["train_start_date"] = str(start_date)
+                updated_config["train_end_date"] = str(end_date)
+                updated_config["embargo_samples"] = int(embargo_rows)
+                self.model_repo.upsert_definition({
+                    "model_id": model_id,
+                    "model_name": model_def.get("model_name"),
+                    "model_type": model_def.get("model_type"),
+                    "factor_list": model_def.get("factor_list"),
+                    "target_type": model_def.get("target_type"),
+                    "model_params": model_def.get("model_params"),
+                    "training_config": updated_config,
+                    "is_active": bool(model_def.get("is_active", True)),
+                })
+            except Exception as meta_error:
+                logger.warning(f"写入训练窗口元数据失败: {meta_error}")
+
             logger.info(f"模型训练完成: {model_id}, 测试R²: {test_score:.4f}")
             report(100.0, "训练完成", "训练任务已完成")
             return {
@@ -634,9 +686,26 @@ class MLModelManager:
                 # 使用最新日期的数据
                 latest_date = factor_data['trade_date'].max()
                 factor_data = factor_data[factor_data['trade_date'] == latest_date]
-                effective_date = str(latest_date)
-                logger.info(f"使用最新日期 {latest_date} 的因子数据进行预测")
+                # 统一格式为 YYYY-MM-DD：直接 str(Timestamp) 会带 00:00:00，
+                # 与 get_predictions 的字符串精确匹配永远对不上，成为孤儿数据
+                effective_date = pd.to_datetime(latest_date).strftime("%Y-%m-%d")
+                logger.info(f"使用最新日期 {effective_date} 的因子数据进行预测")
             
+            # 防泄漏：实际用于预测的日期必须晚于模型训练截止日。
+            # 否则可以对训练区间内的历史日期批量生成 in-sample 预测，
+            # 再被 ml_based 回测消费，产出虚假的漂亮结果
+            train_end = (model_def.get("training_config") or {}).get("train_end_date")
+            if train_end:
+                try:
+                    if pd.to_datetime(effective_date) <= pd.to_datetime(train_end):
+                        logger.warning(
+                            f"预测中止: 预测日期 {effective_date} 不晚于模型 "
+                            f"{model_id} 的训练截止日 {train_end}，拒绝生成 in-sample 预测"
+                        )
+                        return pd.DataFrame()
+                except (TypeError, ValueError):
+                    pass
+
             # 透视表
             feature_df = factor_data.pivot_table(
                 index='ts_code',
