@@ -25,9 +25,15 @@ class FactorExpressionEngine:
             "pct_change",
             "shift",
             "diff",
-            "rank",
+            # 注意：rank 已被移出白名单。Series.rank() 是"整条时间序列"上的
+            # 排名，close.rank() 会把未来价格纳入分母（全样本前视）。
+            # 截面排名请在评分层做（factor_engine._calculate_factor_stats
+            # 按单日截面分组），表达式层只允许时间因果的原语
             "rolling",
         }
+        # 这些方法取负 periods 即引用未来数据（如 close.shift(-1) 是明天的价格）
+        self.causal_period_methods = {"pct_change", "shift", "diff"}
+        self.max_rolling_window = 10000
         self.allowed_window_methods = {
             "mean",
             "std",
@@ -131,20 +137,28 @@ class FactorExpressionEngine:
         }
 
         if method_name == "rolling":
-            if not isinstance(target, pd.Series):
-                raise ValueError("rolling() must be called on a series")
             window = int(self._as_scalar(raw_args[0], "window")) if raw_args else None
             if window is None or window <= 0:
                 raise ValueError("rolling window must be positive")
-            min_periods = raw_kwargs.get("min_periods", window)
-            min_periods = int(self._as_scalar(min_periods, "min_periods"))
-            return target.rolling(window=window, min_periods=min_periods)
+            if window > self.max_rolling_window:
+                raise ValueError(
+                    f"rolling window too large: {window} (max {self.max_rolling_window})"
+                )
 
         if isinstance(target, pd.Series):
             if method_name not in self.allowed_series_methods:
                 raise ValueError(f"series method not allowed: {method_name}")
             args = [self._as_scalar(arg, "arg") for arg in raw_args]
             kwargs = {k: self._as_scalar(v, k) for k, v in raw_kwargs.items()}
+            # shift/pct_change/diff 的负 periods 引用未来数据，一律拒绝。
+            # periods 既可能是位置参数也可能是关键字参数
+            # （close.shift(periods=-1)），两条路都要拦
+            if method_name in self.causal_period_methods:
+                periods = args[0] if args else kwargs.get("periods")
+                if periods is not None and periods < 0:
+                    raise ValueError(
+                        f"{method_name}() 不允许负 periods：引用未来数据（前视偏差）"
+                    )
             return getattr(target, method_name)(*args, **kwargs)
 
         if hasattr(target, method_name):

@@ -9,6 +9,7 @@ from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
+from config import Config
 from app.services.data_reader import ParquetDataReader
 from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
 
@@ -82,14 +83,13 @@ class BacktestEngine:
             calendar_dates = self.data_reader.get_trade_dates(start_date, end_date)
 
             # 初始化回测状态
-            portfolio_values = []
+            executed_states = []  # 每次实际成交后的 (日期, 持仓, 现金)
             positions = {}
             cash = initial_capital
             total_value = initial_capital
             last_prices = {}
 
-            # 记录每日数据
-            daily_returns = []
+            # 记录每次调仓数据（逐日净值在循环结束后统一 mark-to-market）
             daily_positions = []
             daily_turnover = []
 
@@ -104,9 +104,10 @@ class BacktestEngine:
                         logger.warning(f"日期 {trade_date} 没有选出股票")
                         continue
 
-                    # 组合优化
+                    # 组合优化（协方差只使用 trade_date 及之前的数据，避免前视偏差）
                     target_weights = self._get_target_weights(
-                        selected_stocks, strategy_config.get('optimization', {})
+                        selected_stocks, strategy_config.get('optimization', {}),
+                        as_of_date=trade_date,
                     )
 
                     # t+1 执行：信号日收盘后才能观察到的信息，只能在下一个交易日成交
@@ -132,19 +133,16 @@ class BacktestEngine:
                         current_portfolio_value,
                         commission_rate=float(strategy_config.get('commission_rate', 0.001)),
                         slippage_rate=float(strategy_config.get('slippage_rate', 0.0)),
+                        stamp_duty_rate=float(strategy_config.get('stamp_duty_rate', Config.DEFAULT_STAMP_DUTY_RATE)),
                     )
 
-                    # 更新状态：交易成本从组合价值中扣除
+                    # 更新状态：交易成本通过现金扣减体现，由逐日净值如实反映
                     positions = new_positions
                     cash = new_cash
-                    total_value = current_portfolio_value - _cost_breakdown['total_cost']
-
-                    # 记录数据（净值曲线以实际成交日计）
-                    portfolio_values.append({
+                    executed_states.append({
                         'date': exec_date,
-                        'total_value': total_value,
+                        'positions': positions.copy(),
                         'cash': cash,
-                        'positions_value': total_value - cash
                     })
 
                     daily_positions.append(positions.copy())
@@ -154,9 +152,17 @@ class BacktestEngine:
                     logger.error(f"处理交易日 {trade_date} 时出错: {e}")
                     continue
 
-            # 逐期收益率：基于实际记录的净值序列计算，避免跳过的日期错位
+            # 逐日 mark-to-market 净值曲线：只在调仓日记净值点会系统性低估
+            # 最大回撤、低估波动率并虚高夏普（月度调仓时一年只有 ~12 个观测点）
+            portfolio_values = self._build_daily_nav(
+                calendar_dates, executed_states, initial_capital
+            )
+            total_value = portfolio_values[-1]['total_value'] if portfolio_values else initial_capital
+
+            # 逐日收益率
+            daily_returns = []
             for prev, cur in zip(portfolio_values[:-1], portfolio_values[1:]):
-                if prev['total_value']:
+                if prev['total_value'] > 0:
                     daily_returns.append(
                         (cur['total_value'] - prev['total_value']) / prev['total_value']
                     )
@@ -280,8 +286,31 @@ class BacktestEngine:
             logger.error(f"获取股票选择结果失败: {e}")
             return []
     
+    # 截面 z-score → 年化预期收益的线性映射区间（保守量级，
+    # 与年化协方差匹配；如需调整请同步评估 risk_aversion）
+    EXPECTED_RETURN_LOWER = -0.15
+    EXPECTED_RETURN_UPPER = 0.30
+
+    def _scores_to_expected_returns(self, selected_stocks: List[Dict[str, Any]]) -> pd.Series:
+        """把截面 z-score 映射为量纲合理的年化预期收益。
+
+        composite_score 是 ±3 左右的 z-score，而优化器里的协方差是收益率
+        方差（日频 ~1e-4，年化 ~1e-2）。直接把分数当预期收益喂给均值方差，
+        目标函数的收益项会比风险项大三四个数量级，优化退化为把权重全部押给
+        分数最高股票的角点解。这里保留截面排序信息，线性映射到保守的
+        年化收益区间，与年化协方差量纲匹配。
+        """
+        scores = pd.Series({
+            stock['ts_code']: stock.get('composite_score', stock.get('ensemble_score', 0))
+            for stock in selected_stocks
+        })
+        pct_rank = scores.rank(pct=True)
+        lower, upper = self.EXPECTED_RETURN_LOWER, self.EXPECTED_RETURN_UPPER
+        return lower + (upper - lower) * pct_rank
+
     def _get_target_weights(self, selected_stocks: List[Dict[str, Any]], 
-                          optimization_config: Dict[str, Any]) -> Dict[str, float]:
+                          optimization_config: Dict[str, Any],
+                          as_of_date: str = None) -> Dict[str, float]:
         """获取目标权重"""
         try:
             method = optimization_config.get('method', 'equal_weight')
@@ -291,16 +320,15 @@ class BacktestEngine:
                 weight = 1.0 / len(selected_stocks)
                 return {stock['ts_code']: weight for stock in selected_stocks}
             else:
-                # 使用组合优化
-                expected_returns = pd.Series({
-                    stock['ts_code']: stock.get('composite_score', stock.get('ensemble_score', 0))
-                    for stock in selected_stocks
-                })
+                # 使用组合优化：协方差按调仓日截断估计（前视防护）+ 年化口径匹配
+                expected_returns = self._scores_to_expected_returns(selected_stocks)
                 
                 result = self._get_portfolio_optimizer().optimize_portfolio(
                     expected_returns,
                     method=method,
-                    constraints=optimization_config.get('constraints')
+                    constraints=optimization_config.get('constraints'),
+                    as_of_date=as_of_date,
+                    annualize_cov=True,
                 )
                 
                 if 'error' in result:
@@ -315,7 +343,66 @@ class BacktestEngine:
             # 默认等权重
             weight = 1.0 / len(selected_stocks)
             return {stock['ts_code']: weight for stock in selected_stocks}
-    
+
+    def _build_daily_nav(self, calendar_dates: List[str],
+                         executed_states: List[Dict[str, Any]],
+                         initial_capital: float) -> List[Dict[str, Any]]:
+        """逐日 mark-to-market 净值。
+
+        - 现金只在调仓事件日变动
+        - 持仓每个交易日按最近已知收盘价估值（停牌股沿用最后成交价）
+        - 第一个调仓事件之前净值为初始资金（纯现金）
+        """
+        events = {state['date']: state for state in executed_states}
+        all_codes = sorted({code for state in executed_states for code in state['positions']})
+
+        close_pivot = pd.DataFrame()
+        if all_codes and calendar_dates:
+            try:
+                px_df = self.data_reader.get_daily(
+                    ts_codes=all_codes, start_date=calendar_dates[0], end_date=calendar_dates[-1]
+                )
+                if not px_df.empty:
+                    close_pivot = px_df.pivot_table(
+                        index='trade_date', columns='ts_code', values='close', aggfunc='first'
+                    ).sort_index()
+                    # 统一索引为 Timestamp，兼容未归一化日期的调用方
+                    close_pivot.index = pd.to_datetime(close_pivot.index)
+            except Exception as e:
+                # 快速失败：行情缺失时持仓会按 0 估值，净值静默塌缩为纯现金，
+                # 这种"看起来正常的假结果"比直接报错危害大得多
+                raise RuntimeError(f"构建逐日净值读取行情失败: {e}") from e
+
+        nav = []
+        current_positions: Dict[str, int] = {}
+        current_cash = float(initial_capital)
+        last_prices: Dict[str, float] = {}
+
+        for date_text in calendar_dates:
+            event = events.get(date_text)
+            if event is not None:
+                current_positions = event['positions']
+                current_cash = event['cash']
+
+            key = pd.Timestamp(date_text)
+            if not close_pivot.empty and key in close_pivot.index:
+                row = close_pivot.loc[key]
+                for code, price in row.items():
+                    if pd.notna(price) and price > 0:
+                        last_prices[code] = float(price)
+
+            positions_value = sum(
+                shares * last_prices.get(code, 0.0)
+                for code, shares in current_positions.items()
+            )
+            nav.append({
+                'date': date_text,
+                'total_value': positions_value + current_cash,
+                'cash': current_cash,
+                'positions_value': positions_value,
+            })
+        return nav
+
     def _next_trade_date(self, calendar_dates: List[str], signal_date: str) -> Optional[str]:
         """返回严格晚于 signal_date 的第一个交易日"""
         for date in calendar_dates:
@@ -429,20 +516,34 @@ class BacktestEngine:
             logger.error(f"计算组合价值失败: {e}")
             return cash
     
-    def _apply_trade_costs(self, trade_value: float, commission_rate: float, slippage_rate: float) -> Dict[str, float]:
+    def _apply_trade_costs(self, trade_value: float, commission_rate: float,
+                           slippage_rate: float, sell_value: float = 0.0,
+                           stamp_duty_rate: float = None) -> Dict[str, float]:
+        if stamp_duty_rate is None:
+            stamp_duty_rate = Config.DEFAULT_STAMP_DUTY_RATE
+        """交易成本：佣金+滑点双边收取，印花税只对卖出方征收。
+
+        A 股印花税为卖方单边强制成本（2023-08-28 起 0.05%），漏掉会系统性
+        低估高换手策略的成本，足以改变策略盈亏结论。
+        """
         commission = float(trade_value) * float(commission_rate or 0.0)
         slippage = float(trade_value) * float(slippage_rate or 0.0)
+        stamp_duty = float(sell_value or 0.0) * float(stamp_duty_rate or 0.0)
         return {
             'commission': commission,
             'slippage': slippage,
-            'total_cost': commission + slippage,
+            'stamp_duty': stamp_duty,
+            'total_cost': commission + slippage + stamp_duty,
         }
 
     def _rebalance_portfolio(self, current_positions: Dict[str, int],
                            current_cash: float, target_weights: Dict[str, float],
                            prices: Dict[str, float], tradability: Dict[str, Dict[str, bool]],
                            total_value: float,
-                           commission_rate: float, slippage_rate: float) -> Tuple[Dict[str, int], float, float, Dict[str, float]]:
+                           commission_rate: float, slippage_rate: float,
+                           stamp_duty_rate: float = None) -> Tuple[Dict[str, int], float, float, Dict[str, float]]:
+        if stamp_duty_rate is None:
+            stamp_duty_rate = Config.DEFAULT_STAMP_DUTY_RATE
         """执行组合再平衡。
 
         交易约束:
@@ -476,16 +577,27 @@ class BacktestEngine:
 
             # 计算交易成本和换手率
             total_trade_value = 0.0
+            buy_value = 0.0
+            sell_value = 0.0
             for ts_code in set(list(current_positions.keys()) + list(new_positions.keys())):
                 current_shares = current_positions.get(ts_code, 0)
                 new_shares = new_positions.get(ts_code, 0)
                 price = prices.get(ts_code)
 
                 if price is not None and price > 0:
-                    total_trade_value += abs(new_shares - current_shares) * price
+                    delta = new_shares - current_shares
+                    trade_value = abs(delta) * price
+                    total_trade_value += trade_value
+                    if delta > 0:
+                        buy_value += trade_value
+                    elif delta < 0:
+                        sell_value += trade_value
 
             turnover = total_trade_value / total_value if total_value > 0 else 0
-            cost_breakdown = self._apply_trade_costs(total_trade_value, commission_rate, slippage_rate)
+            cost_breakdown = self._apply_trade_costs(
+                total_trade_value, commission_rate, slippage_rate,
+                sell_value=sell_value, stamp_duty_rate=stamp_duty_rate,
+            )
             transaction_costs = cost_breakdown['total_cost']
 
             # 计算新的现金余额
@@ -506,44 +618,52 @@ class BacktestEngine:
             logger.error(f"组合再平衡失败: {e}")
             return current_positions, current_cash, 0.0, self._apply_trade_costs(0.0, commission_rate, slippage_rate)
     
+    TRADING_DAYS_PER_YEAR = 252
+
     def _calculate_performance_metrics(self, portfolio_values: List[Dict[str, Any]],
                                      daily_returns: List[float],
                                      start_date: str, end_date: str,
                                      benchmark_returns: List[Dict[str, Any]] = None,
                                      initial_capital: float = None) -> Dict[str, Any]:
-        """计算回测指标"""
+        """计算回测指标。
+
+        全部指标基于逐日净值与日频收益，年化统一按 252 个交易日折算，
+        与基准年化口径保持一致（此前组合用日历年、基准用交易日，alpha
+        的分子两项口径不同会产生系统性偏移）。
+        """
         try:
             if not portfolio_values or not daily_returns:
                 return {}
+
+            ppy = self.TRADING_DAYS_PER_YEAR
+            returns_array = np.array(daily_returns, dtype=float)
 
             # 基本指标：total_return 统一以初始资金为基准，与响应负载口径一致
             initial_value = initial_capital if initial_capital else portfolio_values[0]['total_value']
             final_value = portfolio_values[-1]['total_value']
             total_return = (final_value - initial_value) / initial_value
 
-            # 年化收益率
-            days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
-            years = days / 365.25
-            annualized_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
+            # 年化收益率：按观测到的交易日数折算年限
+            n_obs = len(portfolio_values)
+            years = n_obs / ppy if n_obs > 0 else 0.0
+            annualized_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0.0
 
-            # 每期收益率对应的实际频率（日/周/月调仓各不相同），
-            # 用观测到的净值点数 / 回测年数估计"每年期数"，而不是一律按 252 个交易日年化
-            value_dates = pd.to_datetime([pv['date'] for pv in portfolio_values])
-            if len(value_dates) > 1 and years > 0:
-                periods_per_year = (len(portfolio_values) - 1) / years
-            else:
-                periods_per_year = 252.0
-
-            # 波动率
-            returns_array = np.array(daily_returns)
+            mean_period_return = float(np.mean(returns_array))
             ddof = 1 if len(returns_array) > 1 else 0
-            volatility = np.std(returns_array, ddof=ddof) * np.sqrt(periods_per_year)  # 年化波动率
-            
-            # 夏普比率 (假设无风险利率为3%)
+            period_volatility = float(np.std(returns_array, ddof=ddof))
+            volatility = period_volatility * np.sqrt(ppy)
+
+            # 夏普比率：分子用算术平均超额收益年化。
+            # 几何年化收益会随波动率上升而低于算术平均（复利拖累），
+            # 用它做分子会让夏普随波动率系统性偏高
             risk_free_rate = 0.03
-            sharpe_ratio = (annualized_return - risk_free_rate) / volatility if volatility > 0 else 0
-            
-            # 最大回撤
+            rf_period = risk_free_rate / ppy
+            sharpe_ratio = (
+                (mean_period_return - rf_period) * np.sqrt(ppy) / period_volatility
+                if period_volatility > 0 else 0.0
+            )
+
+            # 最大回撤（逐日路径）
             values = [pv['total_value'] for pv in portfolio_values]
             peak = values[0]
             max_drawdown = 0
@@ -553,11 +673,11 @@ class BacktestEngine:
                 drawdown = (peak - value) / peak
                 if drawdown > max_drawdown:
                     max_drawdown = drawdown
-            
-            # 胜率
+
+            # 胜率（日频正收益占比）
             positive_returns = [r for r in daily_returns if r > 0]
             win_rate = len(positive_returns) / len(daily_returns) if daily_returns else 0
-            
+
             # 卡尔玛比率
             calmar_ratio = annualized_return / max_drawdown if max_drawdown > 0 else 0
 
@@ -567,48 +687,58 @@ class BacktestEngine:
             # CVaR (95%) - 超过 VaR 损失的均值
             cvar_95 = float(np.mean(returns_array[returns_array <= var_95])) if np.any(returns_array <= var_95) else var_95
 
-            # Beta：组合逐期收益 vs 基准在同日期窗口内的累计收益
-            beta = self._calc_beta(portfolio_values, daily_returns, benchmark_returns)
-
-            # Alpha 和信息比率
+            # Beta / Alpha / 信息比率：基于同窗口对齐的组合与基准收益
+            aligned = self._align_with_benchmark(portfolio_values, daily_returns, benchmark_returns)
+            beta = None
             alpha = None
             information_ratio = None
-            if beta is not None and annualized_return:
-                benchmark_annual = self._calc_benchmark_annual_return(benchmark_returns)
-                alpha = annualized_return - (0.03 + beta * (benchmark_annual - 0.03))
-                excess = annualized_return - benchmark_annual
-                tracking_error = volatility if volatility > 0 else 1e-10
-                information_ratio = excess / tracking_error
+            benchmark_annual = self._calc_benchmark_annual_return(benchmark_returns or [])
+            if aligned is not None:
+                port_rets, bench_rets = aligned
+                bench_var = float(np.var(bench_rets, ddof=1)) if len(bench_rets) > 1 else 0.0
+                if bench_var > 0:
+                    beta = float(np.cov(port_rets, bench_rets, ddof=1)[0, 1] / bench_var)
+
+                    # 跟踪误差必须是"超额收益序列"的波动率，
+                    # 不能拿组合总波动率充数（总波动包含大量基准共同波动）
+                    active_returns = port_rets - bench_rets
+                    tracking_error = float(np.std(active_returns, ddof=1)) * np.sqrt(ppy)
+                    excess_annual = annualized_return - benchmark_annual
+                    information_ratio = excess_annual / tracking_error if tracking_error > 0 else None
+
+                    alpha = annualized_return - (risk_free_rate + beta * (benchmark_annual - risk_free_rate))
 
             return {
                 'total_return': total_return,
                 'annualized_return': annualized_return,
                 'volatility': volatility,
-                'sharpe_ratio': sharpe_ratio,
+                'sharpe_ratio': float(sharpe_ratio),
                 'max_drawdown': max_drawdown,
                 'win_rate': win_rate,
                 'calmar_ratio': calmar_ratio,
                 'total_trades': len(daily_returns),
-                'avg_daily_return': np.mean(daily_returns) if daily_returns else 0,
-                'std_daily_return': np.std(daily_returns) if daily_returns else 0,
+                'avg_daily_return': mean_period_return,
+                'std_daily_return': float(np.std(daily_returns)) if daily_returns else 0,
                 'var_95': var_95,
                 'cvar_95': cvar_95,
                 'beta': beta,
                 'alpha': alpha,
                 'information_ratio': information_ratio,
+                'trading_days': n_obs,
             }
-            
+
         except Exception as e:
             logger.error(f"计算回测指标失败: {e}")
             return {}
 
-    def _calc_beta(self, portfolio_values: List[Dict[str, Any]],
-                   daily_returns: List[float],
-                   benchmark_returns: List[Dict[str, Any]]) -> Optional[float]:
-        """计算 Beta：组合逐期收益 vs 基准在相同日期窗口内的累计收益。
+    def _align_with_benchmark(self, portfolio_values: List[Dict[str, Any]],
+                              daily_returns: List[float],
+                              benchmark_returns: List[Dict[str, Any]]):
+        """把组合区间收益与基准在同区间内的复合收益对齐。
 
-        组合收益的每一期是 [date_{i-1}, date_i] 的区间收益，因此基准日收益
-        必须按同样的窗口复合，直接按位置截断对齐会把不相关日期的收益混在一起。
+        组合每一期是 [date_{i-1}, date_i] 的区间收益，因此基准日收益
+        必须按同样的窗口复合，直接按位置截断对齐会把不相关日期的收益
+        混在一起。返回 (port_rets, bench_rets) 或 None。
         """
         try:
             if len(portfolio_values) < 2 or not daily_returns or not benchmark_returns:
@@ -625,29 +755,22 @@ class BacktestEngine:
                 return None
 
             bench_dates = np.array([r[0] for r in bench_records])
-            bench_rets = np.array([r[1] for r in bench_records])
+            bench_rets_all = np.array([r[1] for r in bench_records])
 
             port_dates = [pd.to_datetime(pv['date']).normalize() for pv in portfolio_values]
             window_bench_returns = []
             aligned_port_returns = []
             for prev_date, cur_date, port_ret in zip(port_dates[:-1], port_dates[1:], daily_returns):
                 mask = (bench_dates > prev_date) & (bench_dates <= cur_date)
-                segment = bench_rets[mask]
+                segment = bench_rets_all[mask]
                 if len(segment) == 0:
                     continue
-                compounded = np.prod(1.0 + segment) - 1.0
-                window_bench_returns.append(compounded)
-                aligned_port_returns.append(port_ret)
+                window_bench_returns.append(float(np.prod(1.0 + segment) - 1.0))
+                aligned_port_returns.append(float(port_ret))
 
             if len(window_bench_returns) < 2:
                 return None
-            port = np.array(aligned_port_returns)
-            bench = np.array(window_bench_returns)
-            cov_matrix = np.cov(port, bench)
-            bench_var = np.var(bench, ddof=1)
-            if bench_var == 0:
-                return None
-            return float(cov_matrix[0, 1] / bench_var)
+            return np.array(aligned_port_returns), np.array(window_bench_returns)
         except Exception:
             return None
 
@@ -874,6 +997,7 @@ class BacktestEngine:
         return {
             'commission_rate': float(strategy_config.get('commission_rate', 0.001)),
             'slippage_rate': float(strategy_config.get('slippage_rate', 0.0)),
+            'stamp_duty_rate': float(strategy_config.get('stamp_duty_rate', Config.DEFAULT_STAMP_DUTY_RATE)),
             'benchmark_index': strategy_config.get('benchmark_index', '000300.SH'),
             'execution_price': 'next_trade_day_close',
         }

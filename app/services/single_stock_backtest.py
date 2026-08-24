@@ -8,6 +8,7 @@
 
 import pandas as pd
 import numpy as np
+from config import Config
 from datetime import datetime
 from loguru import logger
 
@@ -23,6 +24,8 @@ class SingleStockBacktestEngine:
         self.end_date = config['end_date']
         self.initial_capital = config['initial_capital']
         self.commission_rate = config.get('commission_rate', 0.001)
+        # A 股印花税：卖方单边强制成本（2023-08-28 起 0.05%）
+        self.stamp_duty_rate = config.get('stamp_duty_rate', Config.DEFAULT_STAMP_DUTY_RATE)
         self.params = config.get('params', {})
 
         # 回测状态
@@ -30,6 +33,7 @@ class SingleStockBacktestEngine:
         self.position = 0  # 持仓数量
         self.trades = []
         self.daily_values = []
+        self.liquidation_cost = 0.0  # 期末强平成本，_calculate_performance 中更新
 
     def run_backtest(self, history_data, factors_data):
         """运行回测"""
@@ -172,8 +176,13 @@ class SingleStockBacktestEngine:
         """布林带策略"""
         for i in range(len(df)):
             close = df.iloc[i]['close']
-            boll_upper = df.iloc[i]['boll_upper'] if pd.notna(df.iloc[i]['boll_upper']) else close
-            boll_lower = df.iloc[i]['boll_lower'] if pd.notna(df.iloc[i]['boll_lower']) else close
+            boll_upper = df.iloc[i]['boll_upper']
+            boll_lower = df.iloc[i]['boll_lower']
+
+            # 轨道尚未成形（滚动窗口不足，NaN）时跳过。
+            # 旧实现用 close 兜底 NaN 轨道，首根 bar 就会触发"触及下轨"买入
+            if pd.isna(boll_upper) or pd.isna(boll_lower):
+                continue
 
             # 价格触及下轨买入
             if close <= boll_lower and boll_lower > 0:
@@ -184,13 +193,57 @@ class SingleStockBacktestEngine:
 
         return df
 
+    def _limit_threshold(self) -> float:
+        """涨跌停判定阈值。
+
+        这里拿不到股票名称/板块信息，无法区分 ST(5%) 与创业板/科创板(20%)，
+        统一用主板 10% 减去容差。对主板股票是精确的；对 20% 涨跌幅品种
+        只会漏判极端一字板，属于可接受的保守近似。
+        """
+        return 0.098
+
+    def _is_suspended(self, row: pd.Series) -> bool:
+        """当日无成交（停牌）：按量价为 0 或缺失判定。"""
+        vol = row.get('vol')
+        close = row.get('close')
+        if close is None or pd.isna(close) or float(close) <= 0:
+            return True
+        if vol is not None and not pd.isna(vol) and float(vol) <= 0:
+            return True
+        return False
+
+    def _limit_flags(self, row: pd.Series) -> tuple:
+        """返回 (涨停不可买, 跌停不可卖)。"""
+        close = float(row['close'])
+        pct_chg = row.get('pct_chg')
+        pre_close = row.get('pre_close')
+        try:
+            if pct_chg is not None and not pd.isna(pct_chg):
+                chg = float(pct_chg) / 100.0
+            elif pre_close is not None and not pd.isna(pre_close) and float(pre_close) > 0:
+                chg = close / float(pre_close) - 1.0
+            else:
+                return False, False
+        except (TypeError, ValueError):
+            return False, False
+
+        threshold = self._limit_threshold()
+        return chg >= threshold, chg <= -threshold
+
     def _execute_trades(self, df):
         """执行交易：信号在 t 日收盘后产生，t+1 收盘成交。
 
         当日收盘才能确认的信号按当日收盘价成交是未来函数，
         因此这里用 pending_signal 把执行推迟到下一根 bar。
+
+        可成交性约束（与多因子回测引擎口径一致）：
+        - 停牌（无成交）不交易
+        - 涨停不买入、跌停不卖出——反转类策略的超卖反弹日常见一字涨停，
+          无条件成交会系统性高估此类策略收益
+        - 卖出加收印花税（卖方单边）
         """
         pending_signal = 0
+        limit_threshold = self._limit_threshold()
         for i in range(len(df)):
             row = df.iloc[i]
             price = row['close']
@@ -200,7 +253,10 @@ class SingleStockBacktestEngine:
             signal = pending_signal
             pending_signal = int(row['signal']) if not pd.isna(row['signal']) else 0
 
-            if signal == 1 and self.position == 0:  # 买入
+            suspended = self._is_suspended(row)
+            limit_up, limit_down = (False, False) if suspended else self._limit_flags(row)
+
+            if signal == 1 and self.position == 0 and not suspended and not limit_up:  # 买入
                 # 计算可买入数量（按手，1手=100股）
                 max_shares = int(self.cash / price / 100) * 100
                 if max_shares >= 100:  # 至少买入1手
@@ -221,9 +277,10 @@ class SingleStockBacktestEngine:
                             'return_rate': None
                         })
 
-            elif signal == -1 and self.position > 0:  # 卖出
+            elif signal == -1 and self.position > 0 and not suspended and not limit_down:  # 卖出
                 commission = self.position * price * self.commission_rate
-                total_income = self.position * price - commission
+                stamp_duty = self.position * price * self.stamp_duty_rate
+                total_income = self.position * price - commission - stamp_duty
 
                 # 计算收益率
                 buy_trade = None
@@ -248,6 +305,7 @@ class SingleStockBacktestEngine:
                     'quantity': sell_quantity,
                     'amount': total_income,
                     'commission': commission,
+                    'stamp_duty': stamp_duty,
                     'return_rate': return_rate
                 })
 
@@ -265,11 +323,13 @@ class SingleStockBacktestEngine:
         if not self.daily_values:
             return self._get_default_performance()
 
-        # 最终清仓
+        # 最终清仓（期末强平的手续费同样要计入总成本统计）
         final_price = df.iloc[-1]['close']
         if self.position > 0:
             commission = self.position * final_price * self.commission_rate
-            self.cash += self.position * final_price - commission
+            stamp_duty = self.position * final_price * self.stamp_duty_rate
+            self.cash += self.position * final_price - commission - stamp_duty
+            self.liquidation_cost = commission + stamp_duty
             self.position = 0
 
         final_capital = self.cash
@@ -297,9 +357,15 @@ class SingleStockBacktestEngine:
 
         volatility = np.std(returns) * np.sqrt(252) if returns else 0
 
-        # 计算夏普比率
+        # 计算夏普比率：分子用算术平均超额收益年化，
+        # 几何年化做分子会随波动率上升系统性偏高
         risk_free_rate = 0.03  # 假设无风险利率3%
-        sharpe_ratio = (annual_return - risk_free_rate) / volatility if volatility > 0 else 0
+        rf_daily = risk_free_rate / 252
+        mean_daily = float(np.mean(returns)) if returns else 0.0
+        sharpe_ratio = (
+            (mean_daily - rf_daily) * np.sqrt(252) / np.std(returns)
+            if returns and np.std(returns) > 0 else 0
+        )
 
         # 交易统计
         buy_trades = [t for t in self.trades if t['action'] == 'buy']
@@ -323,8 +389,10 @@ class SingleStockBacktestEngine:
         end_price = df.iloc[-1]['close']
         benchmark_return = (end_price - start_price) / start_price
 
-        # 计算总手续费
+        # 计算总手续费：佣金 + 印花税 + 期末强平成本
         total_commission = sum(t['commission'] for t in self.trades if 'commission' in t)
+        total_commission += sum(t['stamp_duty'] for t in self.trades if 'stamp_duty' in t)
+        total_commission += self.liquidation_cost
 
         return {
             'total_return': total_return,

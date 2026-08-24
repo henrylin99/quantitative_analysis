@@ -6,7 +6,9 @@ import pandas as pd
 from app.utils.db_utils import DatabaseUtils
 
 
-FIELDS = "ts_code,symbol,name,area,industry,list_date"
+# delist_date/list_status 用于消除幸存者偏差：只下载在市(L)股票会让回测
+# 整体错过历史退市股，退市前的暴跌不进入样本，收益与回撤都会系统性失真。
+FIELDS = "ts_code,symbol,name,area,industry,list_date,delist_date,list_status"
 
 
 def _resolve_output_path() -> Path:
@@ -18,21 +20,39 @@ def _resolve_output_path() -> Path:
 
 
 def _normalize_list_date(df: pd.DataFrame) -> pd.DataFrame:
-    if "list_date" in df.columns:
+    cols = [c for c in ("list_date", "delist_date") if c in df.columns]
+    if cols:
         df = df.copy()
-        df["list_date"] = pd.to_datetime(df["list_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        for col in cols:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.strftime("%Y-%m-%d")
     return df
 
 
 def main() -> None:
-    """下载股票基础资料并写入本地 Parquet。"""
-    pro = DatabaseUtils.init_tushare_api()
-    df = pro.stock_basic(exchange="", list_status="L", fields=FIELDS)
+    """下载股票基础资料并写入本地 Parquet。
 
-    if df is None or df.empty:
+    必须同时下载 L（上市）/D（退市）/P（暂停上市）三种状态：
+    只下载在市股票会让整个系统（因子、标签、回测）天然错过历史退市股，
+    构成幸存者偏差——回测收益被系统性高估。
+    """
+    pro = DatabaseUtils.init_tushare_api()
+
+    frames = []
+    for status in ("L", "D", "P"):
+        try:
+            part = pro.stock_basic(exchange="", list_status=status, fields=FIELDS)
+        except Exception as exc:
+            print(f"[stock_basic] 下载 list_status={status} 失败: {exc}")
+            continue
+        if part is not None and not part.empty:
+            print(f"[stock_basic] list_status={status}: {len(part)} 条")
+            frames.append(part)
+
+    if not frames:
         print("[stock_basic] 没有获取到股票基础资料，跳过写入。")
         return
 
+    df = pd.concat(frames, ignore_index=True).drop_duplicates(subset="ts_code", keep="first")
     df = _normalize_list_date(df)
     output_path = _resolve_output_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -125,6 +125,53 @@ class ParquetDataReader:
         """读取技术因子数据（MACD/KDJ/RSI/布林带/CCI 等）。"""
         return self._read_table("stk_factor", ts_codes, start_date, end_date)
 
+    def get_return_prices(
+        self,
+        ts_codes: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """读取用于收益率/动量计算的价格序列（后复权优先）。
+
+        不复权 close 在除权除息日存在人为缺口（10送10 会被算成 -50% 收益），
+        直接做 pct_change 会污染动量因子与 ML 标签。这里优先使用 stk_factor
+        表的后复权收盘价；单只股票的复权覆盖率不足时整体退回不复权价，
+        避免同一条序列混用两种口径。
+        """
+        daily = self.get_daily(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
+        if daily.empty:
+            return daily
+
+        try:
+            sf = self.get_stk_factor(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
+        except Exception as e:
+            logger.warning(f"读取 stk_factor 失败，退回不复权价: {e}")
+            return daily
+
+        if sf.empty or "close_hfq" not in sf.columns:
+            return daily
+
+        hfq = sf[["ts_code", "trade_date", "close_hfq"]].dropna(subset=["close_hfq"])
+        if hfq.empty:
+            return daily
+
+        merged = daily.merge(
+            hfq.rename(columns={"close_hfq": "_close_adj"}),
+            on=["ts_code", "trade_date"],
+            how="left",
+        )
+        has_adj = merged["_close_adj"].notna()
+        coverage = merged.groupby("ts_code")["_close_adj"].transform(lambda s: s.notna().mean())
+        use_hfq = coverage >= 0.5
+
+        # 采用复权口径的股票：直接用复权价并丢弃缺失复权价的行，
+        # 否则序列两端会拼接两种口径产生假跳变
+        selected = merged[use_hfq & has_adj].copy()
+        selected["close"] = selected["_close_adj"]
+        fallback = merged[~use_hfq].copy()
+        result = pd.concat([selected, fallback], ignore_index=True)
+        return result.drop(columns=["_close_adj"])
+
     def get_moneyflow(
         self,
         ts_codes: Optional[List[str]] = None,

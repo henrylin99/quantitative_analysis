@@ -97,7 +97,7 @@ def test_ml_model_manager_prepare_training_data_uses_parquet_factor_store(tmp_pa
         ),
     )
 
-    X, y = manager.prepare_training_data("model_a", "2024-06-04", "2024-06-04")
+    X, y, _dates = manager.prepare_training_data("model_a", "2024-06-04", "2024-06-04")
     assert list(X.columns) == ["factor_a", "factor_b"]
     assert y.tolist() == [0.1, 0.2]
 
@@ -209,7 +209,7 @@ def test_ml_model_manager_can_train_a_minimal_parquet_model(tmp_path, monkeypatc
     )
     _write_factor_values(manager)
 
-    X, y = manager.prepare_training_data("model_minimal", "2024-06-01", "2024-06-12")
+    X, y, _dates = manager.prepare_training_data("model_minimal", "2024-06-01", "2024-06-12")
     assert len(X) > 0
     assert len(y) > 0
 
@@ -224,6 +224,12 @@ def test_target_return_calculation_reads_only_required_daily_window(monkeypatch)
     calls = []
 
     class CapturingReader:
+        def get_return_prices(self, ts_codes=None, start_date=None, end_date=None):
+            return self.get_daily(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
+
+        def get_stk_factor(self, ts_codes=None, start_date=None, end_date=None):
+            return pd.DataFrame()
+
         def get_daily(self, ts_codes=None, start_date=None, end_date=None):
             calls.append(
                 {

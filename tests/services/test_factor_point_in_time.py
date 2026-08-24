@@ -17,17 +17,19 @@ def engine():
 
 def test_point_in_time_stamp_prefers_announcement_date(engine):
     income_row = {"end_date": "20231231", "ann_date": "20240330", "f_ann_date": "20240328"}
-    # ann_date 与 f_ann_date 不一致时取孰晚（更保守的 point-in-time 假设）
-    assert engine._point_in_time_stamp(income_row) == "20240330"
+    # ann_date 与 f_ann_date 不一致时取孰晚（更保守的 point-in-time 假设）；
+    # 输出统一归一化为 YYYY-MM-DD（本地数据 YYYYMMDD/YYYY-MM-DD 混存，
+    # 字符串直接比较在混合格式下不可靠）
+    assert engine._point_in_time_stamp(income_row) == "2024-03-30"
 
     # ann_date 缺失时退回 end_date
     only_end = {"end_date": "20231231"}
-    assert engine._point_in_time_stamp(only_end) == "20231231"
+    assert engine._point_in_time_stamp(only_end) == "2023-12-31"
 
     # 多张报表取最晚公告日
     balance_row = {"end_date": "20231231", "ann_date": "20240415", "f_ann_date": None}
     income_row2 = {"end_date": "20231231", "ann_date": "20240330", "f_ann_date": None}
-    assert engine._point_in_time_stamp(income_row2, balance_row) == "20240415"
+    assert engine._point_in_time_stamp(income_row2, balance_row) == "2024-04-15"
 
 
 def test_roe_factor_stamped_with_ann_date_not_end_date(engine):

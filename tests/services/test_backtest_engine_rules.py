@@ -71,7 +71,8 @@ CFG = {
 
 
 def test_signal_executes_next_trading_day():
-    """首个净值点必须在信号日的下一个交易日——当日收盘选股、当日收盘成交是未来函数。"""
+    """t+1 规则：逐日净值下，信号日当日必须仍是纯现金（未建仓），
+    执行日起才出现持仓价值——当日收盘选股、当日收盘成交是未来函数。"""
     dates = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"]
     engine = _build_engine(
         dates,
@@ -81,10 +82,16 @@ def test_signal_executes_next_trading_day():
     )
     result = engine.run_backtest(CFG, "2026-01-05", "2026-01-08", 1_000_000.0, "daily")
     values = result["portfolio_values"]
-    assert values, "应有净值记录"
-    assert values[0]["date"] == "2026-01-06"
-    # 最后一个信号日没有可执行的下一交易日，不应产生净值点
-    assert values[-1]["date"] == "2026-01-08"
+    # 净值曲线逐日覆盖全部交易日
+    assert [v["date"] for v in values] == dates
+    # 信号日 01-05 当天收盘才选股，当日净值必须是纯现金
+    assert values[0]["positions_value"] == 0
+    assert values[0]["total_value"] == pytest.approx(1_000_000.0)
+    # 01-06（t+1 执行日）起持仓进入估值
+    assert values[1]["date"] == "2026-01-06"
+    assert values[1]["positions_value"] > 0
+    # 最后一个信号日 01-08 没有可执行的下一交易日，不产生调仓记录
+    assert len(result["daily_positions"]) == 3
 
 
 def test_limit_up_blocks_buy_then_allows_next_day():
@@ -139,14 +146,21 @@ def test_suspended_position_valued_at_last_known_price():
     result = engine.run_backtest(CFG, "2026-01-05", "2026-01-09", 1_000_000.0, "daily")
     last_positions = result["daily_positions"][-1]
     assert last_positions.get("D.SZ", 0) > 0, "停牌股持仓不能凭空消失"
-    final_value = result["portfolio_values"][-1]["total_value"]
-    # 等权两股各 50 万：A 恒定 10 元、D 以 8 元冻结，总价值应保持 100 万
-    assert final_value == pytest.approx(1_000_000.0)
+    values = result["portfolio_values"]
+    # 逐日净值：停牌期间（01-07 起）D 以最近已知价 8 元冻结估值，
+    # 组合总价值每天都不应假崩塌到远低于 100 万
+    assert values[-1]["total_value"] == pytest.approx(1_000_000.0)
+    for v in values[2:]:
+        assert v["total_value"] > 900_000, f"{v['date']} 停牌估值异常: {v['total_value']}"
 
 
-def test_volatility_annualized_by_actual_frequency():
-    """月度调仓的逐期收益不应按日频 sqrt(252) 年化（虚高约 sqrt(21) 倍）。"""
-    # 构造 25 个月度净值点，每期收益在 0.5%/1.5% 间交替（均值 1%）
+def test_volatility_annualized_on_daily_returns():
+    """波动率必须基于逐日 mark-to-market 收益并按 sqrt(252) 年化。
+
+    旧实现只在调仓日记净值点（月度=每年~12 个点），回撤与波动率被系统性
+    低估。本测试的日历里每个条目就是一个"交易日"，价格按 +0.5%/+1.5%
+    交替（日收益 std≈0.5%），因此年化波动率应 ≈ 0.005*sqrt(252)。
+    """
     dates = [f"{y}-{m:02d}-01" for y in (2024, 2025, 2026) for m in range(1, 13)][:25]
     ratios = [1.005 if i % 2 == 0 else 1.015 for i in range(25)]
     price = 10.0
@@ -157,8 +171,46 @@ def test_volatility_annualized_by_actual_frequency():
     engine = _build_engine(dates, {"A.SZ": prices}, {"A.SZ": [0] * 25}, ["A.SZ"])
     result = engine.run_backtest(CFG, dates[0], dates[-1], 1_000_000.0, "monthly")
     metrics = result["performance_metrics"]
-    # 月频、逐期收益 std=0.5% → 年化 ≈ 0.005*sqrt(12)；若错误地 *sqrt(252) 会约大 4.6 倍
-    assert metrics["volatility"] == pytest.approx(0.005 * (12 ** 0.5), rel=0.15)
+    # 逐日收益序列长度 ≈ 日历长度，而不是调仓次数
+    assert len(result["daily_returns"]) >= 20
+    assert metrics["volatility"] == pytest.approx(0.005 * (252 ** 0.5), rel=0.2)
+
+
+def test_nav_curve_covers_all_calendar_days():
+    """净值曲线必须覆盖每个交易日（mark-to-market），而非只有调仓日。"""
+    dates = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"]
+    engine = _build_engine(
+        dates,
+        {"A.SZ": [10, 11, 12, 13]},
+        {"A.SZ": [0, 10.0, 9.09, 8.33]},
+        ["A.SZ"],
+    )
+    result = engine.run_backtest(CFG, "2026-01-05", "2026-01-08", 1_000_000.0, "weekly")
+    nav_dates = [v["date"] for v in result["portfolio_values"]]
+    assert nav_dates == dates, "逐日净值应覆盖全部交易日"
+
+
+def test_information_ratio_uses_tracking_error():
+    """IR 分母必须是超额收益序列的跟踪误差，不能用组合总波动率充数。"""
+    import numpy as np
+
+    engine = BacktestEngine()
+    portfolio_values = [{"date": d} for d in ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"]]
+    port_rets = [0.01, -0.004, 0.012]
+    bench_rows = [
+        {"date": "2026-01-05", "close": 100, "daily_return": 0.0},
+        {"date": "2026-01-06", "close": 101, "daily_return": 0.01},
+        {"date": "2026-01-07", "close": 100.5, "daily_return": -0.00495},
+        {"date": "2026-01-08", "close": 101.7, "daily_return": 0.01194},
+    ]
+    aligned = engine._align_with_benchmark(portfolio_values, port_rets, bench_rows)
+    assert aligned is not None
+    port, bench = aligned
+    active = port - bench
+    te = float(np.std(active, ddof=1)) * np.sqrt(252)
+    total_vol = float(np.std(port, ddof=1)) * np.sqrt(252)
+    # 跟踪误差显著小于组合总波动（基准解释了大部分共同波动）
+    assert te < total_vol * 0.9
 
 
 def test_trade_constraints_reflect_real_policies():
