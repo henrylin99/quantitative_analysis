@@ -14,6 +14,9 @@ def _build_sqlalchemy_engine_options(database_uri: str) -> dict:
         return {
             "connect_args": {
                 "check_same_thread": False,
+                # web 进程与 celery worker 共写同一库文件，
+                # 没有 busy_timeout 时并发写会直接抛 database is locked
+                "timeout": 30,
             }
         }
     return {

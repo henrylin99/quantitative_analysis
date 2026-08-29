@@ -713,8 +713,12 @@ class FactorEngine:
         df['factor_value'] = df.groupby('ts_code')['winner_rate'].diff(5)
         return self._finalize_factor_result(df, 'factor_value', factor_id)
 
-    def _filter_universe_asof(self, basic_df: pd.DataFrame, trade_date: str) -> List[str]:
+    def filter_universe_asof(self, basic_df: pd.DataFrame, trade_date: str) -> List[str]:
         """按历史时点过滤股票池，消除幸存者偏差与次新股污染。
+
+        所有"按 trade_date 计算全市场因子"的入口都必须先过这道过滤：
+        直接喂当前 stock_basic 全量代码，会把当时尚未上市的股票算进
+        历史截面，污染 z-score 与分位。对外公开，供 API 层复用。
 
         - 剔除 trade_date 之后才上市的股票（次新股上市初期波动特殊）
         - 剔除 trade_date 之前已退市的股票（依赖 stock_basic 中的 delist_date，
@@ -743,7 +747,7 @@ class FactorEngine:
             if ts_codes is None:
                 # 获取所有活跃股票，并按回看时点过滤（退市股/未来上市股不参与）
                 basic_df = self.data_reader.get_stock_basic()
-                ts_codes = self._filter_universe_asof(basic_df, trade_date)
+                ts_codes = self.filter_universe_asof(basic_df, trade_date)
             
             all_results = []
             # 同一调用窗口内多个因子共享数据读取：

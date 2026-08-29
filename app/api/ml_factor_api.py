@@ -251,10 +251,12 @@ def calculate_factors():
         if not trade_date:
             return jsonify({'error': '缺少交易日期参数'}), 400
         
-        # 如果没有指定股票代码，获取所有股票
+        # 如果没有指定股票代码，获取所有股票；
+        # 必须按 trade_date 过滤股票池（剔除未来上市/已退市），
+        # 直接用当前 stock_basic 全量会污染历史截面
         if not ts_codes:
             basic_df = _data_reader.get_stock_basic()
-            ts_codes = basic_df["ts_code"].tolist()
+            ts_codes = get_factor_engine().filter_universe_asof(basic_df, trade_date)
         
         # 计算因子
         if factor_ids:
@@ -912,8 +914,9 @@ def batch_calculate_and_score():
         # 步骤1: 计算因子并落库（步骤2 从 factor_values 存储读取，
         # 不落库的话打分用的还是旧数据）
         if ts_codes is None or len(ts_codes) == 0:
+            # 按 trade_date 过滤股票池，剔除未来上市/已退市股票
             basic_df = _data_reader.get_stock_basic()
-            ts_codes = basic_df["ts_code"].tolist()
+            ts_codes = get_factor_engine().filter_universe_asof(basic_df, trade_date)
 
         if factor_list:
             factor_results = []
@@ -1081,21 +1084,30 @@ def batch_train_and_predict():
 
 @ml_factor_bp.route('/portfolio/optimize', methods=['POST'])
 def optimize_portfolio():
-    """组合优化"""
+    """组合优化
+
+    as_of_date（可选）：风险模型估计的截止日期。对历史 trade_date 的
+    expected_returns 做优化时必须传入，否则协方差会用到该日期之后的
+    行情（前视偏差）；不传视为在线场景，用当前日期估计。
+    annualize_cov（可选，默认 False）：协方差按日频×252 年化。
+    expected_returns 为年化口径时必须开启，否则收益项与风险项量纲失配。
+    """
     try:
         data = request.get_json()
-        
+
         # 参数验证
         expected_returns = data.get('expected_returns')
         if not expected_returns:
             return jsonify({'error': '缺少预期收益率数据'}), 400
-        
+
         # 转换为pandas Series
         expected_returns_series = pd.Series(expected_returns)
-        
+
         method = data.get('method', 'mean_variance')
         constraints = data.get('constraints')
         risk_model = data.get('risk_model')  # 可选，如果不提供会自动估计
+        as_of_date = data.get('as_of_date')
+        annualize_cov = bool(data.get('annualize_cov', False))
 
         if method not in SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS:
             return jsonify({
@@ -1107,13 +1119,15 @@ def optimize_portfolio():
         risk_model_df = None
         if risk_model:
             risk_model_df = pd.DataFrame(risk_model)
-        
+
         # 执行组合优化
         result = get_portfolio_optimizer().optimize_portfolio(
-            expected_returns_series, 
-            risk_model_df, 
-            method, 
-            constraints
+            expected_returns_series,
+            risk_model_df,
+            method,
+            constraints,
+            as_of_date=as_of_date,
+            annualize_cov=annualize_cov
         )
         
         if 'error' in result:
@@ -1500,14 +1514,30 @@ def apply_portfolio_rebalance():
         return jsonify({'error': str(e)}), 500
 
 
+def _map_predictions_to_annualized_returns(predicted_returns: pd.Series) -> pd.Series:
+    """把模型预测的 N 日前向收益映射为年化预期收益。
+
+    predicted_return 是 target_period（5d/20d）前向收益，直接喂给年化
+    协方差量纲仍失配（收益项被风险项压过一个数量级）。与回测路径
+    （backtest_engine._scores_to_expected_returns）保持同一约定：保留截面
+    排序信息，线性映射到保守的年化收益区间，避免未经校准的预测幅度
+    主导目标函数。
+    """
+    pct_rank = predicted_returns.rank(pct=True)
+    lower = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_LOWER
+    upper = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_UPPER
+    return lower + (upper - lower) * pct_rank
+
+
 def _calibrate_scores_to_expected_returns(scores: pd.Series, trade_date: str,
                                           optimization_method: str) -> pd.Series:
-    """把归一化综合分映射到收益量纲。
+    """把归一化综合分映射到年化收益量纲。
 
     mean_variance/black_litterman/factor_neutral 按收益量纲使用 expected_returns，
     直接喂 0-1 排名分会让收益项压过风险项两三个数量级，组合退化成
     "全仓最高分"。这里保留分数排序，用同期截面实际收益的离散度定标：
-    z(score) × std(realized N日收益)。equal_weight/risk_parity 不消费
+    z(score) × std(realized N日收益) × sqrt(252/N)，年化口径与
+    annualize_cov=True 的年化协方差匹配。equal_weight/risk_parity 不消费
     收益数值，原样返回。
     """
     if scores.empty:
@@ -1533,6 +1563,8 @@ def _calibrate_scores_to_expected_returns(scores: pd.Series, trade_date: str,
         ).groupby(price_data['ts_code']).last()
 
         disp = float(pd.to_numeric(realized, errors='coerce').dropna().std())
+        # 年化：N 日收益离散度 × sqrt(252/N)，与年化协方差量纲匹配
+        disp = disp * np.sqrt(252.0 / RETURNS_CALIBRATION_PERIOD_DAYS)
         score_std = float(scores.astype(float).std())
         if not np.isfinite(disp) or disp <= 0 or not np.isfinite(score_std) or score_std <= 0:
             # 数据不足或分数无区分度时给零期望收益，
@@ -1595,6 +1627,10 @@ def integrated_portfolio_selection():
             if expected_returns.empty:
                 return jsonify({'error': 'ML选股结果缺少预测收益（predicted_return），无法进行组合优化'}), 500
 
+            # 保留原始前向预测用于透出，优化器输入用年化映射后的收益
+            predicted_returns = expected_returns.copy()
+            expected_returns = _map_predictions_to_annualized_returns(expected_returns)
+
         else:
             # 基于因子选股
             factor_scores = get_scoring_engine().calculate_factor_scores(trade_date, factor_list)
@@ -1626,15 +1662,21 @@ def integrated_portfolio_selection():
             )
 
         # 步骤2: 组合优化
+        # as_of_date=trade_date：协方差只允许用 trade_date 及之前的数据估计，
+        # 缺省会用到"今天"之后的行情，构成前视偏差；
+        # annualize_cov=True：expected_returns 已统一为年化口径，
+        # 协方差必须同步年化，否则收益项与风险项量纲失配
         optimization_result = get_portfolio_optimizer().optimize_portfolio(
             expected_returns,
             method=optimization_method,
-            constraints=constraints
+            constraints=constraints,
+            as_of_date=trade_date,
+            annualize_cov=True
         )
-        
+
         if 'error' in optimization_result:
             return jsonify({'error': f"组合优化失败: {optimization_result['error']}"}), 500
-        
+
         # 整合结果
         final_result = {
             'success': True,
@@ -1651,6 +1693,8 @@ def integrated_portfolio_selection():
                 'stats': optimization_result['portfolio_stats']
             }
         }
+        if selection_method == 'ml_based' and model_ids:
+            final_result['stock_selection']['predicted_returns'] = predicted_returns.to_dict()
         
         return jsonify(final_result)
         

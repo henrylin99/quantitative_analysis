@@ -8,11 +8,18 @@ from scipy.optimize import minimize
 from sklearn.covariance import LedoitWolf
 
 from app.services.data_reader import ParquetDataReader
+from config import Config
 
 
 class PortfolioOptimizer:
     """组合优化器"""
     UNSUPPORTED_CONSTRAINT_KEYS = set()
+
+    # 截面分数 → 年化预期收益的线性映射区间（保守量级，与年化协方差
+    # 匹配；如需调整请同步评估 risk_aversion）。回测与 API 的打分映射
+    # 共用同一区间，避免两处口径漂移
+    ANNUAL_EXPECTED_RETURN_LOWER = -0.15
+    ANNUAL_EXPECTED_RETURN_UPPER = 0.30
     
     def __init__(self):
         self.optimization_methods = {
@@ -84,7 +91,9 @@ class PortfolioOptimizer:
                 weights = self._apply_constraints(weights, constraints)
             
             # 计算组合统计
-            portfolio_stats = self._calculate_portfolio_stats(weights, expected_returns, risk_model)
+            portfolio_stats = self._calculate_portfolio_stats(
+                weights, expected_returns, risk_model, annualize_cov=annualize_cov
+            )
             
             result = {
                 'success': True,
@@ -542,26 +551,32 @@ class PortfolioOptimizer:
             logger.error(f"应用约束条件失败: {e}")
             return weights
     
-    def _calculate_portfolio_stats(self, weights: pd.Series, 
+    def _calculate_portfolio_stats(self, weights: pd.Series,
                                   expected_returns: pd.Series,
-                                  risk_model: pd.DataFrame) -> Dict[str, float]:
-        """计算组合统计指标"""
+                                  risk_model: pd.DataFrame,
+                                  annualize_cov: bool = False) -> Dict[str, float]:
+        """计算组合统计指标
+
+        annualize_cov 为 True 时 expected_returns 与协方差均为年化口径，
+        无风险利率必须同步年化；日频协方差（False）才用日化无风险利率，
+        否则夏普比率的分子分母相差 252 倍。
+        """
         try:
             # 确保索引一致
             common_index = weights.index.intersection(expected_returns.index)
             weights = weights[common_index]
             expected_returns = expected_returns[common_index]
             risk_model = risk_model.loc[common_index, common_index]
-            
+
             # 组合预期收益率
             portfolio_return = np.dot(weights.values, expected_returns.values)
-            
+
             # 组合风险（标准差）
             portfolio_variance = np.dot(weights.values, np.dot(risk_model.values, weights.values))
             portfolio_risk = np.sqrt(portfolio_variance)
-            
-            # 夏普比率（假设无风险利率为3%）
-            risk_free_rate = 0.03 / 252  # 日化无风险利率
+
+            # 夏普比率（无风险利率与收益同口径：年化协方差配年化利率）
+            risk_free_rate = Config.RISK_FREE_RATE if annualize_cov else Config.RISK_FREE_RATE / 252
             sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_risk if portfolio_risk > 0 else 0
             
             # 权重集中度（HHI指数）

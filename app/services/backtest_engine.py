@@ -372,9 +372,9 @@ class BacktestEngine:
             return []
     
     # 截面 z-score → 年化预期收益的线性映射区间（保守量级，
-    # 与年化协方差匹配；如需调整请同步评估 risk_aversion）
-    EXPECTED_RETURN_LOWER = -0.15
-    EXPECTED_RETURN_UPPER = 0.30
+    # 与年化协方差匹配；与 API 在线优化共用优化器上的同一区间）
+    EXPECTED_RETURN_LOWER = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_LOWER
+    EXPECTED_RETURN_UPPER = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_UPPER
 
     def _scores_to_expected_returns(self, selected_stocks: List[Dict[str, Any]]) -> pd.Series:
         """把截面 z-score 映射为量纲合理的年化预期收益。
