@@ -11,6 +11,7 @@ from app.services.ml_models import MLModelManager
 from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from app.services.backtest_engine import BacktestEngine
+from app.services.factor_analyzer import FactorAnalyzer
 from app.services.model_training_job_service import ModelTrainingJobService
 from app.services.data_reader import ParquetDataReader
 from app.services.parquet_state_store import BacktestRepository, ParquetStateStore, PortfolioRepository
@@ -30,6 +31,7 @@ scoring_engine = None
 portfolio_optimizer = None
 backtest_engine = None
 training_job_service = None
+factor_analyzer = None
 
 SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
 SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral", "black_litterman"}
@@ -92,6 +94,14 @@ def get_training_job_service():
     if training_job_service is None:
         training_job_service = ModelTrainingJobService()
     return training_job_service
+
+
+def get_factor_analyzer():
+    """获取因子分析引擎实例（延迟初始化）"""
+    global factor_analyzer
+    if factor_analyzer is None:
+        factor_analyzer = FactorAnalyzer()
+    return factor_analyzer
 
 
 def _get_latest_scoring_trade_date():
@@ -811,6 +821,73 @@ def sector_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/factor/analysis/ic', methods=['POST'])
+def factor_ic_analysis():
+    """因子 IC/IR 分析：因子截面与未来 N 日收益的秩相关"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_id = data.get('factor_id')
+        if not factor_id:
+            return jsonify({'error': '缺少必需参数: factor_id'}), 400
+
+        result = get_factor_analyzer().ic_analysis(
+            factor_id=factor_id,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            forward_period=int(data.get('forward_period', 1)),
+            min_stocks=int(data.get('min_stocks', 10)),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"因子IC分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/analysis/quantile', methods=['POST'])
+def factor_quantile_analysis():
+    """因子分层回测：按因子值分组的未来收益与多空价差"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_id = data.get('factor_id')
+        if not factor_id:
+            return jsonify({'error': '缺少必需参数: factor_id'}), 400
+
+        result = get_factor_analyzer().quantile_analysis(
+            factor_id=factor_id,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            forward_period=int(data.get('forward_period', 1)),
+            n_quantiles=int(data.get('n_quantiles', 5)),
+            min_stocks=int(data.get('min_stocks', 10)),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"因子分层分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/analysis/correlation', methods=['POST'])
+def factor_correlation_analysis():
+    """因子间截面秩相关矩阵（识别冗余因子）"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_ids = data.get('factor_ids')
+        if not factor_ids or len(factor_ids) < 2:
+            return jsonify({'error': '缺少必需参数: factor_ids（至少两个因子）'}), 400
+
+        result = get_factor_analyzer().correlation_matrix(
+            factor_ids=factor_ids,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            trade_date=data.get('trade_date'),
+            min_stocks=int(data.get('min_stocks', 10)),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"因子相关性分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/batch/calculate-and-score', methods=['POST'])
 def batch_calculate_and_score():
     """批量计算因子并打分"""
@@ -828,19 +905,48 @@ def batch_calculate_and_score():
         method = data.get('method', 'equal_weight')
         top_n = data.get('top_n', 50)
         
-        # 步骤1: 计算因子
+        # 步骤1: 计算因子并落库（步骤2 从 factor_values 存储读取，
+        # 不落库的话打分用的还是旧数据）
+        if ts_codes is None or len(ts_codes) == 0:
+            basic_df = _data_reader.get_stock_basic()
+            ts_codes = basic_df["ts_code"].tolist()
+
         if factor_list:
             factor_results = []
+            engine = get_factor_engine()
             for factor_id in factor_list:
-                result = get_factor_engine().calculate_factor(factor_id, trade_date, ts_codes)
-                factor_results.append({
-                    'factor_id': factor_id,
-                    'success': result['success'],
-                    'calculated_count': result.get('calculated_count', 0)
-                })
+                try:
+                    result_df = engine.calculate_factor(
+                        factor_id, ts_codes, trade_date, trade_date
+                    )
+                    saved = False
+                    if not result_df.empty:
+                        saved = engine.save_factor_values(result_df)
+                    factor_results.append({
+                        'factor_id': factor_id,
+                        'success': not result_df.empty,
+                        'calculated_count': len(result_df),
+                        'saved': saved,
+                    })
+                except Exception as e:
+                    logger.error(f"计算因子 {factor_id} 失败: {e}")
+                    factor_results.append({
+                        'factor_id': factor_id,
+                        'success': False,
+                        'calculated_count': 0,
+                        'error': str(e),
+                    })
         else:
             # 计算所有因子
-            factor_results = get_factor_engine().calculate_all_factors(trade_date, ts_codes)
+            result_df = get_factor_engine().calculate_all_factors(trade_date, ts_codes)
+            saved = False
+            if not result_df.empty:
+                saved = get_factor_engine().save_factor_values(result_df)
+            factor_results = {
+                'success': not result_df.empty,
+                'calculated_count': len(result_df),
+                'saved': saved,
+            }
         
         # 步骤2: 计算因子分数
         factor_scores = get_scoring_engine().calculate_factor_scores(trade_date, factor_list, ts_codes)

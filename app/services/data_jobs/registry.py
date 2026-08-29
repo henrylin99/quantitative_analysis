@@ -19,6 +19,7 @@ class JobRegistry:
             "stk_factor",             # 17
             "cyq_perf",               # 18
             "wide_table_builder",     # 20
+            "factor_compute",         # 因子计算（打分/回测的前置作业）
         }
 
         self._jobs: Dict[str, JobDefinition] = {
@@ -138,6 +139,23 @@ class JobRegistry:
                 source_name="derived",
                 source_mode="derived",
                 dependencies=["daily_basic", "stk_factor", "moneyflow", "stock_basic"],
+            ),
+            "factor_compute": JobDefinition(
+                "factor_compute",
+                "衍生计算",
+                "app/utils/factor_compute.py",
+                display_name="因子计算",
+                description=(
+                    "基于行情/资金流/筹码/财务数据计算内置因子与自定义表达式因子，"
+                    "写入 factor_values 供打分与回测使用。"
+                ),
+                recommended_order=11,
+                source_name="derived",
+                source_mode="derived",
+                dependencies=[
+                    "daily_history_by_code", "daily_basic", "stk_factor",
+                    "moneyflow", "cyq_perf", "income_statement", "balance_sheet",
+                ],
             ),
         }
 

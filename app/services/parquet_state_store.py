@@ -145,6 +145,54 @@ class ParquetStateStore:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
             fh.close()
 
+    # ------------------------------------------------------------------
+    # Hive 风格分区表支持：{base_dir}/{name}/{key}={value}/data.parquet
+    # 适用于按交易日增长的大表（如 factor_values），读写只触碰涉及的分区
+    # ------------------------------------------------------------------
+
+    def _partition_path(self, name: str, partition_key: str,
+                        partition_value: str) -> Path:
+        return self.base_dir / name / f"{partition_key}={partition_value}" / "data.parquet"
+
+    def list_partitions(self, name: str, partition_key: str = "trade_date") -> List[str]:
+        """列出分区值（按名称排序）。表不存在时返回空列表。"""
+        base = self.base_dir / name
+        if not base.is_dir():
+            return []
+        prefix = f"{partition_key}="
+        return sorted(
+            d.name[len(prefix):]
+            for d in base.iterdir()
+            if d.is_dir() and d.name.startswith(prefix) and (d / "data.parquet").is_file()
+        )
+
+    def read_partition(self, name: str, partition_key: str,
+                       partition_value: str) -> pd.DataFrame:
+        """读取单个分区；分区不存在返回空表，读损坏抛 StateStoreError。"""
+        path = self._partition_path(name, partition_key, partition_value)
+        if not path.is_file():
+            return pd.DataFrame()
+        try:
+            return pd.read_parquet(path)
+        except Exception as exc:
+            raise StateStoreError(f"读取 Parquet 分区失败 {path}: {exc}") from exc
+
+    def write_partition(self, name: str, partition_key: str,
+                        partition_value: str, df: pd.DataFrame) -> None:
+        """原子写入单个分区：先写临时文件再 rename。"""
+        path = self._partition_path(name, partition_key, partition_value)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame = df.copy()
+        if not frame.empty:
+            frame = frame.reset_index(drop=True)
+        tmp_path = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+        try:
+            frame.to_parquet(tmp_path, index=False)
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+
     def next_integer_id(self, name: str, column: str = "id") -> int:
         df = self.read_frame(name)
         if df.empty or column not in df.columns:
@@ -220,18 +268,85 @@ class FactorRepository:
         if missing:
             raise ValueError(f"factor values missing columns: {sorted(missing)}")
 
-        df = self.store.read_frame(self.TABLE_VALUES)
+        self._migrate_legacy_values()
+
+        df = frame.copy()
+        # trade_date 归一化到天：它同时是分区键和业务键的一部分
+        df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+        total = len(df)
+        df = df.dropna(subset=["trade_date"])
+        if len(df) < total:
+            logger.warning(f"因子值有 {total - len(df)} 行 trade_date 无效，写入时丢弃")
         if df.empty:
-            combined = frame.copy()
-        else:
-            combined = pd.concat([df, frame], ignore_index=True)
-        combined = self._dedupe_values(combined)
+            return 0
         # 数值列统一 float32：因子值精度足够，库体积与读取内存约省一半
         for column in ("factor_value", "z_score", "percentile_rank"):
-            if column in combined.columns:
-                combined[column] = pd.to_numeric(combined[column], errors="coerce").astype("float32")
-        self.store.write_frame(self.TABLE_VALUES, combined)
-        return len(frame)
+            if column in df.columns:
+                df[column] = pd.to_numeric(df[column], errors="coerce").astype("float32")
+
+        # 按交易日分区写入：trade_date 是业务键的一部分，同一记录只会
+        # 落入一个分区，跨分区不会产生重复；每次只读-改-写涉及的分区，
+        # 而不是整表重写
+        written = 0
+        for date_value, partition_frame in df.groupby(df["trade_date"].dt.normalize()):
+            partition_key = pd.Timestamp(date_value).strftime("%Y-%m-%d")
+            with self.store.locked(self.TABLE_VALUES):
+                existing = self.store.read_partition(
+                    self.TABLE_VALUES, "trade_date", partition_key
+                )
+                if existing.empty:
+                    combined = partition_frame
+                else:
+                    combined = pd.concat([existing, partition_frame], ignore_index=True)
+                combined = self._dedupe_values(combined)
+                self.store.write_partition(
+                    self.TABLE_VALUES, "trade_date", partition_key, combined
+                )
+            written += len(partition_frame)
+        return written
+
+    def _migrate_legacy_values(self) -> None:
+        """旧单文件 factor_values.parquet 一次性迁移到按日分区。
+
+        幂等：迁移完成后旧文件被改名为 .migrated 备份，不会重复迁移；
+        迁移在文件锁内进行并二次检查，多进程并发安全。
+        """
+        legacy_path = self.store.path_for(self.TABLE_VALUES)
+        if not legacy_path.is_file():
+            return
+        with self.store.locked(self.TABLE_VALUES):
+            if not legacy_path.is_file():
+                return  # 另一个进程已完成迁移
+            legacy = self.store.read_frame(self.TABLE_VALUES)
+            migrated_rows = 0
+            if not legacy.empty:
+                normalized = legacy.copy()
+                normalized["trade_date"] = pd.to_datetime(
+                    normalized["trade_date"], errors="coerce", format="mixed"
+                )
+                normalized = normalized.dropna(subset=["trade_date"])
+                for date_value, partition_frame in normalized.groupby(
+                    normalized["trade_date"].dt.normalize()
+                ):
+                    partition_key = pd.Timestamp(date_value).strftime("%Y-%m-%d")
+                    existing = self.store.read_partition(
+                        self.TABLE_VALUES, "trade_date", partition_key
+                    )
+                    if existing.empty:
+                        combined = partition_frame
+                    else:
+                        combined = pd.concat([existing, partition_frame], ignore_index=True)
+                    combined = self._dedupe_values(combined)
+                    self.store.write_partition(
+                        self.TABLE_VALUES, "trade_date", partition_key, combined
+                    )
+                    migrated_rows += len(partition_frame)
+            backup_path = legacy_path.with_name(f"{legacy_path.name}.migrated")
+            legacy_path.replace(backup_path)
+            logger.info(
+                f"factor_values 已迁移到按交易日分区存储"
+                f"（{migrated_rows} 行），旧文件备份为 {backup_path.name}"
+            )
 
     def get_values(
         self,
@@ -241,7 +356,18 @@ class FactorRepository:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> pd.DataFrame:
-        df = self.store.read_frame(self.TABLE_VALUES)
+        self._migrate_legacy_values()
+
+        # 分区裁剪：按日期过滤时只读取涉及的分区
+        partitions = self.store.list_partitions(self.TABLE_VALUES)
+        if not partitions:
+            return pd.DataFrame()
+        wanted = self._select_partitions(partitions, trade_date, start_date, end_date)
+        frames = [
+            self.store.read_partition(self.TABLE_VALUES, "trade_date", partition)
+            for partition in wanted
+        ]
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
         if df.empty:
             return df
 
@@ -279,6 +405,27 @@ class FactorRepository:
         if sort_cols:
             df = df.sort_values(sort_cols).reset_index(drop=True)
         return df
+
+    @staticmethod
+    def _select_partitions(partitions: List[str], trade_date: Optional[str],
+                           start_date: Optional[str],
+                           end_date: Optional[str]) -> List[str]:
+        """根据查询条件裁剪分区。trade_date 精确匹配优先于区间。"""
+        parsed = {p: pd.to_datetime(p, errors="coerce") for p in partitions}
+        if trade_date is not None:
+            trade_dt = pd.to_datetime(trade_date, errors="coerce")
+            if pd.isna(trade_dt):
+                return []
+            return [p for p, ts in parsed.items() if ts == trade_dt]
+
+        lo = pd.to_datetime(start_date, errors="coerce") if start_date else None
+        hi = pd.to_datetime(end_date, errors="coerce") if end_date else None
+        return [
+            p for p, ts in parsed.items()
+            if not pd.isna(ts)
+            and (lo is None or ts >= lo)
+            and (hi is None or ts <= hi)
+        ]
 
     def _dedupe_values(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:

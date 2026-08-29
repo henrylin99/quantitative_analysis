@@ -10,7 +10,7 @@ pytestmark = pytest.mark.module_factor_engine
 
 def _history_frame(close_values, volume_values):
     return {
-        "history": pd.DataFrame(
+        "return_prices": pd.DataFrame(
             {
                 "ts_code": ["000001.SZ"] * len(close_values),
                 "trade_date": pd.date_range("2024-01-01", periods=len(close_values), freq="D"),
