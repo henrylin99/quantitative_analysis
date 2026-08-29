@@ -68,3 +68,5 @@ celery = make_celery()
 
 # Ensure all task modules are imported so worker can discover registered tasks.
 from app.tasks import data_jobs_tasks  # noqa: E402,F401
+from app.tasks import report_tasks  # noqa: E402,F401
+from app.tasks import backtest_tasks  # noqa: E402,F401
