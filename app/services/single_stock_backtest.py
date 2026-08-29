@@ -26,6 +26,8 @@ class SingleStockBacktestEngine:
         self.commission_rate = config.get('commission_rate', 0.001)
         # A 股印花税：卖方单边强制成本（2023-08-28 起 0.05%）
         self.stamp_duty_rate = config.get('stamp_duty_rate', Config.DEFAULT_STAMP_DUTY_RATE)
+        # 与多因子回测引擎保持一致的成本口径：滑点双边收取
+        self.slippage_rate = config.get('slippage_rate', 0.0)
         self.params = config.get('params', {})
 
         # 回测状态
@@ -45,22 +47,25 @@ class SingleStockBacktestEngine:
             # 合并数据
             df = self._merge_data(df_history, df_factors)
 
-            # 筛选回测期间的数据
-            df = df[(df['trade_date'] >= self.start_date) & (df['trade_date'] <= self.end_date)]
-
-            if len(df) < 10:
-                raise ValueError("回测期间数据不足")
-
-            df = df.reset_index(drop=True)
-
-            # 计算策略信号
+            # 先在"全量数据"上计算信号，再截取回测区间：
+            # 调用方特意多取了约 100 天预热数据用于均线/动量指标，
+            # 若先截取后计算，长窗口指标在区间头部会是 NaN，预热白取
             df = self._calculate_signals(df)
 
-            # 执行交易
-            self._execute_trades(df)
+            # 筛选回测期间的数据
+            df_window = df[(df['trade_date'] >= self.start_date) & (df['trade_date'] <= self.end_date)]
+
+            if len(df_window) < 10:
+                raise ValueError("回测期间数据不足")
+
+            df_window = df_window.reset_index(drop=True)
+
+            # 执行交易：传入全量 df 与窗口边界，区间内的首日可以承接
+            # 上一根预热 bar 产生的信号（t+1 语义），预热段本身不交易、不记账
+            self._execute_trades(df, self.start_date, self.end_date)
 
             # 计算绩效指标
-            performance = self._calculate_performance(df)
+            performance = self._calculate_performance(df_window)
 
             return {
                 'performance': performance,
@@ -230,38 +235,51 @@ class SingleStockBacktestEngine:
         threshold = self._limit_threshold()
         return chg >= threshold, chg <= -threshold
 
-    def _execute_trades(self, df):
+    def _execute_trades(self, df, window_start=None, window_end=None):
         """执行交易：信号在 t 日收盘后产生，t+1 收盘成交。
 
         当日收盘才能确认的信号按当日收盘价成交是未来函数，
         因此这里用 pending_signal 把执行推迟到下一根 bar。
 
+        Args:
+            df: 已含信号的全量行情（可包含回测区间前的预热段）
+            window_start/window_end: 回测窗口边界；窗口外的 bar 只推进
+                信号状态，不交易、不记账
+
         可成交性约束（与多因子回测引擎口径一致）：
         - 停牌（无成交）不交易
         - 涨停不买入、跌停不卖出——反转类策略的超卖反弹日常见一字涨停，
           无条件成交会系统性高估此类策略收益
-        - 卖出加收印花税（卖方单边）
+        - 佣金+滑点双边收取，卖出加收印花税（卖方单边）
         """
         pending_signal = 0
-        limit_threshold = self._limit_threshold()
+        cost_rate = self.commission_rate + self.slippage_rate
         for i in range(len(df)):
             row = df.iloc[i]
             price = row['close']
             date = row['trade_date'].strftime('%Y-%m-%d')
+            in_window = (
+                (window_start is None or date >= window_start)
+                and (window_end is None or date <= window_end)
+            )
 
             # 执行上一根 bar 产生的信号（今日收盘价成交）
             signal = pending_signal
             pending_signal = int(row['signal']) if not pd.isna(row['signal']) else 0
 
+            if not in_window:
+                continue
+
             suspended = self._is_suspended(row)
             limit_up, limit_down = (False, False) if suspended else self._limit_flags(row)
 
             if signal == 1 and self.position == 0 and not suspended and not limit_up:  # 买入
-                # 计算可买入数量（按手，1手=100股）
-                max_shares = int(self.cash / price / 100) * 100
+                # 计算可买入数量（按手，1手=100股），预留佣金+滑点
+                max_shares = int(self.cash / (price * (1 + cost_rate)) / 100) * 100
                 if max_shares >= 100:  # 至少买入1手
                     commission = max_shares * price * self.commission_rate
-                    total_cost = max_shares * price + commission
+                    slippage = max_shares * price * self.slippage_rate
+                    total_cost = max_shares * price + commission + slippage
 
                     if total_cost <= self.cash:
                         self.cash -= total_cost
@@ -274,13 +292,15 @@ class SingleStockBacktestEngine:
                             'quantity': max_shares,
                             'amount': total_cost,
                             'commission': commission,
+                            'slippage': slippage,
                             'return_rate': None
                         })
 
             elif signal == -1 and self.position > 0 and not suspended and not limit_down:  # 卖出
                 commission = self.position * price * self.commission_rate
+                slippage = self.position * price * self.slippage_rate
                 stamp_duty = self.position * price * self.stamp_duty_rate
-                total_income = self.position * price - commission - stamp_duty
+                total_income = self.position * price - commission - slippage - stamp_duty
 
                 # 计算收益率
                 buy_trade = None
@@ -305,6 +325,7 @@ class SingleStockBacktestEngine:
                     'quantity': sell_quantity,
                     'amount': total_income,
                     'commission': commission,
+                    'slippage': slippage,
                     'stamp_duty': stamp_duty,
                     'return_rate': return_rate
                 })
@@ -327,9 +348,10 @@ class SingleStockBacktestEngine:
         final_price = df.iloc[-1]['close']
         if self.position > 0:
             commission = self.position * final_price * self.commission_rate
+            slippage = self.position * final_price * self.slippage_rate
             stamp_duty = self.position * final_price * self.stamp_duty_rate
-            self.cash += self.position * final_price - commission - stamp_duty
-            self.liquidation_cost = commission + stamp_duty
+            self.cash += self.position * final_price - commission - slippage - stamp_duty
+            self.liquidation_cost = commission + slippage + stamp_duty
             self.position = 0
 
         final_capital = self.cash
@@ -359,7 +381,7 @@ class SingleStockBacktestEngine:
 
         # 计算夏普比率：分子用算术平均超额收益年化，
         # 几何年化做分子会随波动率上升系统性偏高
-        risk_free_rate = 0.03  # 假设无风险利率3%
+        risk_free_rate = Config.RISK_FREE_RATE
         rf_daily = risk_free_rate / 252
         mean_daily = float(np.mean(returns)) if returns else 0.0
         sharpe_ratio = (
@@ -389,7 +411,8 @@ class SingleStockBacktestEngine:
         end_price = df.iloc[-1]['close']
         benchmark_return = (end_price - start_price) / start_price
 
-        # 计算总手续费：佣金 + 印花税 + 期末强平成本
+        # 成本统计：total_commission 历史上就混入了印花税与强平成本，
+        # 为兼容前端保留原字段，另提供语义明确的 liquidation_cost 分项
         total_commission = sum(t['commission'] for t in self.trades if 'commission' in t)
         total_commission += sum(t['stamp_duty'] for t in self.trades if 'stamp_duty' in t)
         total_commission += self.liquidation_cost
@@ -406,6 +429,8 @@ class SingleStockBacktestEngine:
             'avg_holding_days': round(avg_holding_days, 1),
             'final_capital': final_capital,
             'total_commission': total_commission,
+            'total_cost': total_commission,
+            'liquidation_cost': self.liquidation_cost,
             'benchmark_return': benchmark_return
         }
 
@@ -423,5 +448,7 @@ class SingleStockBacktestEngine:
             'avg_holding_days': 0,
             'final_capital': self.initial_capital,
             'total_commission': 0.0,
+            'total_cost': 0.0,
+            'liquidation_cost': 0.0,
             'benchmark_return': 0.0
         }

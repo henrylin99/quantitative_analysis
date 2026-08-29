@@ -41,6 +41,8 @@ class Config:
     # A 股印花税：卖方单边强制成本（2023-08-28 起 0.05%），
     # 多因子与单股回测共用同一默认值，调整口径只改这里
     DEFAULT_STAMP_DUTY_RATE = float(os.getenv('DEFAULT_STAMP_DUTY_RATE', '0.0005'))
+    # 夏普/alpha 计算的无风险利率，两套回测引擎共用
+    RISK_FREE_RATE = float(os.getenv('RISK_FREE_RATE', '0.03'))
     # 跨域与 SocketIO：生产环境应通过环境变量收紧 CORS_ORIGINS，
     # SOCKETIO_ASYNC_MODE=eventlet 时必须在入口先 monkey_patch
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')

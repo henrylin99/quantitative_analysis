@@ -704,6 +704,34 @@ class BacktestRepository:
             for _, row in df.iterrows()
         ]
 
+    # ------------------------------------------------------------------
+    # 回测完整结果（异步任务落盘，API 轮询读取）
+    # ------------------------------------------------------------------
+
+    TABLE_RESULTS = "backtest_results"
+
+    def save_result(self, run_id: int, result: Dict[str, Any]) -> None:
+        """保存回测完整结果（同一 run_id 覆盖写入）。"""
+        df = self.store.read_frame(self.TABLE_RESULTS)
+        row = {
+            "run_id": int(run_id),
+            "result_json": json.dumps(result or {}, ensure_ascii=False, default=str),
+            "created_at": _now_iso(),
+        }
+        if not df.empty and "run_id" in df.columns:
+            df = df[pd.to_numeric(df["run_id"], errors="coerce") != int(run_id)]
+        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+        self.store.write_frame(self.TABLE_RESULTS, df)
+
+    def get_result(self, run_id: int) -> Optional[Dict[str, Any]]:
+        df = self.store.read_frame(self.TABLE_RESULTS)
+        if df.empty or "run_id" not in df.columns:
+            return None
+        match = df[pd.to_numeric(df["run_id"], errors="coerce") == int(run_id)]
+        if match.empty:
+            return None
+        return _normalize_json(match.iloc[-1].get("result_json"))
+
 
 def _record_to_dict(row: Any, json_columns: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     json_columns = set(json_columns or [])

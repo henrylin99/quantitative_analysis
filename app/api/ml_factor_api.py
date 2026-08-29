@@ -1496,21 +1496,52 @@ def integrated_portfolio_selection():
 
 @ml_factor_bp.route('/backtest/run', methods=['POST'])
 def run_backtest():
-    """运行回测"""
+    """运行回测
+
+    mode=async 时改为 Celery 异步执行：立即返回 run_id，前端轮询
+    /backtest/runs/<id> 的 summary.status，完成后取
+    /backtest/runs/<id>/result。默认同步执行，行为与历史版本一致。
+    """
     try:
         data = request.get_json()
-        
+
         # 参数验证
         strategy_config = data.get('strategy_config')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
-        
+
         if not all([strategy_config, start_date, end_date]):
             return jsonify({'error': '缺少必需参数: strategy_config, start_date, end_date'}), 400
-        
+
         initial_capital = data.get('initial_capital', 1000000.0)
         rebalance_frequency = data.get('rebalance_frequency', 'monthly')
-        
+        mode = str(data.get('mode') or 'sync').lower()
+
+        if mode == 'async':
+            run = _backtest_repo.create_run(
+                strategy_config=strategy_config,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                rebalance_frequency=rebalance_frequency,
+            )
+            run_id = int(run['id'])
+            _backtest_repo.update_summary(run_id, {'status': 'queued'})
+            # 延迟导入，避免 API 模块加载期拉起 Celery 任务链
+            from app.tasks.backtest_tasks import run_backtest_task
+            async_result = run_backtest_task.delay(
+                run_id, strategy_config, start_date, end_date,
+                initial_capital, rebalance_frequency,
+            )
+            return jsonify({
+                'success': True,
+                'queued': True,
+                'run_id': run_id,
+                'task_id': getattr(async_result, 'id', None),
+                'status_url': f'/api/ml-factor/backtest/runs/{run_id}',
+                'result_url': f'/api/ml-factor/backtest/runs/{run_id}/result',
+            })
+
         # 执行回测
         result = get_backtest_engine().run_backtest(
             strategy_config,
@@ -1519,12 +1550,12 @@ def run_backtest():
             initial_capital,
             rebalance_frequency
         )
-        
+
         if 'error' in result:
             return jsonify({'error': result['error']}), 500
-        
+
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"回测失败: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1543,6 +1574,34 @@ def get_backtest_run(run_id):
         })
     except Exception as e:
         logger.error(f"获取回测记录失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/backtest/runs/<int:run_id>/result', methods=['GET'])
+def get_backtest_run_result(run_id):
+    """获取异步回测的完整结果（任务完成前返回 404/状态提示）"""
+    try:
+        run = _backtest_repo.get_run(run_id)
+        if run is None:
+            return jsonify({'error': '回测记录不存在'}), 404
+        result = _backtest_repo.get_result(run_id)
+        if result is None:
+            status = (run.get('summary') or {}).get('status', 'unknown')
+            return jsonify({
+                'success': True,
+                'run_id': run_id,
+                'status': status,
+                'ready': False,
+                'message': f'回测尚未完成（status={status}）',
+            })
+        return jsonify({
+            'success': True,
+            'run_id': run_id,
+            'ready': True,
+            'result': result,
+        })
+    except Exception as e:
+        logger.error(f"获取回测结果失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
