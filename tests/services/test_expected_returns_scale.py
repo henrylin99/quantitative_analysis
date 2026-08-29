@@ -74,7 +74,7 @@ def _price_frame():
     return pd.DataFrame(rows)
 
 
-def test_calibration_maps_scores_to_return_scale(monkeypatch):
+def test_calibration_maps_scores_to_annualized_return_scale(monkeypatch):
     import app.api.ml_factor_api as api
 
     monkeypatch.setattr(api, "ParquetDataReader", lambda: _FakeReader(_price_frame()))
@@ -82,10 +82,12 @@ def test_calibration_maps_scores_to_return_scale(monkeypatch):
 
     out = _calibrate_scores_to_expected_returns(scores, "2026-06-21", "mean_variance")
 
-    # 排序不变；量纲与同期实际收益离散度一致（std = 0.10 * sqrt(2)）
+    # 排序不变；量纲为年化收益（20日离散度 std=0.10 按 sqrt(252/20) 年化），
+    # 与年化协方差匹配，否则收益项与风险项量纲失配
+    annualization = np.sqrt(252.0 / RETURNS_CALIBRATION_PERIOD_DAYS)
     assert out["000001.SZ"] > out["000002.SZ"]
-    assert out.abs().max() == pytest.approx(0.10, rel=1e-6)
-    assert out.std() == pytest.approx(0.10 * np.sqrt(2), rel=1e-6)
+    assert out.abs().max() == pytest.approx(0.10 * annualization, rel=1e-6)
+    assert out.std() == pytest.approx(0.10 * np.sqrt(2) * annualization, rel=1e-6)
 
 
 def test_calibration_passthrough_for_methods_that_ignore_returns(monkeypatch):

@@ -48,8 +48,19 @@ class StockScoringEngine:
                 columns='factor_id',
                 values=score_column,
                 aggfunc='first'
-            ).fillna(0)
-            
+            )
+
+            # 缺失因子数据的股票直接剔除，与 ML 路径 dropna 口径一致。
+            # 不能填 0 冒充"截面中性分"：z_score 均值≈0，填 0 会让缺数据的
+            # 股票以中性分参与 top N 排名，挤掉数据完整的股票
+            total_count = len(factor_scores)
+            factor_scores = factor_scores.dropna(how='any')
+            if len(factor_scores) < total_count:
+                logger.warning(
+                    f"因子分数缺失剔除: {total_count - len(factor_scores)}/{total_count} 只股票"
+                    f"存在因子数据缺口，已从截面中剔除"
+                )
+
             logger.info(f"计算因子分数完成: {len(factor_scores)} 只股票, {len(factor_scores.columns)} 个因子")
             return factor_scores
             
