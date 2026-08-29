@@ -1,8 +1,5 @@
-import time
-
 from db_utils import DatabaseUtils
-from parquet_job_helpers import resolve_trade_dates
-from parquet_writer import save_partitioned_parquet
+from parquet_job_helpers import DailyFetchJob
 
 
 FIELDS = [
@@ -29,18 +26,16 @@ FIELDS = [
 ]
 
 
+class MoneyflowJob(DailyFetchJob):
+    job_name = "moneyflow"
+    rel_table = "moneyflow/daily"
+
+    def fetch_one(self, trade_date):
+        return self.api.moneyflow(trade_date=trade_date, fields=FIELDS)
+
+
 def main():
-    pro = DatabaseUtils.init_tushare_api()
-    trade_dates, _ = resolve_trade_dates()
-
-    total_saved = 0
-    for trade_date in trade_dates:
-        print(f"[moneyflow] trade_date={trade_date}")
-        data = pro.moneyflow(trade_date=trade_date, fields=FIELDS)
-        total_saved += save_partitioned_parquet(data, "trade_date", "moneyflow/daily")
-        time.sleep(0.05)
-
-    print(f"[moneyflow] 完成，trade_days={len(trade_dates)}, total_upsert={total_saved}")
+    MoneyflowJob(api=DatabaseUtils.init_tushare_api()).run()
 
 
 if __name__ == "__main__":

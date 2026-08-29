@@ -43,6 +43,11 @@ class DataJobService:
     def submit(self, job_type: str, params: Optional[Dict[str, Any]] = None):
         definition = self.registry.get_job(job_type)
         params = params or {}
+        # 提交前先清理僵尸 run：worker 被 kill 后 run 永远停在 running，
+        # 不清理的话 find_active_duplicate 会永久拒绝该作业再次提交
+        reap_stale = getattr(self.state_store, "reap_stale_runs", None)
+        if callable(reap_stale):
+            reap_stale()
         find_active_duplicate = getattr(self.state_store, "find_active_duplicate", None)
         if callable(find_active_duplicate):
             duplicate_run = find_active_duplicate(job_type, params)

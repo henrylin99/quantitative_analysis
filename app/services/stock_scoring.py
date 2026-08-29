@@ -364,6 +364,12 @@ class StockScoringEngine:
                     'percentile_rank': float(row['percentile_rank']),
                     'model_count': int(row['model_count'])
                 }
+                # 预测收益（真实收益量纲）单独透出：组合优化器的 expected_returns
+                # 需要收益口径，ensemble_score 在 rank_average 集成下是 1/rank
+                predicted_return = row.get('predicted_return')
+                stock_data['predicted_return'] = (
+                    float(predicted_return) if pd.notna(predicted_return) else None
+                )
                 
                 # 添加股票基本信息
                 if row['ts_code'] in stock_info:
@@ -394,6 +400,9 @@ class StockScoringEngine:
                     'predicted_return': 'ensemble_score',
                     'model_id': 'model_count'
                 })
+                # average 下 ensemble_score 就是预测收益，保留原始量纲列，
+                # 供组合优化按收益口径使用（rank_average 的 ensemble_score 是 1/rank，不可混用）
+                ensemble_result['predicted_return'] = ensemble_result['ensemble_score']
                 
             elif method == 'weighted_average':
                 # 加权平均（基于模型历史表现）
@@ -437,6 +446,9 @@ class StockScoringEngine:
                         'model_count': int(g['model_id'].nunique())
                     })
                 ).reset_index()
+                # 同步保留未加权的预测收益均值，维持收益量纲列在所有集成方法下可用
+                mean_returns = predictions.groupby('ts_code')['predicted_return'].mean()
+                ensemble_result['predicted_return'] = ensemble_result['ts_code'].map(mean_returns)
                 
             elif method == 'rank_average':
                 # 排名平均

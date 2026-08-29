@@ -292,7 +292,64 @@ class RealtimeIndicatorEngine:
                     'error': str(e)
                 }
     
-    def calculate_indicators(self, ts_code: str, period_type: str, 
+    def _adjust_minute_prices(self, ts_code: str, df: pd.DataFrame) -> pd.DataFrame:
+        """把分钟 OHLC 调整到前复权口径（锚定最新交易日复权比 = 1）。
+
+        回测/因子侧统一用后复权价，实时指标若直接用未复权分钟价，
+        除权除息日的分红缺口会被当成价格跳空。以最新日复权比归一：
+        窗口内无除权事件时 adj_factor 恒为 1、数值与未复权完全一致；
+        有除权时历史 bar 被缩放、跳空被抹平，且最新值仍与盘面价格对齐。
+        任何数据问题都降级为返回原 df（宁可未复权也不能算不出指标）。
+        """
+        try:
+            price_cols = [c for c in ("open", "high", "low", "close") if c in df.columns]
+            if df.empty or not price_cols or "datetime" not in df.columns:
+                return df
+
+            end_str = df["datetime"].max().strftime("%Y-%m-%d")
+            start_str = (df["datetime"].min() - timedelta(days=10)).strftime("%Y-%m-%d")
+            hfq = self.data_reader.get_return_prices(
+                ts_codes=[ts_code], start_date=start_str, end_date=end_str
+            )
+            raw = self.data_reader.get_daily(
+                ts_codes=[ts_code], start_date=start_str, end_date=end_str
+            )
+            if hfq.empty or raw.empty:
+                return df
+
+            daily = hfq[["trade_date", "close"]].rename(columns={"close": "close_hfq"}).merge(
+                raw[["trade_date", "close"]].rename(columns={"close": "close_raw"}),
+                on="trade_date", how="inner",
+            )
+            daily = daily[pd.to_numeric(daily["close_raw"], errors="coerce") > 0].copy()
+            if daily.empty:
+                return df
+            daily["factor"] = pd.to_numeric(daily["close_hfq"], errors="coerce") / pd.to_numeric(daily["close_raw"], errors="coerce")
+            daily = daily.replace([np.inf, -np.inf], np.nan).dropna(subset=["factor"])
+            daily = daily[daily["factor"] > 0]
+            if daily.empty:
+                return df
+
+            daily = daily.sort_values("trade_date")
+            latest_factor = float(daily["factor"].iloc[-1])
+            daily["adj_factor"] = daily["factor"] / latest_factor
+            if np.allclose(daily["adj_factor"].to_numpy(dtype=float), 1.0):
+                return df
+
+            factor_by_date = {
+                pd.to_datetime(d).normalize(): float(f)
+                for d, f in zip(daily["trade_date"], daily["adj_factor"])
+            }
+            df = df.copy()
+            scale = df["datetime"].dt.normalize().map(factor_by_date).fillna(1.0)
+            for col in price_cols:
+                df[col] = pd.to_numeric(df[col], errors="coerce") * scale
+            return df
+        except Exception as e:
+            logger.warning(f"分钟价格复权失败，使用未复权价继续: {ts_code}: {e}")
+            return df
+
+    def calculate_indicators(self, ts_code: str, period_type: str,
                            indicators: List[str] = None, 
                            lookback_days: int = 30) -> Dict:
         """
@@ -325,7 +382,11 @@ class RealtimeIndicatorEngine:
             df = df.copy()
             df['datetime'] = pd.to_datetime(df['datetime'])
             df = df.sort_values('datetime').reset_index(drop=True)
-            
+
+            # 与回测/因子侧的复权口径对齐：未复权分钟价在除权除息日有假跳空，
+            # 会产生假金叉/假突破（"回测赚实盘亏"的典型来源）
+            df = self._adjust_minute_prices(ts_code, df)
+
             # 如果没有指定指标，计算所有支持的指标
             if indicators is None:
                 indicators = list(self.supported_indicators.keys())

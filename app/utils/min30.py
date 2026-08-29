@@ -1,3 +1,7 @@
+# DEPRECATED: 本脚本已从 data_jobs 注册表摘除。
+# 原因：日期区间硬编码、无视 DATA_JOB_* 环境变量，且写入的 min30/daily
+# 表没有任何读取方（实时分钟线走 stock_minute/，由通达信同步服务维护）。
+# 如需恢复，先接入 resolve_trade_dates 并确认下游消费方。
 import baostock as bs
 import pandas as pd
 

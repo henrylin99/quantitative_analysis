@@ -59,10 +59,13 @@ def main():
 
     total_saved = 0
     per_factor_stats = {}
+    failed = 0
+    attempted = 0
 
     if factor_ids:
         # 指定因子：区间一次算完（内置因子支持任意区间）
         for factor_id in factor_ids:
+            attempted += 1
             try:
                 result = engine.calculate_factor(
                     factor_id, ts_codes, start_date, end_date
@@ -74,6 +77,7 @@ def main():
                 per_factor_stats[factor_id] = len(result)
                 total_saved += len(result)
             except Exception as e:
+                failed += 1
                 logger.error(f"计算因子 {factor_id} 失败: {e}")
                 per_factor_stats[factor_id] = f"error: {e}"
     else:
@@ -83,7 +87,13 @@ def main():
             print(f"区间 {start_date} ~ {end_date} 没有交易日数据")
             sys.exit(1)
         for date in dates:
-            result = engine.calculate_all_factors(date, ts_codes)
+            attempted += 1
+            try:
+                result = engine.calculate_all_factors(date, ts_codes)
+            except Exception as e:
+                failed += 1
+                logger.error(f"计算 {date} 全部因子失败: {e}")
+                continue
             if result.empty:
                 per_factor_stats[str(date)] = 0
                 continue
@@ -93,6 +103,17 @@ def main():
 
     print(f"因子计算完成: {start_date} ~ {end_date}, 共写入 {total_saved} 条")
     print(per_factor_stats)
+
+    # 零产出或全部失败必须以非零码退出：否则流水线把作业记成 success，
+    # 缺失的因子值要等到回测覆盖率校验才暴露
+    if attempted and total_saved == 0:
+        print(f"{attempted} 个计算单元全部零产出，判定作业失败")
+        sys.exit(1)
+    if failed:
+        print(
+            f"警告: {failed}/{attempted} 个计算单元失败。部分成功不阻断流水线，"
+            "缺失的因子值会被回测覆盖率校验拦截"
+        )
 
 
 if __name__ == "__main__":

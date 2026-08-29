@@ -89,7 +89,9 @@ class StockService:
             }
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
-            return {'stocks': [], 'total': 0, 'page': page, 'page_size': page_size, 'total_pages': 0}
+            # 失败必须抛出：返回假空分页会被 @cached 写进缓存，
+            # 一次瞬时故障让列表空半小时
+            raise
 
     @staticmethod
     @cached(expire=600, key_prefix='stock_info')
@@ -108,7 +110,7 @@ class StockService:
             return row
         except Exception as e:
             logger.error(f"获取股票信息失败: {ts_code}, 错误: {e}")
-            return None
+            raise
     
     @staticmethod
     @cached(expire=300, key_prefix='daily_history')
@@ -130,7 +132,7 @@ class StockService:
             return df.where(df.notna(), None).to_dict(orient="records")
         except Exception as e:
             logger.error(f"获取日线历史数据失败: {ts_code}, 错误: {e}")
-            return []
+            raise
     
     @staticmethod
     @cached(expire=300, key_prefix='daily_basic')
@@ -154,7 +156,7 @@ class StockService:
             return row
         except Exception as e:
             logger.error(f"获取日线基本数据失败: {ts_code}, 错误: {e}")
-            return None
+            raise
     
     @staticmethod
     @cached(expire=300, key_prefix='stock_factor')
@@ -182,7 +184,7 @@ class StockService:
                     return StockService._calculate_technical_indicators(history_data)
             except Exception as calc_error:
                 logger.error(f"计算技术指标失败: {calc_error}")
-            return []
+            raise
     
     @staticmethod
     @cached(expire=600, key_prefix='ma_data')
@@ -202,7 +204,7 @@ class StockService:
             return d
         except Exception as e:
             logger.error(f"获取均线数据失败: {ts_code}, 错误: {e}")
-            return None
+            raise
     
     @staticmethod
     @cached(expire=300, key_prefix='moneyflow')
@@ -222,7 +224,7 @@ class StockService:
             return list(reversed(records))
         except Exception as e:
             logger.error(f"获取资金流向数据失败: {ts_code}, 错误: {e}")
-            return []
+            raise
     
     @staticmethod
     @cached(expire=300, key_prefix='cyq_perf')
@@ -242,7 +244,7 @@ class StockService:
             return list(reversed(records))
         except Exception as e:
             logger.error(f"获取筹码分布数据失败: {ts_code}, 错误: {e}")
-            return []
+            raise
 
     @staticmethod
     @cached(expire=3600, key_prefix='financials')
@@ -260,11 +262,7 @@ class StockService:
             }
         except Exception as e:
             logger.error(f"获取财务数据失败: {ts_code}, 错误: {e}")
-            return {
-                "balance_sheet": None,
-                "income_statement": None,
-                "cash_flow": None,
-            }
+            raise
 
     @staticmethod
     @cached(expire=3600, key_prefix='stock_company')
@@ -289,7 +287,7 @@ class StockService:
             return payload
         except Exception as e:
             logger.error(f"获取公司信息失败: {ts_code}, 错误: {e}")
-            return None
+            raise
 
     @staticmethod
     def _extract_latest_financial_row(df: pd.DataFrame, table_name: str):
@@ -370,7 +368,7 @@ class StockService:
             }
         except Exception as e:
             logger.error(f"获取股票详细信息失败: {ts_code}, 错误: {e}")
-            return None
+            raise
     
     @staticmethod
     @cached(expire=1800, key_prefix='industry_list')
@@ -380,7 +378,7 @@ class StockService:
             return _data_reader.get_industry_list()
         except Exception as e:
             logger.error(f"获取行业列表失败: {e}")
-            return []
+            raise
 
     @staticmethod
     @cached(expire=1800, key_prefix='area_list')
@@ -390,7 +388,7 @@ class StockService:
             return _data_reader.get_area_list()
         except Exception as e:
             logger.error(f"获取地域列表失败: {e}")
-            return []
+            raise
     
     @staticmethod
     def screen_stocks(criteria: Dict):
@@ -572,12 +570,7 @@ class StockService:
             logger.error(f"股票筛选失败: {e}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
-            return {
-                'stocks': [],
-                'total': 0,
-                'criteria': criteria,
-                'error': str(e)
-            }
+            raise
     
     @staticmethod
     def _calculate_technical_indicators(history_data: List[Dict]) -> List[Dict]:
@@ -640,7 +633,7 @@ class StockService:
             
         except Exception as e:
             logger.error(f"计算技术指标失败: {e}")
-            return []
+            raise
     
     @staticmethod
     def _calculate_macd(prices, fast=12, slow=26, signal=9):

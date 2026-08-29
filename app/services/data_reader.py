@@ -8,7 +8,7 @@ ParquetDataReader — 从本地 Parquet 文件加载日行情数据，替代传�
 
 import os
 from datetime import datetime, date
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -246,13 +246,29 @@ class ParquetDataReader:
             logger.warning(f"读取 parquet 失败 {path}: {e}")
             return pd.DataFrame()
 
-    _stock_basic_cache: Optional[pd.DataFrame] = None
+    # 单文件表按 mtime 失效的缓存：web 进程与 Celery worker 是不同进程，
+    # 类属性缓存在 worker 里清不掉 web 进程的值（宽表重建后 web 一直读旧表）；
+    # 改为比较文件 mtime，任务重写文件后所有进程下次读取自然拿到新数据
+    _single_file_cache: Dict[str, Tuple[float, pd.DataFrame]] = {}
+
+    def _read_single_cached(self, filename: str) -> pd.DataFrame:
+        """带 mtime 失效的单文件表读取。键用完整路径：不同 DATA_DIR 的
+        实例（测试、多环境）不得共享缓存条目。"""
+        path = os.path.join(self.data_dir, filename)
+        if not os.path.isfile(path):
+            ParquetDataReader._single_file_cache.pop(path, None)
+            return self._read_single(filename)
+        mtime = os.path.getmtime(path)
+        cached = ParquetDataReader._single_file_cache.get(path)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        df = self._read_single(filename)
+        ParquetDataReader._single_file_cache[path] = (mtime, df)
+        return df
 
     def get_stock_basic(self, ts_code: Optional[str] = None) -> pd.DataFrame:
         """读取 stock_basic 表。可选按 ts_code 过滤。"""
-        if ParquetDataReader._stock_basic_cache is None:
-            ParquetDataReader._stock_basic_cache = self._read_single("stock_basic.parquet")
-        df = ParquetDataReader._stock_basic_cache
+        df = self._read_single_cached("stock_basic.parquet")
         if df.empty:
             return df
         if ts_code:
@@ -299,7 +315,7 @@ class ParquetDataReader:
 
     def get_trade_calendar(self) -> pd.DataFrame:
         """读取交易日历。"""
-        return self._read_single("stock_trade_calendar.parquet")
+        return self._read_single_cached("stock_trade_calendar.parquet")
 
     def get_minute_reader(self) -> MinuteParquetReader:
         """获取分钟级 parquet 读取器。"""
@@ -309,7 +325,7 @@ class ParquetDataReader:
 
     def get_stock_company(self, ts_codes: Optional[List[str]] = None) -> pd.DataFrame:
         """读取公司信息表。"""
-        df = self._read_single("stock_company.parquet")
+        df = self._read_single_cached("stock_company.parquet")
         if df.empty or ts_codes is None:
             return df
         return df[df["ts_code"].isin(set(ts_codes))]
@@ -318,19 +334,21 @@ class ParquetDataReader:
         """读取指数基本信息。"""
         return self._read_single("index_basic.parquet")
 
-    _stock_business_cache: Optional[pd.DataFrame] = None
-
     @classmethod
     def invalidate_stock_business_cache(cls):
-        """清除 stock_business 缓存，使下次读取重新加载文件。"""
-        cls._stock_business_cache = None
+        """清除 stock_business 缓存条目。
+
+        读取侧按文件 mtime 自动失效，此方法仅作为既有调用方的
+        兼容入口保留（Celery 任务/宽表重建后显式调一下也无害）。
+        """
+        for key in list(cls._single_file_cache.keys()):
+            if key.endswith(os.path.join("", "stock_business.parquet")) or key.endswith("stock_business.parquet"):
+                del cls._single_file_cache[key]
 
     def get_stock_business(self, ts_code: Optional[str] = None,
                            trade_date: Optional[str] = None) -> pd.DataFrame:
         """读取股票业务大宽表（daily_basic + factor + moneyflow 合并）。"""
-        if ParquetDataReader._stock_business_cache is None:
-            ParquetDataReader._stock_business_cache = self._read_single("stock_business.parquet")
-        df = ParquetDataReader._stock_business_cache
+        df = self._read_single_cached("stock_business.parquet")
         if df.empty:
             return df
         if ts_code:
@@ -350,7 +368,7 @@ class ParquetDataReader:
 
     def get_ma_data(self, ts_code: str) -> Optional[pd.Series]:
         """读取单只股票的最新均线数据。"""
-        df = self._read_single("stock_ma_data.parquet")
+        df = self._read_single_cached("stock_ma_data.parquet")
         if df.empty:
             return None
         row = df[df["ts_code"] == ts_code]

@@ -163,6 +163,53 @@ class ParquetDataJobStateStore:
                 return run
         return None
 
+    # 与 ScriptRunner 的子进程超时保持同一量级：超过它还没终态的 run，
+    # 只可能是 worker 被杀/掉电留下的僵尸
+    STALE_RUN_DEFAULT_TIMEOUT_SECONDS = 3600
+
+    @classmethod
+    def _stale_timeout_seconds(cls) -> float:
+        raw = os.getenv("DATA_JOB_TIMEOUT", "")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return float(cls.STALE_RUN_DEFAULT_TIMEOUT_SECONDS)
+        return value if value > 0 else float(cls.STALE_RUN_DEFAULT_TIMEOUT_SECONDS)
+
+    def reap_stale_runs(self, timeout_seconds: Optional[float] = None) -> List[DataJobRunRecord]:
+        """把长期停留在 pending/queued/running 的僵尸 run 标记为 failed。
+
+        worker 被 kill -9 / 掉电后 run 永远停在 running，
+        find_active_duplicate 会据此永久拒绝同一作业再次提交。
+        以 started_at（未开始则 created_at）+ 超时判定，超时与
+        子进程 DATA_JOB_TIMEOUT 对齐。返回本次清理的 run 列表。
+        """
+        limit = float(timeout_seconds) if timeout_seconds else self._stale_timeout_seconds()
+        now = now_local()
+        reaped: List[DataJobRunRecord] = []
+        for run in self.list_runs(limit=1000):
+            if run.status not in {"pending", "queued", "running"}:
+                continue
+            reference = run.started_at or run.created_at
+            try:
+                started = datetime.fromisoformat(str(reference))
+            except (TypeError, ValueError):
+                started = None
+            if started is None or (now - started).total_seconds() <= limit:
+                continue
+            reaped.append(
+                self.update_run_status(
+                    run,
+                    "failed",
+                    error_message=(
+                        f"run 超过 {int(limit)} 秒仍处于 {run.status}，"
+                        "判定为 worker 中断留下的僵尸任务并强制失败"
+                    ),
+                    progress_message="已超时强制失败",
+                )
+            )
+        return reaped
+
     def get_run(self, run_id: int) -> Optional[DataJobRunRecord]:
         df = self.store.read_frame(self.TABLE_RUNS)
         if df.empty or "id" not in df.columns:

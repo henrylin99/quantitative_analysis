@@ -12,6 +12,32 @@ import pandas as pd
 from loguru import logger
 
 
+def _data_root(data_dir: Optional[str]) -> str:
+    if data_dir is None:
+        return os.getenv(
+            "DATA_DIR",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
+        )
+    return data_dir
+
+
+def atomic_write_parquet(df: pd.DataFrame, path: str) -> None:
+    """原子写入：先写临时文件再 rename。
+
+    直接 to_parquet 到最终路径时，进程被杀/磁盘满会留下半个 parquet，
+    所有下游读取（data_reader 遇坏文件只 warning + 空表）会静默把
+    这一天的数据当成不存在。rename 在同一文件系统上是原子的，
+    读方要么看到旧文件要么看到完整新文件。
+    """
+    tmp_path = f"{path}.tmp.{os.getpid()}"
+    try:
+        df.to_parquet(tmp_path, index=False, engine="pyarrow")
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
 def save_to_parquet(
     df: pd.DataFrame,
     trade_date: str,
@@ -39,11 +65,7 @@ def save_to_parquet(
     if df is None or df.empty:
         return 0
 
-    if data_dir is None:
-        data_dir = os.getenv(
-            "DATA_DIR",
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
-        )
+    data_dir = _data_root(data_dir)
 
     # 统一日期格式为 YYYY, MM, DD
     clean = trade_date.replace("-", "")
@@ -61,7 +83,7 @@ def save_to_parquet(
     parquet_path = os.path.join(partition_dir, "data.parquet")
 
     df = df.copy()
-    df.to_parquet(parquet_path, index=False, engine="pyarrow")
+    atomic_write_parquet(df, parquet_path)
 
     logger.info(f"写入 parquet: {parquet_path} ({len(df)} 行)")
     return len(df)
@@ -76,16 +98,12 @@ def save_single_parquet(
     if df is None or df.empty:
         return 0
 
-    if data_dir is None:
-        data_dir = os.getenv(
-            "DATA_DIR",
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
-        )
+    data_dir = _data_root(data_dir)
 
     path = os.path.join(data_dir, filename)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     df = df.copy()
-    df.to_parquet(path, index=False, engine="pyarrow")
+    atomic_write_parquet(df, path)
     logger.info(f"写入 parquet: {path} ({len(df)} 行)")
     return len(df)
 

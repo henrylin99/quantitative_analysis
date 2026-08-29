@@ -36,6 +36,10 @@ factor_analyzer = None
 SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
 SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral", "black_litterman"}
 
+# 综合分→预期收益定标参数：用近 lookback 天、period 日实际收益的截面离散度定标
+RETURNS_CALIBRATION_LOOKBACK_DAYS = 90
+RETURNS_CALIBRATION_PERIOD_DAYS = 20
+
 # JSON序列化辅助函数
 def convert_numpy_types(obj):
     """将numpy类型转换为Python原生类型，用于JSON序列化"""
@@ -1496,6 +1500,51 @@ def apply_portfolio_rebalance():
         return jsonify({'error': str(e)}), 500
 
 
+def _calibrate_scores_to_expected_returns(scores: pd.Series, trade_date: str,
+                                          optimization_method: str) -> pd.Series:
+    """把归一化综合分映射到收益量纲。
+
+    mean_variance/black_litterman/factor_neutral 按收益量纲使用 expected_returns，
+    直接喂 0-1 排名分会让收益项压过风险项两三个数量级，组合退化成
+    "全仓最高分"。这里保留分数排序，用同期截面实际收益的离散度定标：
+    z(score) × std(realized N日收益)。equal_weight/risk_parity 不消费
+    收益数值，原样返回。
+    """
+    if scores.empty:
+        return scores
+    if optimization_method in ('equal_weight', 'risk_parity'):
+        return scores
+
+    try:
+        end_dt = pd.to_datetime(trade_date)
+        start_dt = end_dt - timedelta(days=RETURNS_CALIBRATION_LOOKBACK_DAYS)
+        price_data = ParquetDataReader().get_return_prices(
+            ts_codes=list(scores.index),
+            start_date=start_dt.strftime("%Y-%m-%d"),
+            end_date=end_dt.strftime("%Y-%m-%d"),
+        )
+        price_data = price_data.copy()
+        price_data['trade_date'] = pd.to_datetime(price_data['trade_date'], errors='coerce')
+        price_data['close'] = pd.to_numeric(price_data['close'], errors='coerce')
+        price_data = price_data.dropna(subset=['ts_code', 'trade_date', 'close'])
+        price_data = price_data.sort_values(['ts_code', 'trade_date'])
+        realized = price_data.groupby('ts_code')['close'].pct_change(
+            RETURNS_CALIBRATION_PERIOD_DAYS
+        ).groupby(price_data['ts_code']).last()
+
+        disp = float(pd.to_numeric(realized, errors='coerce').dropna().std())
+        score_std = float(scores.astype(float).std())
+        if not np.isfinite(disp) or disp <= 0 or not np.isfinite(score_std) or score_std <= 0:
+            # 数据不足或分数无区分度时给零期望收益，
+            # 优化退化为只看风险，比编一个假收益尺度诚实
+            return pd.Series(0.0, index=scores.index)
+        centered = scores.astype(float) - float(scores.astype(float).mean())
+        return centered / score_std * disp
+    except Exception as e:
+        logger.warning(f"综合分定标为预期收益失败，回退为等权零收益: {e}")
+        return pd.Series(0.0, index=scores.index)
+
+
 @ml_factor_bp.route('/portfolio/integrated-selection', methods=['POST'])
 def integrated_portfolio_selection():
     """集成选股和组合优化"""
@@ -1533,13 +1582,19 @@ def integrated_portfolio_selection():
             
             if not selected_stocks:
                 return jsonify({'error': 'ML选股失败'}), 500
-            
-            # 提取预期收益率
+
+            # 预期收益必须用收益量纲的 predicted_return（模型预测的前向收益）；
+            # ensemble_score 在 rank_average 集成下是 1/rank，
+            # 喂进优化器会让收益项与风险项量纲失配
             expected_returns = pd.Series({
-                stock['ts_code']: stock['ensemble_score'] 
+                stock['ts_code']: stock['predicted_return']
                 for stock in selected_stocks
+                if stock.get('predicted_return') is not None
             })
-            
+
+            if expected_returns.empty:
+                return jsonify({'error': 'ML选股结果缺少预测收益（predicted_return），无法进行组合优化'}), 500
+
         else:
             # 基于因子选股
             factor_scores = get_scoring_engine().calculate_factor_scores(trade_date, factor_list)
@@ -1556,16 +1611,20 @@ def integrated_portfolio_selection():
             
             # 选择前N只股票
             top_stocks_data = get_scoring_engine().rank_stocks(composite_scores, top_n)
-            
+
             if not top_stocks_data:
                 return jsonify({'error': '选股失败'}), 500
-            
-            # 提取预期收益率
-            expected_returns = pd.Series({
-                stock['ts_code']: stock['composite_score'] 
+
+            # composite_score 是 0-1 归一化排名分，不是收益；按收益量纲定标后
+            # 再进优化器（equal_weight/risk_parity 不消费收益值，原样透传）
+            composite_series = pd.Series({
+                stock['ts_code']: stock['composite_score']
                 for stock in top_stocks_data
             })
-        
+            expected_returns = _calibrate_scores_to_expected_returns(
+                composite_series, trade_date, optimization_method
+            )
+
         # 步骤2: 组合优化
         optimization_result = get_portfolio_optimizer().optimize_portfolio(
             expected_returns,

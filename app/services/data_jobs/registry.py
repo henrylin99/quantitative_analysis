@@ -22,6 +22,10 @@ class JobRegistry:
             "factor_compute",         # 因子计算（打分/回测的前置作业）
         }
 
+        # 注意：baostock_daily / min5 / min15 / min30 / min60 已从注册表摘除：
+        # 脚本硬编码 2025 年日期区间、无视 DATA_JOB_* 参数，且写入的表没有任何
+        # 读取方（实时分钟线走 stock_minute/，由通达信同步服务维护），保留
+        # 注册项只会让 AI/API 误提交无效作业。
         self._jobs: Dict[str, JobDefinition] = {
             "stock_basic": JobDefinition(
                 "stock_basic",
@@ -89,22 +93,6 @@ class JobRegistry:
                 source_mode="incremental",
                 supports_incremental=True,
             ),
-            "baostock_daily": JobDefinition(
-                "baostock_daily",
-                "日频行情与基本面",
-                "app/utils/baostock_daily.py",
-                display_name="Baostock 日线",
-                description="使用 Baostock 补充日线行情数据。",
-                dependencies=["stock_basic"],
-                recommended_order=7,
-                source_name="baostock",
-                source_mode="incremental",
-                supports_incremental=True,
-            ),
-            "min5": JobDefinition("min5", "分钟行情", "app/utils/min5.py", display_name="5 分钟行情", description="下载 5 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
-            "min15": JobDefinition("min15", "分钟行情", "app/utils/min15.py", display_name="15 分钟行情", description="下载 15 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
-            "min30": JobDefinition("min30", "分钟行情", "app/utils/min30.py", display_name="30 分钟行情", description="下载 30 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
-            "min60": JobDefinition("min60", "分钟行情", "app/utils/min60.py", display_name="60 分钟行情", description="下载 60 分钟级别行情。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True),
             "income_statement": JobDefinition(
                 "income_statement", "财务三表", "app/utils/income_statement.py", display_name="利润表", description="下载上市公司利润表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
             ),
