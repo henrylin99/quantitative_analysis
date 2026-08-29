@@ -209,13 +209,15 @@ class FactorEngine:
             logger.error(f"计算因子失败: {factor_id}, 错误: {e}")
             return pd.DataFrame()
     
-    def _calculate_builtin_factor(self, factor_id: str, ts_codes: List[str], 
-                                 start_date: str, end_date: str) -> pd.DataFrame:
+    def _calculate_builtin_factor(self, factor_id: str, ts_codes: List[str],
+                                 start_date: str, end_date: str,
+                                 data_cache: Dict[str, pd.DataFrame] = None) -> pd.DataFrame:
         """计算内置因子"""
         factor_func = self.builtin_factors[factor_id]
-        
-        # 根据因子类型获取所需数据
-        data = self._get_factor_data(factor_id, ts_codes, start_date, end_date)
+
+        # 按声明获取数据源（可跨因子共享缓存，避免同一窗口重复读表）
+        data = self._get_factor_data(factor_id, ts_codes, start_date, end_date,
+                                     data_cache=data_cache)
         
         # 计算因子值
         result = factor_func(data, factor_id)
@@ -235,254 +237,187 @@ class FactorEngine:
 
         return result
     
-    def _get_factor_data(self, factor_id: str, ts_codes: List[str], 
-                        start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
-        """获取计算因子所需的数据"""
-        data = {}
+    # 内置因子 → 数据源声明。键为 _get_factor_data 返回 dict 的键；
+    # needs_history=True 的源把起始日外推一年，供滚动窗口预热。
+    # 声明式而非因子 id 子串匹配：子串路由既脆弱（id 命名碰巧含
+    # 关键词就读错表）又浪费（price_to_ma20 曾因含 'ma' 白读一张表）
+    BUILTIN_FACTOR_SOURCES = {
+        'momentum_1d': ['return_prices'],
+        'momentum_5d': ['return_prices'],
+        'momentum_20d': ['return_prices'],
+        'volatility_20d': ['return_prices'],
+        'volume_ratio_20d': ['return_prices'],
+        'price_to_ma20': ['return_prices'],
+        'pe_percentile': ['daily_basic'],
+        'pb_percentile': ['daily_basic'],
+        'ps_percentile': ['daily_basic'],
+        'roe_ttm': ['income', 'balance'],
+        'roa_ttm': ['income', 'balance'],
+        'revenue_growth': ['income'],
+        'profit_growth': ['income'],
+        'money_flow_strength': ['moneyflow'],
+        'big_order_ratio': ['moneyflow'],
+        'money_flow_momentum': ['moneyflow'],
+        'chip_concentration': ['cyq'],
+        'winner_rate_change': ['cyq'],
+    }
 
-        # 扩展日期范围以获取足够的历史数据
+    # 数据源 → (reader 方法名, 是否需要一年预热窗, 是否按 ts_codes 全量读取)
+    DATA_SOURCE_LOADERS = {
+        'return_prices': ('get_return_prices', True, False),
+        'daily_basic': ('get_daily_basic', False, False),
+        'moneyflow': ('get_moneyflow', True, False),
+        'cyq': ('get_cyq_perf', True, False),
+        'income': ('get_income_statement', False, True),
+        'balance': ('get_balance_sheet', False, True),
+    }
+
+    def _get_factor_data(self, factor_id: str, ts_codes: List[str],
+                        start_date: str, end_date: str,
+                        data_cache: Dict[str, pd.DataFrame] = None) -> Dict[str, pd.DataFrame]:
+        """按声明获取因子计算所需的数据。
+
+        data_cache: 跨因子共享的数据缓存（calculate_all_factors 传入），
+        同一调用窗口内多个因子共用一次数据读取。
+        """
+        sources = self.BUILTIN_FACTOR_SOURCES.get(factor_id)
+        if sources is None:
+            logger.warning(f"内置因子未声明数据源: {factor_id}")
+            return {}
+
         extended_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=252)).strftime('%Y-%m-%d')
+        data: Dict[str, pd.DataFrame] = {}
 
-        try:
-            # 基础行情数据
-            # 收益率类因子必须用后复权价：不复权 close 在除权除息日有假缺口，
-            # 10送10 会被算成 -50% 动量。价格比值类（price_to_ma）对比值无影响，一并复权保持口径统一。
-            if any(x in factor_id for x in ['momentum', 'volatility', 'volume', 'price']):
-                history_data = self.data_reader.get_return_prices(
-                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
-                )
-                data['history'] = history_data
-                logger.info(f"获取历史数据: {len(history_data)} 条记录")
+        for source in sources:
+            if data_cache is not None and source in data_cache:
+                data[source] = data_cache[source]
+                continue
+            method_name, needs_history, codes_only = self.DATA_SOURCE_LOADERS[source]
+            window_start = extended_start if needs_history else start_date
+            try:
+                if codes_only:
+                    loaded = getattr(self.data_reader, method_name)(ts_codes)
+                else:
+                    loaded = getattr(self.data_reader, method_name)(
+                        ts_codes=ts_codes, start_date=window_start, end_date=end_date
+                    )
+            except Exception as e:
+                logger.error(f"获取因子数据失败 source={source}: {e}")
+                continue
+            data[source] = loaded
+            if data_cache is not None:
+                data_cache[source] = loaded
 
-            # 基本面数据
-            if any(x in factor_id for x in ['pe', 'pb', 'ps']):
-                basic_data = self.data_reader.get_daily_basic(
-                    ts_codes=ts_codes, start_date=start_date, end_date=end_date
-                )
-                data['basic'] = basic_data
-
-            # 技术因子数据
-            if 'ma' in factor_id:
-                factor_data = self.data_reader.get_stk_factor(
-                    ts_codes=ts_codes, start_date=start_date, end_date=end_date
-                )
-                data['factor'] = factor_data
-
-            # 资金流向数据
-            if 'money' in factor_id:
-                money_data = self.data_reader.get_moneyflow(
-                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
-                )
-                data['moneyflow'] = money_data
-
-            # 筹码数据
-            if 'chip' in factor_id or 'winner' in factor_id:
-                cyq_data = self.data_reader.get_cyq_perf(
-                    ts_codes=ts_codes, start_date=extended_start, end_date=end_date
-                )
-                data['cyq'] = cyq_data
-
-            # 财务数据
-            if any(x in factor_id for x in ['roe', 'roa', 'revenue', 'profit']):
-                income_data = self.data_reader.get_income_statement(ts_codes)
-                data['income'] = income_data
-
-                balance_data = self.data_reader.get_balance_sheet(ts_codes)
-                data['balance'] = balance_data
-            
-        except Exception as e:
-            logger.error(f"获取因子数据失败: {e}")
-        
         return data
     
     # ==================== 内置因子计算函数 ====================
     
+    @staticmethod
+    def _finalize_factor_result(df: pd.DataFrame, value_col: str,
+                                factor_id: str) -> pd.DataFrame:
+        """统一因子输出 schema：ts_code, trade_date, factor_id, factor_value"""
+        result = df.rename(columns={value_col: "factor_value"})
+        result["factor_id"] = factor_id
+        return result[["ts_code", "trade_date", "factor_id", "factor_value"]].dropna(
+            subset=["factor_value"]
+        )
+
+    @staticmethod
+    def _sorted_by_code_and_date(df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df["trade_date"] = pd.to_datetime(df["trade_date"])
+        return df.sort_values(["ts_code", "trade_date"])
+
     def _momentum_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """动量因子：计算N日收益率"""
-        if 'history' not in data or data['history'].empty:
+        """动量因子：N日收益率"""
+        if 'return_prices' not in data or data['return_prices'].empty:
             return pd.DataFrame()
-        
-        # 提取周期参数
+
         period = int(factor_id.split('_')[1].replace('d', ''))
-        
-        df = data['history'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data[f'return_{period}d'] = stock_data['close'].pct_change(period)
-            
-            # 只保留指定日期范围的数据
-            result_list.append(stock_data[['ts_code', 'trade_date', f'return_{period}d']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={f'return_{period}d': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        df = self._sorted_by_code_and_date(data['return_prices'])
+        df['factor_value'] = df.groupby('ts_code')['close'].pct_change(period)
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _volatility_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """波动率因子：计算N日收益率标准差"""
-        if 'history' not in data or data['history'].empty:
+        """波动率因子：N日收益率标准差"""
+        if 'return_prices' not in data or data['return_prices'].empty:
             return pd.DataFrame()
-        
+
         period = int(factor_id.split('_')[1].replace('d', ''))
-        
-        df = data['history'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data['daily_return'] = stock_data['close'].pct_change()
-            stock_data[f'volatility_{period}d'] = stock_data['daily_return'].rolling(period).std()
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', f'volatility_{period}d']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={f'volatility_{period}d': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        df = self._sorted_by_code_and_date(data['return_prices'])
+        df['daily_return'] = df.groupby('ts_code')['close'].pct_change()
+        df['factor_value'] = df.groupby('ts_code')['daily_return'].transform(
+            lambda s: s.rolling(period).std()
+        )
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _volume_ratio_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """成交量比率因子"""
-        if 'history' not in data or data['history'].empty:
+        if 'return_prices' not in data or data['return_prices'].empty:
             return pd.DataFrame()
-        
+
         period = int(factor_id.split('_')[2].replace('d', ''))
-        
-        df = data['history'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data['vol_ma'] = stock_data['vol'].rolling(period).mean()
-            stock_data['volume_ratio'] = stock_data['vol'] / stock_data['vol_ma']
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'volume_ratio']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'volume_ratio': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        df = self._sorted_by_code_and_date(data['return_prices'])
+        df['vol_ma'] = df.groupby('ts_code')['vol'].transform(
+            lambda s: s.rolling(period).mean()
+        )
+        df['factor_value'] = df['vol'] / df['vol_ma']
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _price_to_ma_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """价格相对均线因子"""
-        if 'history' not in data or data['history'].empty:
+        if 'return_prices' not in data or data['return_prices'].empty:
             return pd.DataFrame()
-        
+
         period = int(factor_id.split('ma')[1])
-        
-        df = data['history'].copy()
+        df = self._sorted_by_code_and_date(data['return_prices'])
+        df['ma'] = df.groupby('ts_code')['close'].transform(
+            lambda s: s.rolling(period).mean()
+        )
+        df['factor_value'] = df['close'] / df['ma'] - 1
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
+    def _valuation_percentile_factor(self, data: Dict[str, pd.DataFrame],
+                                     factor_id: str, value_col: str) -> pd.DataFrame:
+        """估值历史分位数因子（PE/PB/PS 共用实现）。
+
+        每只股票至少需要 20 个有效数据点；滚动窗口 252 日、min_periods=20。
+        """
+        if 'daily_basic' not in data or data['daily_basic'].empty:
+            return pd.DataFrame()
+
+        df = data['daily_basic'].copy()
         df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data[f'ma{period}'] = stock_data['close'].rolling(period).mean()
-            stock_data['price_to_ma'] = stock_data['close'] / stock_data[f'ma{period}'] - 1
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'price_to_ma']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'price_to_ma': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        df[value_col] = pd.to_numeric(df[value_col], errors='coerce')
+        df = df[df[value_col].notna() & (df[value_col] > 0)]
+        if df.empty:
+            return pd.DataFrame()
+
+        valid_counts = df.groupby('ts_code')[value_col].transform('size')
+        df = df[valid_counts > 20]
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.sort_values(['ts_code', 'trade_date'])
+        df['factor_value'] = df.groupby('ts_code')[value_col].transform(
+            lambda s: s.rolling(252, min_periods=20).apply(
+                lambda x: stats.percentileofscore(x, x.iloc[-1]) / 100
+            )
+        )
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _pe_percentile_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """PE历史分位数因子"""
-        if 'basic' not in data or data['basic'].empty:
-            return pd.DataFrame()
-        
-        df = data['basic'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data = stock_data[stock_data['pe_ttm'].notna() & (stock_data['pe_ttm'] > 0)]
-            
-            if len(stock_data) > 20:  # 至少需要20个数据点
-                stock_data['pe_percentile'] = stock_data['pe_ttm'].rolling(252, min_periods=20).apply(
-                    lambda x: stats.percentileofscore(x, x.iloc[-1]) / 100
-                )
-                result_list.append(stock_data[['ts_code', 'trade_date', 'pe_percentile']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'pe_percentile': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        return self._valuation_percentile_factor(data, factor_id, 'pe_ttm')
+
     def _pb_percentile_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """PB历史分位数因子"""
-        if 'basic' not in data or data['basic'].empty:
-            return pd.DataFrame()
-        
-        df = data['basic'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data = stock_data[stock_data['pb'].notna() & (stock_data['pb'] > 0)]
-            
-            if len(stock_data) > 20:
-                stock_data['pb_percentile'] = stock_data['pb'].rolling(252, min_periods=20).apply(
-                    lambda x: stats.percentileofscore(x, x.iloc[-1]) / 100
-                )
-                result_list.append(stock_data[['ts_code', 'trade_date', 'pb_percentile']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'pb_percentile': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        return self._valuation_percentile_factor(data, factor_id, 'pb')
+
     def _ps_percentile_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """PS历史分位数因子"""
-        if 'basic' not in data or data['basic'].empty:
-            return pd.DataFrame()
-        
-        df = data['basic'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            stock_data = stock_data[stock_data['ps_ttm'].notna() & (stock_data['ps_ttm'] > 0)]
-            
-            if len(stock_data) > 20:
-                stock_data['ps_percentile'] = stock_data['ps_ttm'].rolling(252, min_periods=20).apply(
-                    lambda x: stats.percentileofscore(x, x.iloc[-1]) / 100
-                )
-                result_list.append(stock_data[['ts_code', 'trade_date', 'ps_percentile']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'ps_percentile': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        return self._valuation_percentile_factor(data, factor_id, 'ps_ttm')
+
     def _point_in_time_stamp(self, *report_rows) -> Optional[str]:
         """财务因子的打点日期：取所用报告的公告日（ann_date/f_ann_date）中最晚的一个。
 
@@ -720,148 +655,64 @@ class FactorEngine:
         return self._yoy_ttm_growth_factor(data, factor_id, "n_income_attr_p")
 
     def _money_flow_strength_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """资金流向强度因子"""
+        """资金流向强度因子：大单净流入 / 总成交额"""
         if 'moneyflow' not in data or data['moneyflow'].empty:
             return pd.DataFrame()
-        
+
         df = data['moneyflow'].copy()
         df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            
-            # 计算大单净流入强度
-            stock_data['big_net_amount'] = (stock_data['buy_lg_amount'] + stock_data['buy_elg_amount']) - \
-                                         (stock_data['sell_lg_amount'] + stock_data['sell_elg_amount'])
-            
-            # 计算总成交额
-            stock_data['total_amount'] = (stock_data['buy_sm_amount'] + stock_data['buy_md_amount'] + 
-                                        stock_data['buy_lg_amount'] + stock_data['buy_elg_amount'])
-            
-            # 计算资金流向强度
-            stock_data['money_flow_strength'] = stock_data['big_net_amount'] / stock_data['total_amount']
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'money_flow_strength']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'money_flow_strength': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        big_net = (df['buy_lg_amount'] + df['buy_elg_amount']) \
+            - (df['sell_lg_amount'] + df['sell_elg_amount'])
+        total = (df['buy_sm_amount'] + df['buy_md_amount']
+                 + df['buy_lg_amount'] + df['buy_elg_amount'])
+        df['factor_value'] = big_net / total
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _big_order_ratio_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """大单占比因子"""
+        """大单占比因子：大单成交额 / 全口径成交额"""
         if 'moneyflow' not in data or data['moneyflow'].empty:
             return pd.DataFrame()
-        
+
         df = data['moneyflow'].copy()
         df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            
-            # 计算大单总额
-            stock_data['big_amount'] = stock_data['buy_lg_amount'] + stock_data['sell_lg_amount'] + \
-                                     stock_data['buy_elg_amount'] + stock_data['sell_elg_amount']
-            
-            # 计算总成交额
-            stock_data['total_amount'] = (stock_data['buy_sm_amount'] + stock_data['sell_sm_amount'] +
-                                        stock_data['buy_md_amount'] + stock_data['sell_md_amount'] +
-                                        stock_data['buy_lg_amount'] + stock_data['sell_lg_amount'] +
-                                        stock_data['buy_elg_amount'] + stock_data['sell_elg_amount'])
-            
-            # 计算大单占比
-            stock_data['big_order_ratio'] = stock_data['big_amount'] / stock_data['total_amount']
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'big_order_ratio']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'big_order_ratio': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        big = (df['buy_lg_amount'] + df['sell_lg_amount']
+               + df['buy_elg_amount'] + df['sell_elg_amount'])
+        total = (df['buy_sm_amount'] + df['sell_sm_amount']
+                 + df['buy_md_amount'] + df['sell_md_amount']
+                 + big)
+        df['factor_value'] = big / total
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _money_flow_momentum_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """资金流向动量因子"""
+        """资金流向动量因子：5日净流入之和"""
         if 'moneyflow' not in data or data['moneyflow'].empty:
             return pd.DataFrame()
-        
-        df = data['moneyflow'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            
-            # 计算5日资金流向动量
-            stock_data['net_flow_5d'] = stock_data['net_mf_amount'].rolling(5).sum()
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'net_flow_5d']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'net_flow_5d': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+
+        df = self._sorted_by_code_and_date(data['moneyflow'])
+        df['factor_value'] = df.groupby('ts_code')['net_mf_amount'].transform(
+            lambda s: s.rolling(5).sum()
+        )
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _chip_concentration_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """筹码集中度因子"""
+        """筹码集中度因子：90%筹码价格区间相对中位数的比例"""
         if 'cyq' not in data or data['cyq'].empty:
             return pd.DataFrame()
-        
+
         df = data['cyq'].copy()
         df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            
-            # 计算筹码集中度：90%筹码的价格区间相对中位数的比例
-            stock_data['chip_concentration'] = (stock_data['cost_95pct'] - stock_data['cost_5pct']) / stock_data['cost_50pct']
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'chip_concentration']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'chip_concentration': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+        df['factor_value'] = (df['cost_95pct'] - df['cost_5pct']) / df['cost_50pct']
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _winner_rate_change_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
-        """胜率变化因子"""
+        """胜率变化因子：5日胜率差分"""
         if 'cyq' not in data or data['cyq'].empty:
             return pd.DataFrame()
-        
-        df = data['cyq'].copy()
-        df['trade_date'] = pd.to_datetime(df['trade_date'])
-        
-        result_list = []
-        for ts_code in df['ts_code'].unique():
-            stock_data = df[df['ts_code'] == ts_code].sort_values('trade_date')
-            
-            # 计算胜率5日变化
-            stock_data['winner_rate_change'] = stock_data['winner_rate'].diff(5)
-            
-            result_list.append(stock_data[['ts_code', 'trade_date', 'winner_rate_change']])
-        
-        if result_list:
-            result = pd.concat(result_list, ignore_index=True)
-            result = result.rename(columns={'winner_rate_change': 'factor_value'})
-            result['factor_id'] = factor_id
-            return result[['ts_code', 'trade_date', 'factor_id', 'factor_value']].dropna()
-        
-        return pd.DataFrame()
-    
+
+        df = self._sorted_by_code_and_date(data['cyq'])
+        df['factor_value'] = df.groupby('ts_code')['winner_rate'].diff(5)
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _filter_universe_asof(self, basic_df: pd.DataFrame, trade_date: str) -> List[str]:
         """按历史时点过滤股票池，消除幸存者偏差与次新股污染。
 
@@ -895,11 +746,18 @@ class FactorEngine:
                 ts_codes = self._filter_universe_asof(basic_df, trade_date)
             
             all_results = []
-            
+            # 同一调用窗口内多个因子共享数据读取：
+            # momentum/volatility/volume/price_to_ma 六个因子共用一次
+            # return_prices 读取，不再各自全表扫描
+            data_cache: Dict[str, pd.DataFrame] = {}
+
             # 计算内置因子
             for factor_id in self.builtin_factors.keys():
                 try:
-                    result = self.calculate_factor(factor_id, ts_codes, trade_date, trade_date)
+                    result = self._calculate_builtin_factor(
+                        factor_id, ts_codes, trade_date, trade_date,
+                        data_cache=data_cache,
+                    )
                     if not result.empty:
                         all_results.append(result)
                 except Exception as e:
@@ -1004,8 +862,12 @@ class FactorEngine:
                 datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=252)
             ).strftime("%Y-%m-%d")
 
-            history_df = self.data_reader.get_daily(
-                ts_codes=ts_codes, start_date=extended_start, end_date=end_date
+            # 与内置动量类因子同一复权口径：close.pct_change(20) 这类
+            # 表达式必须基于后复权价，否则除权除息日会出现假缺口。
+            # OHLC 全部传入保证同一表达式内的价格列口径一致
+            history_df = self.data_reader.get_return_prices(
+                ts_codes=ts_codes, start_date=extended_start, end_date=end_date,
+                price_fields=["open", "high", "low", "close", "pre_close"],
             )
             if history_df.empty:
                 return pd.DataFrame()

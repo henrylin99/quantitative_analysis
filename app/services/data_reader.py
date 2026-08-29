@@ -130,6 +130,7 @@ class ParquetDataReader:
         ts_codes: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        price_fields: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """读取用于收益率/动量计算的价格序列（后复权优先）。
 
@@ -137,9 +138,18 @@ class ParquetDataReader:
         直接做 pct_change 会污染动量因子与 ML 标签。这里优先使用 stk_factor
         表的后复权收盘价；单只股票的复权覆盖率不足时整体退回不复权价，
         避免同一条序列混用两种口径。
+
+        price_fields: 需要复权的价格列，默认 ["close"]。其他价格列按当日
+        复权因子（close_hfq/close）换算，保证 open/high/low/close 口径一致——
+        表达式因子同时用到多个价格列时应全部传入，否则复权 close 与
+        不复权 open 在同一表达式里混算会失真。
         """
         daily = self.get_daily(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
         if daily.empty:
+            return daily
+
+        fields = [f for f in (price_fields or ["close"]) if f in daily.columns]
+        if not fields:
             return daily
 
         try:
@@ -167,10 +177,16 @@ class ParquetDataReader:
         # 采用复权口径的股票：直接用复权价并丢弃缺失复权价的行，
         # 否则序列两端会拼接两种口径产生假跳变
         selected = merged[use_hfq & has_adj].copy()
-        selected["close"] = selected["_close_adj"]
-        fallback = merged[~use_hfq].copy()
+        adjust_factor = selected["_close_adj"] / selected["close"].where(selected["close"] > 0)
+        for field in fields:
+            if field == "close":
+                selected["close"] = selected["_close_adj"]
+            else:
+                selected[field] = selected[field] * adjust_factor
+        selected = selected.drop(columns=["_close_adj"])
+        fallback = merged[~use_hfq].copy().drop(columns=["_close_adj"])
         result = pd.concat([selected, fallback], ignore_index=True)
-        return result.drop(columns=["_close_adj"])
+        return result
 
     def get_moneyflow(
         self,

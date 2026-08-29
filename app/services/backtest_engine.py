@@ -11,7 +11,7 @@ from app.services.stock_scoring import StockScoringEngine
 from app.services.portfolio_optimizer import PortfolioOptimizer
 from config import Config
 from app.services.data_reader import ParquetDataReader
-from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
+from app.services.parquet_state_store import BacktestRepository, FactorRepository, ParquetStateStore
 
 
 class BacktestEngine:
@@ -25,6 +25,7 @@ class BacktestEngine:
         self.data_reader = ParquetDataReader()
         self.state_store = ParquetStateStore()
         self.backtest_repo = BacktestRepository(self.state_store)
+        self.factor_repo = FactorRepository(self.state_store)
     
     def _get_factor_engine(self):
         """延迟初始化因子引擎"""
@@ -72,6 +73,19 @@ class BacktestEngine:
         """
         try:
             logger.info(f"开始回测: {start_date} to {end_date}")
+
+            # 生成交易日期
+            trade_dates = self._generate_trade_dates(start_date, end_date, rebalance_frequency)
+            # 完整交易日历，用于把信号日的调仓推迟到下一个交易日执行
+            calendar_dates = self.data_reader.get_trade_dates(start_date, end_date)
+
+            # 前置校验：因子值缺失会让选股为空、日期被静默跳过，
+            # 回测照常出指标——这种"看起来正常的假结果"必须在入口挡住
+            coverage_error = self._check_factor_coverage(strategy_config, trade_dates)
+            if coverage_error:
+                logger.error(f"回测前置校验失败: {coverage_error}")
+                return {'error': coverage_error}
+
             if run_id is None:
                 backtest_run = self.backtest_repo.create_run(
                     strategy_config=strategy_config,
@@ -90,11 +104,6 @@ class BacktestEngine:
                         rebalance_frequency=rebalance_frequency,
                     )
             run_id = int(backtest_run["id"])
-            
-            # 生成交易日期
-            trade_dates = self._generate_trade_dates(start_date, end_date, rebalance_frequency)
-            # 完整交易日历，用于把信号日的调仓推迟到下一个交易日执行
-            calendar_dates = self.data_reader.get_trade_dates(start_date, end_date)
 
             # 初始化回测状态
             executed_states = []  # 每次实际成交后的 (日期, 持仓, 现金)
@@ -282,6 +291,48 @@ class BacktestEngine:
             logger.error(f"生成交易日期失败: {e}")
             return []
     
+
+    def _check_factor_coverage(self, strategy_config: Dict[str, Any],
+                               signal_dates: List[str]) -> Optional[str]:
+        """因子选股回测的前置校验：调仓信号日必须已有因子值。
+
+        打分引擎按 trade_date 精确匹配从 factor_values 读取因子值；
+        数据缺失时选股为空、该日期被静默跳过，回测仍然照常输出指标。
+        这里在入口显式检查覆盖率，缺失即拒绝执行，并提示如何补数据。
+        """
+        if strategy_config.get('skip_factor_coverage_check'):
+            return None
+        if strategy_config.get('selection_method', 'factor_based') != 'factor_based':
+            return None
+        factor_list = strategy_config.get('factor_list') or []
+        if not factor_list or not signal_dates:
+            return None
+
+        try:
+            stored = self.factor_repo.get_values(
+                factor_ids=list(factor_list),
+                start_date=signal_dates[0],
+                end_date=signal_dates[-1],
+            )
+        except Exception as e:
+            return f"读取因子值失败，无法校验因子覆盖率: {e}"
+
+        available = set() if stored.empty else set(
+            pd.to_datetime(stored["trade_date"], errors="coerce", format="mixed")
+            .dropna().dt.strftime("%Y-%m-%d")
+        )
+        missing = [d for d in signal_dates if d not in available]
+        if not missing:
+            return None
+
+        preview = ", ".join(missing[:3])
+        return (
+            f"因子值缺失：{len(missing)}/{len(signal_dates)} 个调仓信号日"
+            f"（{preview}{'...' if len(missing) > 3 else ''}）没有 "
+            f"{list(factor_list)} 的数据。请先运行因子计算作业"
+            f"（factor_compute），或在 strategy_config 中设置 "
+            f"skip_factor_coverage_check=true 跳过校验。"
+        )
     def _get_stock_selection(self, strategy_config: Dict[str, Any], 
                            trade_date: str) -> List[Dict[str, Any]]:
         """获取股票选择结果"""
