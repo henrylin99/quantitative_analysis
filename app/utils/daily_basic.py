@@ -1,6 +1,5 @@
 from db_utils import DatabaseUtils
-from parquet_job_helpers import resolve_trade_dates
-from parquet_writer import save_partitioned_parquet
+from parquet_job_helpers import DailyFetchJob
 
 
 FIELDS = [
@@ -25,17 +24,16 @@ FIELDS = [
 ]
 
 
+class DailyBasicJob(DailyFetchJob):
+    job_name = "daily_basic"
+    rel_table = "daily_basic/daily"
+
+    def fetch_one(self, trade_date):
+        return self.api.daily_basic(trade_date=trade_date, fields=FIELDS)
+
+
 def main():
-    pro = DatabaseUtils.init_tushare_api()
-    trade_dates, _ = resolve_trade_dates()
-
-    total_saved = 0
-    for trade_date in trade_dates:
-        print(f"[daily_basic] 拉取 {trade_date}")
-        df = pro.daily_basic(trade_date=trade_date, fields=FIELDS)
-        total_saved += save_partitioned_parquet(df, "trade_date", "daily_basic/daily")
-
-    print(f"[daily_basic] 完成，处理交易日={len(trade_dates)}，写入/更新记录={total_saved}")
+    DailyBasicJob(api=DatabaseUtils.init_tushare_api()).run()
 
 
 if __name__ == "__main__":

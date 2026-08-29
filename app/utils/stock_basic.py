@@ -54,9 +54,12 @@ def main() -> None:
 
     df = pd.concat(frames, ignore_index=True).drop_duplicates(subset="ts_code", keep="first")
     df = _normalize_list_date(df)
+    # 原子写：stock_basic 是全库的依赖根（股票列表/行业/地域），半截文件会让
+    # 所有下游 job 拿到空列表
+    from app.utils.parquet_writer import atomic_write_parquet
     output_path = _resolve_output_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(output_path, index=False, engine="pyarrow")
+    atomic_write_parquet(df, str(output_path))
 
     print(f"[stock_basic] 完成，写入 {len(df)} 条记录 -> {output_path}")
 

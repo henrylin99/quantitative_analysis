@@ -278,17 +278,13 @@ class WebSocketPushService:
             latest_alerts = RiskAlert.get_recent_alerts(minutes=10, active_only=True, limit=10)
             
             for alert in latest_alerts:
-                alert_data = {
-                    'id': alert.id,
-                    'portfolio_id': alert.portfolio_id,
-                    'alert_type': alert.alert_type,
-                    'severity': alert.severity,
-                    'message': alert.message,
-                    'threshold_value': alert.threshold_value,
-                    'current_value': alert.current_value,
-                    'created_at': alert.created_at.isoformat()
-                }
-                
+                # 字段必须与 RiskAlert 模型对齐：模型上是 alert_level/alert_message/
+                # current_price，没有 portfolio_id/severity/message/current_value，
+                # 访问不存在属性会让第一条预警就 AttributeError、整条推送链路失效
+                alert_data = alert.to_dict()
+                # websocket_management.html 的前端直接读 alert.message，补个别名
+                alert_data['message'] = alert.alert_message
+
                 broadcast_risk_alert(alert_data)
             
             logger.debug(f"推送风险预警完成，预警数量: {len(latest_alerts)}")

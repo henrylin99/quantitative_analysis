@@ -10,10 +10,16 @@ def test_registry_contains_all_utils_jobs():
     jobs = registry.list_jobs()
     job_types = {job.job_type for job in jobs}
 
-    assert len(jobs) >= 18
+    assert len(jobs) >= 16
     assert "stock_basic" in job_types
-    assert "min60" in job_types
     assert "income_statement" in job_types
+    # baostock_daily/min* 脚本硬编码日期区间且产出的表无消费方，已摘除注册，
+    # 防止 AI 工具/API 误提交无效作业
+    assert "baostock_daily" not in job_types
+    assert "min5" not in job_types
+    assert "min15" not in job_types
+    assert "min30" not in job_types
+    assert "min60" not in job_types
 
 
 def test_registry_visible_jobs_follow_whitelist():

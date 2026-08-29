@@ -539,10 +539,17 @@ class MLModelManager:
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
 
             joblib.dump(model, model_path)
-            # 保存的是本次训练 fit 出的预处理器，而不是复用上一次训练残留在实例上的状态
+            # 保存的是本次训练 fit 出的预处理器，而不是复用上一次训练残留在实例上的状态。
+            # 本次训练没有预处理器时必须删掉磁盘上的旧 scaler：否则重训关闭
+            # scaling/feature_selection 后，load_model 会加载上一次的预处理器，
+            # 用过期特征清单 transform 新特征（列数不一致时报错，一致时静默选错列）
             if preprocessor is not None:
                 joblib.dump(preprocessor, scaler_path)
                 self.scalers[model_id] = preprocessor
+            else:
+                self.scalers.pop(model_id, None)
+                if os.path.exists(scaler_path):
+                    os.remove(scaler_path)
 
             # 缓存模型
             self.models[model_id] = model
@@ -860,8 +867,11 @@ class MLModelManager:
             ts_codes = pred_data['ts_code'].unique()
             start_date = pred_data['trade_date'].min()
             end_date = pd.to_datetime(pred_data['trade_date'].max()) + timedelta(days=period + 10)
-            
-            price_data = ParquetDataReader().get_daily(
+
+            # 评估必须与训练标签同口径：训练标签用后复权价（见 _create_target_data），
+            # 若这里用未复权 close，除权除息日的分红缺口会被算成负收益，
+            # 评估指标被系统性压低
+            price_data = ParquetDataReader().get_return_prices(
                 ts_codes=list(ts_codes),
                 start_date=str(start_date)[:10] if not isinstance(start_date, str) else start_date,
                 end_date=end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)[:10],
