@@ -62,9 +62,42 @@
 .chart-tab:hover {
     background-color: var(--obs-surface);
 }
-#main-chart, #indicator-chart {
+#main-chart {
+    width: 100%;
+    height: 480px;
+}
+#indicator-chart {
     width: 100%;
     height: 400px;
+}
+/* lightweight-charts 左上角图例（替代 ECharts tooltip/legend） */
+.lwc-legend {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    z-index: 5;
+    pointer-events: none;
+    font-size: 12px;
+    line-height: 1.8;
+    color: #cbd5e1;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(51, 65, 85, 0.4);
+    max-width: calc(100% - 80px);
+}
+.lwc-legend .lbl {
+    color: #64748b;
+    margin-right: 3px;
+}
+.lwc-legend .val {
+    margin-right: 10px;
+}
+.lwc-legend .up {
+    color: #f87171;
+}
+.lwc-legend .down {
+    color: #4ade80;
 }
 
 @media (min-width: 992px) {
@@ -171,13 +204,15 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">📊 价格图表</h5>
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary active" onclick="switchMainChart('price')">价格</button>
-                            <button type="button" class="btn btn-outline-primary" onclick="switchMainChart('volume')">成交量</button>
+                            <button type="button" class="btn btn-outline-primary active" onclick="switchMainChart('price', this)">价格</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="switchMainChart('volume', this)">成交量</button>
                         </div>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div id="main-chart" class="chart-container"></div>
+                    <div id="main-chart" class="chart-container">
+                        <div id="main-chart-legend" class="lwc-legend"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -188,10 +223,10 @@
         <!-- 图表选项卡 -->
         <div class="col-12 mb-3">
             <div class="chart-tabs">
-                <div class="chart-tab active" onclick="switchIndicatorChart('macd')">MACD</div>
-                <div class="chart-tab" onclick="switchIndicatorChart('kdj')">KDJ</div>
-                <div class="chart-tab" onclick="switchIndicatorChart('rsi')">RSI</div>
-                <div class="chart-tab" onclick="switchIndicatorChart('boll')">布林带</div>
+                <div class="chart-tab active" onclick="switchIndicatorChart('macd', this)">MACD</div>
+                <div class="chart-tab" onclick="switchIndicatorChart('kdj', this)">KDJ</div>
+                <div class="chart-tab" onclick="switchIndicatorChart('rsi', this)">RSI</div>
+                <div class="chart-tab" onclick="switchIndicatorChart('boll', this)">布林带</div>
             </div>
         </div>
 
@@ -202,7 +237,9 @@
                     <h6 class="mb-0" id="indicator-title">📈 MACD指标</h6>
                 </div>
                 <div class="card-body">
-                    <div id="indicator-chart" class="indicator-chart"></div>
+                    <div id="indicator-chart" class="indicator-chart">
+                        <div id="indicator-chart-legend" class="lwc-legend"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -243,6 +280,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 let currentStock = null;
 let currentPeriod = 60;
@@ -252,24 +290,20 @@ let chartType = 'candlestick';
 let currentIndicator = 'macd';
 let currentMainChart = 'price';
 
-// ECharts实例
+// lightweight-charts 实例与渲染状态
 let mainChart = null;
+let mainRender = null;
 let indicatorChart = null;
+let indicatorRender = null;
 
-function getChronologicalHistoryData() {
-    return [...historyData].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
-}
-
-function getChronologicalFactorsData() {
-    return [...factorsData].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
-}
+// A股配色约定：红涨绿跌
+const UP_COLOR = '#f87171';
+const DOWN_COLOR = '#4ade80';
+const ACCENT = '#818cf8';
+const AMBER = '#fbbf24';
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM加载完成，开始初始化...');
-    console.log('ECharts是否可用:', typeof echarts !== 'undefined');
-    console.log('Axios是否可用:', typeof axios !== 'undefined');
-    
     // 检查URL参数中是否有股票代码
     const urlParams = new URLSearchParams(window.location.search);
     const stockFromUrl = urlParams.get('stock');
@@ -278,158 +312,226 @@ document.addEventListener('DOMContentLoaded', function() {
         currentStock = stockFromUrl.toUpperCase();
         console.log('从URL获取股票代码:', currentStock);
     }
-    
+
     // 绑定事件
     const stockForm = document.getElementById('stock-form');
     if (stockForm) {
         stockForm.addEventListener('submit', handleAnalysis);
-        console.log('表单事件绑定成功');
-    } else {
-        console.error('股票表单未找到');
     }
-    
+
     // 绑定股票代码输入框事件
     const stockInput = document.getElementById('stock-input');
     if (stockInput) {
         stockInput.addEventListener('input', handleStockInputChange);
         stockInput.addEventListener('blur', validateStockCode);
     }
-    
-    // 延迟初始化图表容器，确保DOM完全渲染
-    setTimeout(() => {
-        initCharts();
-    }, 100);
+
+    // 图表类型切换后立即重绘主图（无需重新提交分析）
+    const chartTypeSelect = document.getElementById('chart-type-select');
+    if (chartTypeSelect) {
+        chartTypeSelect.addEventListener('change', function() {
+            chartType = this.value;
+            if (historyData.length > 0 && currentMainChart === 'price') {
+                renderMainChart();
+            }
+        });
+    }
 });
 
-// Obsidian 暗色图表基础配置
-const obsidianChartBase = {
-    backgroundColor: 'transparent',
-    title: { textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
-    tooltip: {
-        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-        borderColor: '#334155',
-        textStyle: { color: '#e2e8f0', fontSize: 12 }
-    },
-    legend: { textStyle: { color: '#94a3b8', fontSize: 11 } },
-    xAxis: {
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#334155' } },
-        axisTick: { lineStyle: { color: '#334155' } },
-        splitLine: { show: false }
-    },
-    yAxis: {
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#334155' } },
-        splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } },
-        splitArea: { show: false }
-    },
-    dataZoom: [{
-        type: 'inside'
-    }, {
-        show: true,
-        type: 'slider',
-        top: '90%',
-        borderColor: '#334155',
-        fillerColor: 'rgba(99,102,241,0.15)',
-        handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
-        textStyle: { color: '#64748b' },
-        dataBackground: {
-            lineStyle: { color: '#475569' },
-            areaStyle: { color: 'rgba(71,85,105,0.3)' }
-        }
-    }]
-};
+// ========== 数据工具 ==========
 
-// 初始化图表容器
-function initCharts() {
-    console.log('开始初始化图表...');
-    
-    // 检查ECharts是否可用
-    if (typeof echarts === 'undefined') {
-        console.error('ECharts未加载');
-        return;
+function dateKey(d) {
+    return String(d == null ? '' : d).slice(0, 10);
+}
+
+// lightweight-charts 的 crosshair 回传 BusinessDay 对象，转回 'YYYY-MM-DD'
+function timeKey(t) {
+    if (t && typeof t === 'object') {
+        return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
     }
-    
-    // 初始化主图表
-    const mainChartDom = document.getElementById('main-chart');
-    if (mainChartDom) {
-        console.log('找到主图表容器，尺寸:', mainChartDom.offsetWidth, 'x', mainChartDom.offsetHeight);
-        
-        // 确保容器有明确的尺寸
-        mainChartDom.style.width = '100%';
-        mainChartDom.style.height = '400px';
-        
-        try {
-            // 直接初始化图表
-            mainChart = echarts.init(mainChartDom);
-            console.log('主图表初始化成功');
-            
-            // 测试渲染一个简单图表
-            const testOption = {
-                title: { text: '等待数据加载...' },
-                xAxis: { type: 'category', data: [] },
-                yAxis: { type: 'value' },
-                series: [{ type: 'line', data: [] }]
-            };
-            mainChart.setOption(testOption);
-            console.log('主图表测试渲染完成');
-        } catch (error) {
-            console.error('主图表初始化失败:', error);
+    return dateKey(t);
+}
+
+// 契约约定：图表数据必须归一化为时间升序（tests/ui/test_analysis_chart_order_contract.py）
+function sortByTradeDateAsc(rows) {
+    return [...rows].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
+}
+
+function getChronologicalHistoryData() {
+    return sortByTradeDateAsc(historyData);
+}
+
+function getChronologicalFactorsData() {
+    return sortByTradeDateAsc(factorsData);
+}
+
+// 转为 line/area 序列数据：时间升序去重，空值输出 whitespace 点（不画 0）
+function toLinePoints(rows, pick) {
+    const out = [];
+    const seen = new Set();
+    for (const r of sortByTradeDateAsc(rows)) {
+        const t = dateKey(r.trade_date);
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        const v = pick(r);
+        if (v === null || v === undefined || Number.isNaN(Number(v))) {
+            out.push({ time: t });
+        } else {
+            out.push({ time: t, value: Number(v) });
         }
-    } else {
-        console.error('主图表容器未找到');
     }
-    
-    // 初始化指标图表
-    const indicatorChartDom = document.getElementById('indicator-chart');
-    if (indicatorChartDom) {
-        console.log('找到指标图表容器，尺寸:', indicatorChartDom.offsetWidth, 'x', indicatorChartDom.offsetHeight);
-        
-        // 确保容器有明确的尺寸
-        indicatorChartDom.style.width = '100%';
-        indicatorChartDom.style.height = '400px';
-        
-        try {
-            // 直接初始化图表
-            indicatorChart = echarts.init(indicatorChartDom);
-            console.log('指标图表初始化成功');
-            
-            // 测试渲染一个简单图表
-            const testOption = {
-                title: { text: '等待数据加载...' },
-                xAxis: { type: 'category', data: [] },
-                yAxis: { type: 'value' },
-                series: [{ type: 'line', data: [] }]
-            };
-            indicatorChart.setOption(testOption);
-            console.log('指标图表测试渲染完成');
-        } catch (error) {
-            console.error('指标图表初始化失败:', error);
-        }
-    } else {
-        console.error('指标图表容器未找到');
+    return out;
+}
+
+function toCandleBars(rows) {
+    const out = [];
+    const seen = new Set();
+    for (const r of sortByTradeDateAsc(rows)) {
+        const t = dateKey(r.trade_date);
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        out.push({
+            time: t,
+            open: Number(r.open),
+            high: Number(r.high),
+            low: Number(r.low),
+            close: Number(r.close),
+            vol: Number(r.vol) || 0,
+            pct_chg: (r.pct_chg === null || r.pct_chg === undefined) ? null : Number(r.pct_chg),
+        });
     }
-    
-    // 窗口大小改变时重新调整图表
-    window.addEventListener('resize', function() {
-        setTimeout(() => {
-            if (mainChart) {
-                mainChart.resize();
-                console.log('主图表已调整尺寸');
-            }
-            if (indicatorChart) {
-                indicatorChart.resize();
-                console.log('指标图表已调整尺寸');
-            }
-        }, 100);
+    return out;
+}
+
+function toVolumeBars(rows) {
+    const out = [];
+    const seen = new Set();
+    for (const r of sortByTradeDateAsc(rows)) {
+        const t = dateKey(r.trade_date);
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        const up = Number(r.pct_chg || 0) >= 0;
+        out.push({
+            time: t,
+            value: Number(r.vol) || 0,
+            color: up ? 'rgba(248, 113, 113, 0.65)' : 'rgba(74, 222, 128, 0.65)',
+        });
+    }
+    return out;
+}
+
+function lastValueOf(points) {
+    for (let i = points.length - 1; i >= 0; i--) {
+        if (points[i].value !== undefined) return points[i].value;
+    }
+    return null;
+}
+
+// ========== 图表通用 ==========
+
+function lwcBaseOptions() {
+    return {
+        autoSize: true,
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#94a3b8',
+            fontSize: 11,
+        },
+        grid: {
+            vertLines: { color: 'rgba(51, 65, 85, 0.25)' },
+            horzLines: { color: 'rgba(51, 65, 85, 0.35)' },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: '#64748b', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#334155' },
+            horzLine: { color: '#64748b', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#334155' },
+        },
+        rightPriceScale: { borderColor: '#334155' },
+        timeScale: { borderColor: '#334155', rightOffset: 2 },
+        localization: { locale: 'zh-CN' },
+    };
+}
+
+// 数据少时全量展示，多时默认展示最近 90 根
+function applyInitialZoom(chart, barCount) {
+    const MAX_VISIBLE = 90;
+    if (barCount > MAX_VISIBLE) {
+        chart.timeScale().setVisibleLogicalRange({ from: barCount - MAX_VISIBLE, to: barCount + 2 });
+    } else {
+        chart.timeScale().fitContent();
+    }
+}
+
+function addLineSeries(chart, data, opts) {
+    const precision = opts.precision == null ? 2 : opts.precision;
+    const s = chart.addSeries(LightweightCharts.LineSeries, {
+        color: opts.color,
+        lineWidth: opts.width || 1,
+        lineStyle: opts.dashed ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
+        priceFormat: { type: 'price', precision: precision, minMove: Math.pow(10, -precision) },
+        lastValueVisible: false,
+        priceLineVisible: false,
+    }, 0);
+    s.setData(data);
+    return s;
+}
+
+function addLevelLine(series, price, color, title) {
+    series.createPriceLine({
+        price: price,
+        color: color,
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: title,
     });
 }
 
-// 处理股票代码输入变化
+function legendHtml(pairs) {
+    return pairs.map(([label, value, cls]) =>
+        `<span class="val"><span class="lbl">${label}</span><span${cls ? ` class="${cls}"` : ''}>${value}</span></span>`
+    ).join('');
+}
+
+// ========== 图表容器加载/提示遮罩 ==========
+
+function chartOverlay(containerId) {
+    const dom = document.getElementById(containerId);
+    if (!dom) return null;
+    let ov = document.getElementById(`${containerId}-loading`);
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = `${containerId}-loading`;
+        ov.className = 'loading-overlay';
+        dom.appendChild(ov);
+    }
+    return ov;
+}
+
+function showChartLoading(containerId, text) {
+    const ov = chartOverlay(containerId);
+    if (!ov) return;
+    ov.style.display = 'flex';
+    ov.innerHTML = `<div class="text-center"><div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div><div class="small text-muted">${text || '正在加载数据...'}</div></div>`;
+}
+
+function showChartMessage(containerId, text) {
+    const ov = chartOverlay(containerId);
+    if (!ov) return;
+    ov.style.display = 'flex';
+    ov.innerHTML = `<div class="text-muted">${text}</div>`;
+}
+
+function hideChartOverlay(containerId) {
+    const ov = document.getElementById(`${containerId}-loading`);
+    if (ov) ov.style.display = 'none';
+}
+
+// ========== 处理股票代码输入变化 ==========
 function handleStockInputChange(event) {
     const input = event.target;
     let value = input.value.toUpperCase();
-    
+
     // 自动格式化股票代码
     if (value.length === 6 && !value.includes('.')) {
         // 根据股票代码前缀自动添加后缀
@@ -440,7 +542,7 @@ function handleStockInputChange(event) {
         }
         input.value = value;
     }
-    
+
     currentStock = value;
 }
 
@@ -448,7 +550,7 @@ function handleStockInputChange(event) {
 function validateStockCode() {
     const input = document.getElementById('stock-input');
     const value = input.value.trim();
-    
+
     if (value && !isValidStockCode(value)) {
         input.classList.add('is-invalid');
         showTooltip(input, '请输入正确的股票代码格式，如：000001.SZ 或 600000.SH');
@@ -467,12 +569,12 @@ function isValidStockCode(code) {
 // 显示提示信息
 function showTooltip(element, message) {
     hideTooltip(element); // 先清除已有的提示
-    
+
     const tooltip = document.createElement('div');
     tooltip.className = 'invalid-feedback d-block';
     tooltip.textContent = message;
     tooltip.id = 'stock-code-tooltip';
-    
+
     element.parentNode.appendChild(tooltip);
 }
 
@@ -487,27 +589,27 @@ function hideTooltip(element) {
 // 处理分析请求
 async function handleAnalysis(event) {
     event.preventDefault();
-    
+
     const tsCode = document.getElementById('stock-input').value.trim().toUpperCase();
     const period = document.getElementById('period-select').value;
     chartType = document.getElementById('chart-type-select').value;
-    
+
     if (!tsCode) {
         alert('请输入股票代码');
         return;
     }
-    
+
     if (!isValidStockCode(tsCode)) {
         alert('请输入正确的股票代码格式，如：000001.SZ 或 600000.SH');
         return;
     }
-    
+
     currentStock = tsCode;
     currentPeriod = period;
-    
+
     // 显示加载状态
     showAnalysisLoading();
-    
+
     try {
         // 并行加载数据
         const [stockInfoResponse, historyResponse, factorsResponse] = await Promise.all([
@@ -515,25 +617,25 @@ async function handleAnalysis(event) {
             apiRequest(`/stocks/${tsCode}/history?limit=${period}`),
             apiRequest(`/stocks/${tsCode}/factors?limit=${period}`)
         ]);
-        
+
         // 检查历史数据和技术因子数据是否成功获取（这两个是必需的）
         if (historyResponse.code === 200 && factorsResponse.code === 200) {
             historyData = historyResponse.data || [];
             factorsData = factorsResponse.data || [];
-            
+
             if (historyData.length === 0) {
                 throw new Error('该股票暂无历史数据');
             }
-            
+
             // 渲染所有组件（股票信息可能为空，但不影响技术分析）
             renderStockInfo(stockInfoResponse.code === 200 ? stockInfoResponse.data : null);
             renderMetrics(historyData);
+            renderDataTable(historyData, factorsData);
+
+            // 先显示区域（容器有尺寸后建图），再渲染图表
+            showAnalysisResults();
             renderMainChart();
             renderIndicatorChart();
-            renderDataTable(historyData, factorsData);
-            
-            // 显示所有区域
-            showAnalysisResults();
         } else {
             if (historyResponse.code !== 200) {
                 throw new Error('无法获取该股票的历史数据，请检查股票代码是否正确');
@@ -550,18 +652,8 @@ async function handleAnalysis(event) {
 
 // 显示分析加载状态
 function showAnalysisLoading() {
-    if (mainChart) {
-        mainChart.showLoading('default', {
-            text: '正在加载数据...',
-            color: 'var(--obs-primary)',
-            textColor: 'var(--obs-text)',
-            maskColor: 'rgba(30, 30, 30, 0.8)',
-            zlevel: 0
-        });
-    }
-    if (indicatorChart) {
-        indicatorChart.showLoading();
-    }
+    showChartLoading('main-chart', '正在加载数据...');
+    showChartLoading('indicator-chart', '正在计算指标...');
 }
 
 // 显示分析结果
@@ -573,9 +665,6 @@ function showAnalysisResults() {
         'indicators-section',
         'data-section'
     ].forEach(showSection);
-    
-    if (mainChart) mainChart.hideLoading();
-    if (indicatorChart) indicatorChart.hideLoading();
 }
 
 function showSection(sectionId) {
@@ -585,26 +674,14 @@ function showSection(sectionId) {
 
 // 显示分析错误
 function showAnalysisError() {
-    if (mainChart) {
-        mainChart.hideLoading();
-        mainChart.clear();
-        mainChart.setOption({
-            title: {
-                text: '数据加载失败',
-                left: 'center',
-                top: 'center',
-                textStyle: {
-                    color: '#64748b'
-                }
-            }
-        });
-    }
+    showChartMessage('main-chart', '数据加载失败，请检查股票代码后重试');
+    hideChartOverlay('indicator-chart');
 }
 
 // 渲染股票信息
 function renderStockInfo(stock) {
     const container = document.getElementById('stock-info-content');
-    
+
     // 如果没有获取到股票信息，显示基本信息
     if (!stock) {
         container.innerHTML = `
@@ -612,7 +689,7 @@ function renderStockInfo(stock) {
                 <div class="col-md-8">
                     <h4 class="mb-2">${currentStock} <small class="text-muted">股票代码</small></h4>
                     <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i> 
+                        <i class="fas fa-exclamation-triangle"></i>
                         无法获取该股票的详细信息，但可以进行技术分析
                     </div>
                 </div>
@@ -628,7 +705,7 @@ function renderStockInfo(stock) {
         `;
         return;
     }
-    
+
     container.innerHTML = `
         <div class="row align-items-center">
             <div class="col-md-8">
@@ -669,15 +746,15 @@ function renderStockInfo(stock) {
 // 渲染关键指标
 function renderMetrics(data) {
     if (!data || data.length === 0) return;
-    
+
     const latest = data[0];
     const previous = data[1];
-    
+
     const currentPrice = latest.close || 0;
     const priceChange = previous ? ((currentPrice - previous.close) / previous.close * 100) : 0;
     const volume = latest.vol || 0;
     const turnover = latest.amount || 0;
-    
+
     document.getElementById('current-price').textContent = formatNumber(currentPrice, 2);
     document.getElementById('price-change').textContent = formatPercent(priceChange);
     document.getElementById('price-change').className = `metric-value ${priceChange >= 0 ? 'text-success' : 'text-danger'}`;
@@ -685,451 +762,309 @@ function renderMetrics(data) {
     document.getElementById('turnover').textContent = formatNumber(turnover / 100000, 2) + '亿';
 }
 
-// 渲染主图表
+// ========== 主图（价格/成交量） ==========
+
+function destroyMainChart() {
+    if (mainChart) {
+        try { mainChart.remove(); } catch (e) { /* 容器已被替换时忽略 */ }
+    }
+    mainChart = null;
+    mainRender = null;
+}
+
 function renderMainChart() {
-    if (!historyData || historyData.length === 0) {
-        console.log('主图表渲染失败: 没有历史数据');
+    const dom = document.getElementById('main-chart');
+    if (!dom || historyData.length === 0) return;
+
+    if (typeof LightweightCharts === 'undefined') {
+        showChartMessage('main-chart', 'lightweight-charts 加载失败，请检查网络');
         return;
     }
-    
-    if (!mainChart) {
-        console.log('主图表渲染失败: 图表实例不存在，尝试重新初始化');
-        const mainChartDom = document.getElementById('main-chart');
-        if (mainChartDom) {
-            mainChart = echarts.init(mainChartDom);
-            console.log('主图表重新初始化成功');
-        } else {
-            console.error('主图表容器未找到');
-            return;
-        }
-    }
-    
-    if (currentMainChart === 'price') {
-        renderPriceChart();
+    hideChartOverlay('main-chart');
+    destroyMainChart();
+
+    mainChart = LightweightCharts.createChart(dom, lwcBaseOptions());
+
+    if (currentMainChart === 'volume') {
+        const volData = toVolumeBars(historyData);
+        const volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            lastValueVisible: false,
+            priceLineVisible: false,
+        }, 0);
+        volumeSeries.setData(volData);
+        mainRender = {
+            view: 'volume',
+            barMap: new Map(volData.map(b => [b.time, b])),
+        };
+        applyInitialZoom(mainChart, volData.length);
     } else {
-        renderVolumeChart();
+        const candleData = toCandleBars(historyData);
+        let priceSeries;
+        if (chartType === 'line') {
+            priceSeries = mainChart.addSeries(LightweightCharts.AreaSeries, {
+                lineColor: ACCENT,
+                topColor: 'rgba(129, 140, 248, 0.30)',
+                bottomColor: 'rgba(129, 140, 248, 0.02)',
+                lineWidth: 2,
+                priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            }, 0);
+            priceSeries.setData(candleData.map(b => ({ time: b.time, value: b.close })));
+        } else {
+            priceSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, {
+                upColor: UP_COLOR,
+                downColor: DOWN_COLOR,
+                borderUpColor: UP_COLOR,
+                borderDownColor: DOWN_COLOR,
+                wickUpColor: UP_COLOR,
+                wickDownColor: DOWN_COLOR,
+                priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            }, 0);
+            priceSeries.setData(candleData);
+        }
+
+        // 区间最高/最低价参考线（替代原 ECharts markPoint）
+        if (chartType === 'line') {
+            const hi = candleData.reduce((m, b) => (b.close > m.close ? b : m), candleData[0]);
+            const lo = candleData.reduce((m, b) => (b.close < m.close ? b : m), candleData[0]);
+            addLevelLine(priceSeries, hi.close, UP_COLOR, `最高 ${hi.close.toFixed(2)}`);
+            addLevelLine(priceSeries, lo.close, DOWN_COLOR, `最低 ${lo.close.toFixed(2)}`);
+        } else {
+            const hi = candleData.reduce((m, b) => (b.high > m.high ? b : m), candleData[0]);
+            const lo = candleData.reduce((m, b) => (b.low < m.low ? b : m), candleData[0]);
+            addLevelLine(priceSeries, hi.high, UP_COLOR, `最高 ${hi.high.toFixed(2)}`);
+            addLevelLine(priceSeries, lo.low, DOWN_COLOR, `最低 ${lo.low.toFixed(2)}`);
+        }
+
+        // 成交量副图（独立窗格，与主图共享十字光标与时间轴）
+        const volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            lastValueVisible: false,
+            priceLineVisible: false,
+        }, 1);
+        volumeSeries.setData(toVolumeBars(historyData));
+        const panes = mainChart.panes();
+        if (panes[1]) panes[1].setHeight(110);
+
+        mainRender = {
+            view: 'price',
+            barMap: new Map(candleData.map(b => [b.time, b])),
+        };
+        applyInitialZoom(mainChart, candleData.length);
     }
+
+    updateMainLegend();
+    mainChart.subscribeCrosshairMove(param => updateMainLegend(param.time));
 }
 
-// 渲染价格图表
-function renderPriceChart() {
-    console.log('开始渲染价格图表，图表类型:', chartType);
-    console.log('历史数据条数:', historyData.length);
+function updateMainLegend(t) {
+    const el = document.getElementById('main-chart-legend');
+    if (!el || !mainRender) return;
 
-    const orderedHistoryData = getChronologicalHistoryData();
-    const dates = orderedHistoryData.map(item => item.trade_date);
-    const klineData = orderedHistoryData.map(item => [item.open, item.close, item.low, item.high]);
-    const lineData = orderedHistoryData.map(item => item.close);
-    
-    console.log('处理后的数据:', {
-        dates: dates.slice(0, 3),
-        klineData: klineData.slice(0, 3),
-        lineData: lineData.slice(0, 3)
-    });
-    
-    const option = {
-        ...obsidianChartBase,
-        title: {
-            text: `${currentStock} 价格走势`,
-            left: 'left',
-            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
-        },
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'cross' },
-            backgroundColor: 'rgba(30, 41, 59, 0.95)',
-            borderColor: '#334155',
-            textStyle: { color: '#e2e8f0', fontSize: 12 },
-            formatter: function(params) {
-                const data = params[0];
-                if (chartType === 'candlestick') {
-                    const values = data.data;
-                    return `${data.name}<br/>
-                            开盘: ${values[0]}<br/>
-                            收盘: ${values[1]}<br/>
-                            最低: ${values[2]}<br/>
-                            最高: ${values[3]}`;
-                } else {
-                    return `${data.name}<br/>收盘价: ${data.value}`;
-                }
-            }
-        },
-        legend: {
-            data: [chartType === 'candlestick' ? 'K线' : '收盘价'],
-            top: 30,
-            textStyle: { color: '#94a3b8' }
-        },
-        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
-        xAxis: {
-            type: 'category',
-            data: dates,
-            scale: true,
-            boundaryGap: false,
-            axisLine: { onZero: false, lineStyle: { color: '#334155' } },
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            splitLine: { show: false },
-            min: 'dataMin',
-            max: 'dataMax'
-        },
-        yAxis: {
-            scale: true,
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } },
-            splitArea: { show: false }
-        },
-        dataZoom: [
-            { type: 'inside', start: 50, end: 100 },
-            {
-                show: true, type: 'slider', top: '90%', start: 50, end: 100,
-                borderColor: '#334155', fillerColor: 'rgba(99,102,241,0.15)',
-                handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
-                textStyle: { color: '#64748b' }
-            }
-        ],
-        series: [{
-            name: chartType === 'candlestick' ? 'K线' : '收盘价',
-            type: chartType === 'candlestick' ? 'candlestick' : 'line',
-            data: chartType === 'candlestick' ? klineData : lineData,
-            itemStyle: chartType === 'candlestick' ? {
-                color: '#f87171',
-                color0: '#4ade80',
-                borderColor: '#f87171',
-                borderColor0: '#4ade80'
-            } : {
-                color: '#818cf8'
-            },
-            lineStyle: chartType === 'candlestick' ? {} : { width: 2, color: '#818cf8' },
-            showSymbol: false,
-            markPoint: {
-                label: {
-                    formatter: function (param) {
-                        return param != null ? Math.round(param.value * 100) / 100 + '' : '';
-                    }
-                },
-                data: [
-                    { name: '最高值', type: 'max', valueDim: chartType === 'candlestick' ? 'highest' : 'y' },
-                    { name: '最低值', type: 'min', valueDim: chartType === 'candlestick' ? 'lowest' : 'y' }
-                ]
-            }
-        }]
-    };
-    
-    console.log('设置价格图表选项...');
-    mainChart.setOption(option, true);
-    console.log('价格图表选项设置完成');
-    
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        mainChart.resize();
-        console.log('价格图表尺寸调整完成');
-    }, 100);
-}
+    const keys = [...mainRender.barMap.keys()];
+    if (keys.length === 0) { el.innerHTML = ''; return; }
+    const lastKey = keys[keys.length - 1];
+    const bar = mainRender.barMap.get(t ? timeKey(t) : lastKey) || mainRender.barMap.get(lastKey);
+    if (!bar) { el.innerHTML = ''; return; }
 
-// 渲染成交量图表
-function renderVolumeChart() {
-    const orderedHistoryData = getChronologicalHistoryData();
-    const dates = orderedHistoryData.map(item => item.trade_date);
-    const volumeData = orderedHistoryData.map(item => item.vol);
-    
-    const option = {
-        ...obsidianChartBase,
-        title: {
-            text: `${currentStock} 成交量`,
-            left: 'left',
-            textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 }
-        },
-        tooltip: {
-            trigger: 'axis',
-            backgroundColor: 'rgba(30, 41, 59, 0.95)',
-            borderColor: '#334155',
-            textStyle: { color: '#e2e8f0', fontSize: 12 },
-            formatter: function(params) {
-                const data = params[0];
-                return `${data.name}<br/>成交量: ${formatNumber(data.value / 10000, 1)}万`;
-            }
-        },
-        legend: { data: ['成交量'], top: 30, textStyle: { color: '#94a3b8' } },
-        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
-        xAxis: {
-            type: 'category', data: dates,
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { lineStyle: { color: '#334155' } }
-        },
-        yAxis: {
-            type: 'value',
-            axisLabel: { color: '#64748b', fontSize: 10, formatter: function(value) { return formatNumber(value / 10000, 1) + '万'; } },
-            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
-        },
-        dataZoom: [
-            { type: 'inside', start: 50, end: 100 },
-            {
-                show: true, type: 'slider', top: '90%', start: 50, end: 100,
-                borderColor: '#334155', fillerColor: 'rgba(99,102,241,0.15)',
-                handleStyle: { color: '#818cf8', borderColor: '#818cf8' },
-                textStyle: { color: '#64748b' }
-            }
-        ],
-        series: [{
-            name: '成交量',
-            type: 'bar',
-            data: volumeData,
-            itemStyle: { color: 'rgba(129, 140, 248, 0.6)', borderRadius: [2, 2, 0, 0] }
-        }]
-    };
-    
-    mainChart.setOption(option, true);
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        mainChart.resize();
-    }, 100);
-}
-
-// 渲染指标图表
-function renderIndicatorChart() {
-    if (!factorsData || factorsData.length === 0) {
-        console.log('指标图表渲染失败: 没有技术因子数据');
+    const head = `<span class="val"><b>${currentStock || ''}</b></span><span class="val">${bar.time}</span>`;
+    if (mainRender.view === 'volume') {
+        el.innerHTML = head + legendHtml([['成交量', formatNumber(bar.value / 10000, 1) + '万']]);
         return;
     }
-    
-    if (!indicatorChart) {
-        console.log('指标图表渲染失败: 图表实例不存在，尝试重新初始化');
-        const indicatorChartDom = document.getElementById('indicator-chart');
-        if (indicatorChartDom) {
-            indicatorChart = echarts.init(indicatorChartDom);
-            console.log('指标图表重新初始化成功');
-        } else {
-            console.error('指标图表容器未找到');
-            return;
-        }
-    }
-    
-    console.log('开始渲染指标图表:', currentIndicator, '数据条数:', factorsData.length);
-    
-    switch(currentIndicator) {
-        case 'macd':
-            renderMACDChart();
-            break;
-        case 'kdj':
-            renderKDJChart();
-            break;
-        case 'rsi':
-            renderRSIChart();
-            break;
-        case 'boll':
-            renderBollChart();
-            break;
-    }
-}
 
-// 渲染MACD图表
-function renderMACDChart() {
-    const orderedFactorsData = getChronologicalFactorsData();
-    const dates = orderedFactorsData.map(item => item.trade_date);
-    const macdData = orderedFactorsData.map(item => item.macd || 0);
-    const deaData = orderedFactorsData.map(item => item.macd_dea || 0);
-    const difData = orderedFactorsData.map(item => item.macd_dif || 0);
-    
-    console.log('MACD数据:', {
-        dates: dates.slice(0, 3),
-        macd: macdData.slice(0, 3),
-        dea: deaData.slice(0, 3),
-        dif: difData.slice(0, 3)
-    });
-    
-    const option = {
-        ...obsidianChartBase,
-        title: { text: 'MACD指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
-        legend: { data: ['MACD', 'DEA', 'DIF'], top: 30, textStyle: { color: '#94a3b8' } },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
-        yAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } } },
-        series: [
-            {
-                name: 'MACD', type: 'bar', data: macdData,
-                itemStyle: { color: function(params) { return params.value >= 0 ? 'rgba(248,113,113,0.6)' : 'rgba(74,222,128,0.6)'; }, borderRadius: [2, 2, 0, 0] }
-            },
-            { name: 'DEA', type: 'line', data: deaData, smooth: true, showSymbol: false, itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' } },
-            { name: 'DIF', type: 'line', data: difData, smooth: true, showSymbol: false, itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' } }
-        ]
-    };
-    
-    indicatorChart.setOption(option, true);
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        indicatorChart.resize();
-    }, 100);
-}
-
-// 渲染KDJ图表
-function renderKDJChart() {
-    const orderedFactorsData = getChronologicalFactorsData();
-    const dates = orderedFactorsData.map(item => item.trade_date);
-    const kData = orderedFactorsData.map(item => item.kdj_k || 0);
-    const dData = orderedFactorsData.map(item => item.kdj_d || 0);
-    const jData = orderedFactorsData.map(item => item.kdj_j || 0);
-    
-    const option = {
-        ...obsidianChartBase,
-        title: { text: 'KDJ指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
-        legend: { data: ['K', 'D', 'J'], top: 30, textStyle: { color: '#94a3b8' } },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
-        yAxis: {
-            type: 'value', min: 0, max: 100,
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { lineStyle: { color: '#334155' } },
-            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
-        },
-        series: [
-            { name: 'K', type: 'line', data: kData, smooth: true, showSymbol: false, itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' } },
-            { name: 'D', type: 'line', data: dData, smooth: true, showSymbol: false, itemStyle: { color: '#34d399' }, lineStyle: { width: 1.5, color: '#34d399' } },
-            { name: 'J', type: 'line', data: jData, smooth: true, showSymbol: false, itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' } }
-        ],
-        markLine: {
-            data: [
-                { yAxis: 80, lineStyle: { color: '#f87171', type: 'dashed' }, label: { color: '#f87171', fontSize: 10 } },
-                { yAxis: 20, lineStyle: { color: '#4ade80', type: 'dashed' }, label: { color: '#4ade80', fontSize: 10 } }
-            ]
-        }
-    };
-    
-    indicatorChart.setOption(option, true);
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        indicatorChart.resize();
-    }, 100);
-}
-
-// 渲染RSI图表
-function renderRSIChart() {
-    const orderedFactorsData = getChronologicalFactorsData();
-    const dates = orderedFactorsData.map(item => item.trade_date);
-    const rsi6Data = orderedFactorsData.map(item => item.rsi_6 || 0);
-    const rsi12Data = orderedFactorsData.map(item => item.rsi_12 || 0);
-    const rsi24Data = orderedFactorsData.map(item => item.rsi_24 || 0);
-    
-    const option = {
-        ...obsidianChartBase,
-        title: { text: 'RSI指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
-        legend: { data: ['RSI6', 'RSI12', 'RSI24'], top: 30, textStyle: { color: '#94a3b8' } },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
-        yAxis: {
-            type: 'value', min: 0, max: 100,
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { lineStyle: { color: '#334155' } },
-            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
-        },
-        series: [
-            {
-                name: 'RSI6', type: 'line', data: rsi6Data, smooth: true, showSymbol: false,
-                itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' }
-            },
-            {
-                name: 'RSI12', type: 'line', data: rsi12Data, smooth: true, showSymbol: false,
-                itemStyle: { color: '#a78bfa' }, lineStyle: { width: 1.5, color: '#a78bfa' }
-            },
-            {
-                name: 'RSI24', type: 'line', data: rsi24Data, smooth: true, showSymbol: false,
-                itemStyle: { color: '#818cf8' }, lineStyle: { width: 1.5, color: '#818cf8' }
-            }
-        ],
-        markLine: {
-            data: [
-                { yAxis: 70, lineStyle: { color: '#f87171', type: 'dashed' }, label: { color: '#f87171', fontSize: 10 } },
-                { yAxis: 30, lineStyle: { color: '#4ade80', type: 'dashed' }, label: { color: '#4ade80', fontSize: 10 } }
-            ]
-        }
-    };
-    
-    indicatorChart.setOption(option, true);
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        indicatorChart.resize();
-    }, 100);
-}
-
-// 渲染布林带图表
-function renderBollChart() {
-    const orderedHistoryData = getChronologicalHistoryData();
-    const orderedFactorsData = getChronologicalFactorsData();
-    const dates = orderedHistoryData.map(item => item.trade_date);
-    const closeData = orderedHistoryData.map(item => item.close);
-    
-    // 从技术因子数据中获取布林带数据
-    const bollUpper = [];
-    const bollMid = [];
-    const bollLower = [];
-    
-    dates.forEach(date => {
-        const factor = orderedFactorsData.find(f => f.trade_date === date);
-        bollUpper.push(factor ? factor.boll_upper || 0 : 0);
-        bollMid.push(factor ? factor.boll_mid || 0 : 0);
-        bollLower.push(factor ? factor.boll_lower || 0 : 0);
-    });
-    
-    const option = {
-        ...obsidianChartBase,
-        title: { text: '布林带指标', left: 'left', textStyle: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 } },
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 12 } },
-        legend: { data: ['收盘价', '上轨', '中轨', '下轨'], top: 30, textStyle: { color: '#94a3b8' } },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: dates, axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
-        yAxis: {
-            type: 'value', scale: true,
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { lineStyle: { color: '#334155' } },
-            splitLine: { lineStyle: { color: 'rgba(51,65,85,0.5)', type: 'dashed' } }
-        },
-        series: [
-            {
-                name: '收盘价', type: 'line', data: closeData, smooth: true, showSymbol: false,
-                itemStyle: { color: '#818cf8' }, lineStyle: { width: 2, color: '#818cf8' }
-            },
-            {
-                name: '上轨', type: 'line', data: bollUpper, smooth: true, showSymbol: false,
-                itemStyle: { color: '#f87171' }, lineStyle: { width: 1.5, color: '#f87171', type: 'dashed' }
-            },
-            {
-                name: '中轨', type: 'line', data: bollMid, smooth: true, showSymbol: false,
-                itemStyle: { color: '#fbbf24' }, lineStyle: { width: 1.5, color: '#fbbf24' }
-            },
-            {
-                name: '下轨', type: 'line', data: bollLower, smooth: true, showSymbol: false,
-                itemStyle: { color: '#4ade80' }, lineStyle: { width: 1.5, color: '#4ade80', type: 'dashed' }
-            }
-        ]
-    };
-    
-    indicatorChart.setOption(option, true);
-    // 强制调整图表尺寸
-    setTimeout(() => {
-        indicatorChart.resize();
-    }, 100);
+    const pct = bar.pct_chg;
+    const hasPct = pct !== null && pct !== undefined && !Number.isNaN(pct);
+    const pctCls = hasPct ? (pct >= 0 ? 'up' : 'down') : '';
+    el.innerHTML = head + legendHtml([
+        ['开', formatNumber(bar.open, 2)],
+        ['高', formatNumber(bar.high, 2)],
+        ['低', formatNumber(bar.low, 2)],
+        ['收', formatNumber(bar.close, 2), pctCls],
+        ['涨跌', hasPct ? formatPercent(pct) : '--', pctCls],
+        ['量', formatNumber(bar.vol / 10000, 1) + '万'],
+    ]);
 }
 
 // 切换主图表
-function switchMainChart(type) {
+function switchMainChart(type, btn) {
     currentMainChart = type;
-    document.querySelectorAll('#main-chart-section .btn-group .btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
-    
+    document.querySelectorAll('#main-chart-section .btn-group .btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
     if (historyData.length > 0) {
         renderMainChart();
     }
 }
 
+// ========== 技术指标图 ==========
+
+function destroyIndicatorChart() {
+    if (indicatorChart) {
+        try { indicatorChart.remove(); } catch (e) { /* 容器已被替换时忽略 */ }
+    }
+    indicatorChart = null;
+    indicatorRender = null;
+}
+
+// 渲染指标图表
+function renderIndicatorChart() {
+    const dom = document.getElementById('indicator-chart');
+    if (!dom || factorsData.length === 0) return;
+
+    if (typeof LightweightCharts === 'undefined') {
+        showChartMessage('indicator-chart', 'lightweight-charts 加载失败，请检查网络');
+        return;
+    }
+    hideChartOverlay('indicator-chart');
+    destroyIndicatorChart();
+
+    indicatorChart = LightweightCharts.createChart(dom, lwcBaseOptions());
+
+    const builders = {
+        macd: buildMacdChart,
+        kdj: buildKdjChart,
+        rsi: buildRsiChart,
+        boll: buildBollChart,
+    };
+    const build = builders[currentIndicator] || buildMacdChart;
+    indicatorRender = build(indicatorChart);
+
+    applyInitialZoom(indicatorChart, indicatorRender.count);
+    updateIndicatorLegend(null);
+    indicatorChart.subscribeCrosshairMove(param => updateIndicatorLegend(param.seriesData));
+}
+
+function buildMacdChart(chart) {
+    const histData = toLinePoints(factorsData, r => r.macd).map(p =>
+        p.value === undefined ? p : {
+            time: p.time,
+            value: p.value,
+            color: p.value >= 0 ? 'rgba(248, 113, 113, 0.7)' : 'rgba(74, 222, 128, 0.7)',
+        }
+    );
+    const hist = chart.addSeries(LightweightCharts.HistogramSeries, {
+        priceFormat: { type: 'price', precision: 4, minMove: 0.0001 },
+        lastValueVisible: false,
+        priceLineVisible: false,
+    }, 0);
+    hist.setData(histData);
+    hist.createPriceLine({
+        price: 0, color: '#475569', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: false,
+    });
+    const difData = toLinePoints(factorsData, r => r.macd_dif);
+    const deaData = toLinePoints(factorsData, r => r.macd_dea);
+    const dif = addLineSeries(chart, difData, { color: ACCENT, precision: 4 });
+    const dea = addLineSeries(chart, deaData, { color: AMBER, precision: 4 });
+
+    return {
+        count: histData.length,
+        specs: [
+            { label: 'DIF', series: dif, color: ACCENT, decimals: 4, last: lastValueOf(difData) },
+            { label: 'DEA', series: dea, color: AMBER, decimals: 4, last: lastValueOf(deaData) },
+            { label: 'MACD', series: hist, color: '#f87171', decimals: 4, last: lastValueOf(histData) },
+        ],
+    };
+}
+
+function buildKdjChart(chart) {
+    const kData = toLinePoints(factorsData, r => r.kdj_k);
+    const dData = toLinePoints(factorsData, r => r.kdj_d);
+    const jData = toLinePoints(factorsData, r => r.kdj_j);
+    const k = addLineSeries(chart, kData, { color: ACCENT });
+    const d = addLineSeries(chart, dData, { color: '#34d399' });
+    const j = addLineSeries(chart, jData, { color: AMBER });
+    addLevelLine(k, 80, UP_COLOR, '超买');
+    addLevelLine(k, 20, DOWN_COLOR, '超卖');
+
+    return {
+        count: kData.length,
+        specs: [
+            { label: 'K', series: k, color: ACCENT, decimals: 2, last: lastValueOf(kData) },
+            { label: 'D', series: d, color: '#34d399', decimals: 2, last: lastValueOf(dData) },
+            { label: 'J', series: j, color: AMBER, decimals: 2, last: lastValueOf(jData) },
+        ],
+    };
+}
+
+function buildRsiChart(chart) {
+    const rsi6Data = toLinePoints(factorsData, r => r.rsi_6);
+    const rsi12Data = toLinePoints(factorsData, r => r.rsi_12);
+    const rsi24Data = toLinePoints(factorsData, r => r.rsi_24);
+    const rsi6 = addLineSeries(chart, rsi6Data, { color: AMBER });
+    const rsi12 = addLineSeries(chart, rsi12Data, { color: '#a78bfa' });
+    const rsi24 = addLineSeries(chart, rsi24Data, { color: ACCENT });
+    addLevelLine(rsi6, 70, UP_COLOR, '超买');
+    addLevelLine(rsi6, 30, DOWN_COLOR, '超卖');
+
+    return {
+        count: rsi6Data.length,
+        specs: [
+            { label: 'RSI6', series: rsi6, color: AMBER, decimals: 2, last: lastValueOf(rsi6Data) },
+            { label: 'RSI12', series: rsi12, color: '#a78bfa', decimals: 2, last: lastValueOf(rsi12Data) },
+            { label: 'RSI24', series: rsi24, color: ACCENT, decimals: 2, last: lastValueOf(rsi24Data) },
+        ],
+    };
+}
+
+function buildBollChart(chart) {
+    const factorByDate = new Map(factorsData.map(f => [dateKey(f.trade_date), f]));
+    const closeData = toLinePoints(historyData, r => r.close);
+    const upperData = toLinePoints(historyData, r => {
+        const f = factorByDate.get(dateKey(r.trade_date));
+        return f ? f.boll_upper : null;
+    });
+    const midData = toLinePoints(historyData, r => {
+        const f = factorByDate.get(dateKey(r.trade_date));
+        return f ? f.boll_mid : null;
+    });
+    const lowerData = toLinePoints(historyData, r => {
+        const f = factorByDate.get(dateKey(r.trade_date));
+        return f ? f.boll_lower : null;
+    });
+
+    const close = addLineSeries(chart, closeData, { color: ACCENT, width: 2 });
+    const upper = addLineSeries(chart, upperData, { color: UP_COLOR, dashed: true });
+    const mid = addLineSeries(chart, midData, { color: AMBER });
+    const lower = addLineSeries(chart, lowerData, { color: DOWN_COLOR, dashed: true });
+
+    return {
+        count: closeData.length,
+        specs: [
+            { label: '收盘', series: close, color: ACCENT, decimals: 2, last: lastValueOf(closeData) },
+            { label: '上轨', series: upper, color: UP_COLOR, decimals: 2, last: lastValueOf(upperData) },
+            { label: '中轨', series: mid, color: AMBER, decimals: 2, last: lastValueOf(midData) },
+            { label: '下轨', series: lower, color: DOWN_COLOR, decimals: 2, last: lastValueOf(lowerData) },
+        ],
+    };
+}
+
+function updateIndicatorLegend(seriesData) {
+    const el = document.getElementById('indicator-chart-legend');
+    if (!el || !indicatorRender) return;
+
+    const names = { macd: 'MACD', kdj: 'KDJ', rsi: 'RSI', boll: '布林带' };
+    const html = [`<span class="val"><b>${names[currentIndicator] || ''}</b></span>`];
+    for (const spec of indicatorRender.specs) {
+        let v = spec.last;
+        if (seriesData && typeof seriesData.get === 'function') {
+            const d = seriesData.get(spec.series);
+            if (d && d.value !== undefined) v = d.value;
+        }
+        html.push(`<span class="val"><span class="lbl">${spec.label}</span><span style="color:${spec.color}">${formatNumber(v, spec.decimals)}</span></span>`);
+    }
+    el.innerHTML = html.join('');
+}
+
 // 切换指标图表
-function switchIndicatorChart(indicator) {
+function switchIndicatorChart(indicator, tab) {
     currentIndicator = indicator;
-    
+
     // 更新选项卡状态
-    document.querySelectorAll('.chart-tab').forEach(tab => tab.classList.remove('active'));
-    event.target.classList.add('active');
-    
+    document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+    if (tab) tab.classList.add('active');
+
     // 更新标题
     const titles = {
         'macd': '📈 MACD指标',
@@ -1138,7 +1073,7 @@ function switchIndicatorChart(indicator) {
         'boll': '📊 布林带指标'
     };
     document.getElementById('indicator-title').textContent = titles[indicator];
-    
+
     if (factorsData.length > 0) {
         renderIndicatorChart();
     }
@@ -1147,18 +1082,18 @@ function switchIndicatorChart(indicator) {
 // 渲染数据表格
 function renderDataTable(historyData, factorsData) {
     const tbody = document.getElementById('data-table-body');
-    
+
     if (!historyData || historyData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无数据</td></tr>';
         return;
     }
-    
+
     // 合并历史数据和技术因子数据
     const mergedData = historyData.slice(0, 20).map(history => {
         const factor = factorsData.find(f => f.trade_date === history.trade_date) || {};
         return { ...history, ...factor };
     });
-    
+
     tbody.innerHTML = mergedData.map(item => `
         <tr>
             <td>${item.trade_date}</td>
@@ -1198,4 +1133,4 @@ function formatPercent(num) {
     return sign + Number(num).toFixed(2) + '%';
 }
 </script>
-{% endblock %} 
+{% endblock %}
