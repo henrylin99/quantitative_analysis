@@ -62,7 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: '多因子模型',
     items: [
-      { to: '/ml-factor', label: '因子管理', icon: '🧬' },
+      { to: '/ml-factor', label: '因子管理', icon: '🧬', end: true },
       { to: '/ml-factor/models', label: '模型管理', icon: '🤖' },
       { to: '/ml-factor/scoring', label: '股票评分', icon: '⭐' },
       { to: '/ml-factor/portfolio', label: '投资组合', icon: '💼' },
