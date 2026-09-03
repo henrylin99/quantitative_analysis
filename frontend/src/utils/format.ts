@@ -7,6 +7,21 @@ export function formatNumber(value: number | null | undefined, decimals = 2): st
   })
 }
 
+/** 指标最新值格式化：后端按指标类型返回 数字 / 数组 / {子指标名: 值或数组} 三种形态，
+ *  直接渲染对象会变成 [object Object]，这里统一拍平成可读文本 */
+export function formatIndicatorValue(value: unknown): string {
+  if (value === null || value === undefined) return '--'
+  if (Array.isArray(value)) return value.map((x) => formatNumber(x as number, 2)).join(' / ')
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) return '--'
+    return entries
+      .map(([sub, v]) => `${sub} ${Array.isArray(v) ? v.map((x) => formatNumber(x as number, 2)).join('/') : formatNumber(v as number, 2)}`)
+      .join('；')
+  }
+  return formatNumber(value as number, 2)
+}
+
 /** 百分比格式化（输入已是百分数值，如 2.35 表示 +2.35%）：带符号两位小数 */
 export function formatPercent(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '--'
