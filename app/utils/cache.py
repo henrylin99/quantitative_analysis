@@ -63,8 +63,15 @@ class CacheManager:
         return True
 
     def exists(self, key):
-        """检查缓存是否存在且未过期。"""
-        return self.get(key) is not None
+        """检查缓存是否存在且未过期（只查表，不做 JSON 反序列化）。"""
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return False
+            if time.monotonic() > entry[0]:
+                del self._store[key]
+                return False
+            return True
 
     def _evict_if_over_capacity(self):
         """须在持有锁时调用。先清过期键，仍超限则按写入顺序淘汰一批。"""
