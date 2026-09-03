@@ -1,0 +1,191 @@
+- generic [ref=f44e2]:
+  - complementary [ref=f44e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f44e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f44e5]: Q
+      - generic [ref=f44e6]:
+        - text: 量化分析终端
+        - generic [ref=f44e7]: REACT EDITION
+    - navigation [ref=f44e8]:
+      - generic [ref=f44e9]:
+        - generic [ref=f44e10]: 概览
+        - link "🏠 首页" [ref=f44e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f44e12]: 🏠
+          - text: 首页
+      - generic [ref=f44e13]:
+        - generic [ref=f44e14]: 核心分析
+        - link "📋 股票列表" [ref=f44e15] [cursor=pointer]:
+          - /url: /stocks
+          - generic [ref=f44e16]: 📋
+          - text: 股票列表
+        - link "📈 技术分析" [ref=f44e17] [cursor=pointer]:
+          - /url: /analysis
+          - generic [ref=f44e18]: 📈
+          - text: 技术分析
+        - link "🔍 选股筛选" [ref=f44e19] [cursor=pointer]:
+          - /url: /screen
+          - generic [ref=f44e20]: 🔍
+          - text: 选股筛选
+        - link "🧪 策略回测" [ref=f44e21] [cursor=pointer]:
+          - /url: /backtest
+          - generic [ref=f44e22]: 🧪
+          - text: 策略回测
+      - generic [ref=f44e23]:
+        - generic [ref=f44e24]: 多因子模型
+        - link "🧬 因子管理" [ref=f44e25] [cursor=pointer]:
+          - /url: /ml-factor
+          - generic [ref=f44e26]: 🧬
+          - text: 因子管理
+        - link "🤖 模型管理" [ref=f44e27] [cursor=pointer]:
+          - /url: /ml-factor/models
+          - generic [ref=f44e28]: 🤖
+          - text: 模型管理
+        - link "⭐ 股票评分" [ref=f44e29] [cursor=pointer]:
+          - /url: /ml-factor/scoring
+          - generic [ref=f44e30]: ⭐
+          - text: 股票评分
+        - link "💼 投资组合" [ref=f44e31] [cursor=pointer]:
+          - /url: /ml-factor/portfolio
+          - generic [ref=f44e32]: 💼
+          - text: 投资组合
+        - link "📊 分析报告" [ref=f44e33] [cursor=pointer]:
+          - /url: /ml-factor/analysis
+          - generic [ref=f44e34]: 📊
+          - text: 分析报告
+        - link "🏁 组合回测" [ref=f44e35] [cursor=pointer]:
+          - /url: /ml-factor/backtest
+          - generic [ref=f44e36]: 🏁
+          - text: 组合回测
+      - generic [ref=f44e37]:
+        - generic [ref=f44e38]: 实时分析
+        - link "⏱️ 技术指标" [ref=f44e39] [cursor=pointer]:
+          - /url: /realtime-analysis/indicators
+          - generic [ref=f44e40]: ⏱️
+          - text: 技术指标
+        - link "🚦 交易信号" [ref=f44e41] [cursor=pointer]:
+          - /url: /realtime-analysis/signals
+          - generic [ref=f44e42]: 🚦
+          - text: 交易信号
+        - link "📡 实时监控" [ref=f44e43] [cursor=pointer]:
+          - /url: /realtime-analysis/monitor
+          - generic [ref=f44e44]: 📡
+          - text: 实时监控
+        - link "🛡️ 风险管理" [ref=f44e45] [cursor=pointer]:
+          - /url: /realtime-analysis/risk
+          - generic [ref=f44e46]: 🛡️
+          - text: 风险管理
+        - link "📄 报告管理" [ref=f44e47] [cursor=pointer]:
+          - /url: /realtime-analysis/reports
+          - generic [ref=f44e48]: 📄
+          - text: 报告管理
+        - link "🔌 推送管理" [ref=f44e49] [cursor=pointer]:
+          - /url: /realtime-analysis/websocket
+          - generic [ref=f44e50]: 🔌
+          - text: 推送管理
+      - generic [ref=f44e51]:
+        - generic [ref=f44e52]: 数据
+        - link "🗄️ 数据管理" [ref=f44e53] [cursor=pointer]:
+          - /url: /data-management
+          - generic [ref=f44e54]: 🗄️
+          - text: 数据管理
+      - generic [ref=f44e55]:
+        - generic [ref=f44e56]: 试用工具
+        - link "🔥 板块热力图" [ref=f44e57] [cursor=pointer]:
+          - /url: /heatmap
+          - generic [ref=f44e58]: 🔥
+          - text: 板块热力图
+        - link "🎯 形态选股" [ref=f44e59] [cursor=pointer]:
+          - /url: /pattern-screen
+          - generic [ref=f44e60]: 🎯
+          - text: 形态选股
+        - link "💰 资金流统计" [ref=f44e61] [cursor=pointer]:
+          - /url: /moneyflow
+          - generic [ref=f44e62]: 💰
+          - text: 资金流统计
+        - link "📰 市场简报" [ref=f44e63] [cursor=pointer]:
+          - /url: /market-brief
+          - generic [ref=f44e64]: 📰
+          - text: 市场简报
+        - link "❤️ 财务健康" [ref=f44e65] [cursor=pointer]:
+          - /url: /financial-health
+          - generic [ref=f44e66]: ❤️
+          - text: 财务健康
+        - link "🛰️ 个股雷达" [ref=f44e67] [cursor=pointer]:
+          - /url: /stock-radar
+          - generic [ref=f44e68]: 🛰️
+          - text: 个股雷达
+        - link "🗂️ 个股全景" [ref=f44e69] [cursor=pointer]:
+          - /url: /stock-panorama
+          - generic [ref=f44e70]: 🗂️
+          - text: 个股全景
+        - link "📖 功能介绍" [ref=f44e71] [cursor=pointer]:
+          - /url: /feature-intro
+          - generic [ref=f44e72]: 📖
+          - text: 功能介绍
+      - generic [ref=f44e73]:
+        - generic [ref=f44e74]: AI 助手
+        - link "🧠 AI 工作台" [ref=f44e75] [cursor=pointer]:
+          - /url: /ai-workbench
+          - generic [ref=f44e76]: 🧠
+          - text: AI 工作台
+        - link "💬 智能查数" [ref=f44e77] [cursor=pointer]:
+          - /url: /text2sql
+          - generic [ref=f44e78]: 💬
+          - text: 智能查数
+    - generic [ref=f44e79]:
+      - button "☀️ 浅色模式" [ref=f44e80] [cursor=pointer]:
+        - generic [ref=f44e81]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f44e82] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f44e83]: ↗
+        - text: 旧版
+  - main [ref=f44e85]:
+    - generic [ref=f44e86]:
+      - generic [ref=f44e87]:
+        - generic [ref=f44e88]:
+          - heading "因子管理" [level=2] [ref=f44e89]
+          - paragraph [ref=f44e90]: 内置与自定义因子清单、表达式白名单与一键计算
+        - generic [ref=f44e91]:
+          - button "⚡ 计算因子" [ref=f44e92] [cursor=pointer]
+          - button "+ 创建自定义因子" [ref=f44e93] [cursor=pointer]
+      - generic [ref=f44e94]:
+        - generic [ref=f44e95]:
+          - generic [ref=f44e96]: "0"
+          - generic [ref=f44e97]: 总因子数
+        - generic [ref=f44e98]:
+          - generic [ref=f44e99]: "0"
+          - generic [ref=f44e100]: 内置因子
+        - generic [ref=f44e101]:
+          - generic [ref=f44e102]: "0"
+          - generic [ref=f44e103]: 自定义因子
+        - generic [ref=f44e104]:
+          - generic [ref=f44e105]: "0"
+          - generic [ref=f44e106]: 活跃因子
+      - generic [ref=f44e107]:
+        - heading "因子列表 0 / 0" [level=6] [ref=f44e109]:
+          - text: 因子列表
+          - generic [ref=f44e111]: 0 / 0
+        - generic [ref=f44e112]:
+          - generic [ref=f44e113]:
+            - combobox [ref=f44e115]:
+              - option "全部类型" [selected]
+              - option "technical"
+              - option "fundamental"
+              - option "money_flow"
+              - option "chip"
+              - option "other"
+            - combobox [ref=f44e117]:
+              - option "全部来源" [selected]
+              - option "内置"
+              - option "自定义"
+            - combobox [ref=f44e119]:
+              - option "全部状态" [selected]
+              - option "活跃"
+              - option "停用"
+            - textbox "搜索因子 ID / 名称" [ref=f44e121]
+          - generic [ref=f44e122]:
+            - status [ref=f44e123]:
+              - generic [ref=f44e124]: 加载因子...
+            - generic [ref=f44e125]: 加载因子...
