@@ -24,9 +24,6 @@ pytest -k "portfolio"
 pip install -r requirements.txt
 # If empyrical or TA-Lib fail, fall back to:
 pip install -r requirements_minimal.txt
-
-# Celery worker (only needed when DATA_JOB_EXECUTION_MODE=celery)
-celery -A app.celery_app.celery worker -l info -P solo
 ```
 
 ## Architecture
@@ -55,7 +52,7 @@ HTML page routes live in `app/routes/` (separate from API blueprints).
 | StockScoringEngine | `services/stock_scoring.py` | Factor-based and ML-based scoring |
 | PortfolioOptimizer | `services/portfolio_optimizer.py` | Equal-weight, mean-variance, risk-parity, factor-neutral |
 | BacktestEngine | `services/backtest_engine.py` | Single-strategy and multi-strategy backtest |
-| DataJobs | `services/data_jobs/` | Data download job runner (inline or Celery) |
+| DataJobs | `services/data_jobs/` | Data download job runner (in-process local execution) |
 | Text2SQL | `services/text2sql_engine.py` + `services/llm_service.py` | LLM-powered natural language to SQL |
 
 ### Blueprint URL Prefixes
@@ -66,20 +63,17 @@ HTML page routes live in `app/routes/` (separate from API blueprints).
 - `/api/realtime-analysis/*` — realtime indicators, signals, monitor, risk, reports
 - `/api/websocket/*` — WebSocket management endpoints
 
-### Data Jobs Execution Modes
+### Data Jobs Execution
 
-Controlled by `DATA_JOB_EXECUTION_MODE` env var:
-- `inline` (default in development) — runs in the web process, no Celery needed
-- `celery` (default in production) — requires a Celery worker with Redis broker
+Data jobs run in the web process (`app/celery_app.py` keeps a local in-process task registry; no external broker). `DATA_JOB_EXECUTION_MODE` is kept for compatibility with old deploy scripts — any value behaves as local execution.
 
 ### Configuration
 
 All config in `config.py` via env vars (`.env` file). Key vars:
 - `DATA_SOURCE` — defaults to `parquet`
 - `SQLALCHEMY_DATABASE_URI` — defaults to SQLite (`stock_cursor.sqlite3`)
-- `REDIS_HOST`, `REDIS_PORT` — Redis for Celery and caching
 - `FLASK_ENV` — `development` or `production`
-- `DATA_JOB_EXECUTION_MODE` — `inline` or `celery`
+- `DATA_JOB_EXECUTION_MODE` — legacy knob; tasks always run locally
 
 LLM provider for Text2SQL defaults to local Ollama (`qwen2.5-coder`), configurable to OpenAI via `LLM_CONFIG` in `config.py`.
 

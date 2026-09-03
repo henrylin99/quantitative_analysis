@@ -1741,7 +1741,7 @@ def integrated_portfolio_selection():
 def run_backtest():
     """运行回测
 
-    mode=async 时改为 Celery 异步执行：立即返回 run_id，前端轮询
+    mode=async 时改为后台线程异步执行：立即返回 run_id，前端轮询
     /backtest/runs/<id> 的 summary.status，完成后取
     /backtest/runs/<id>/result。默认同步执行，行为与历史版本一致。
     """
@@ -1770,17 +1770,22 @@ def run_backtest():
             )
             run_id = int(run['id'])
             _backtest_repo.update_summary(run_id, {'status': 'queued'})
-            # 延迟导入，避免 API 模块加载期拉起 Celery 任务链
+            # 去 Redis 化后无 Celery worker：后台线程执行，任务自写
+            # BacktestRepository，前端凭 run_id 轮询状态
+            import threading
             from app.tasks.backtest_tasks import run_backtest_task
-            async_result = run_backtest_task.delay(
-                run_id, strategy_config, start_date, end_date,
-                initial_capital, rebalance_frequency,
-            )
+            threading.Thread(
+                target=run_backtest_task,
+                args=(run_id, strategy_config, start_date, end_date,
+                      initial_capital, rebalance_frequency),
+                name=f"backtest-{run_id}",
+                daemon=True,
+            ).start()
             return jsonify({
                 'success': True,
                 'queued': True,
                 'run_id': run_id,
-                'task_id': getattr(async_result, 'id', None),
+                'task_id': None,
                 'status_url': f'/api/ml-factor/backtest/runs/{run_id}',
                 'result_url': f'/api/ml-factor/backtest/runs/{run_id}/result',
             })

@@ -1,7 +1,7 @@
 """回测异步任务。
 
 长区间/日频调仓的回测在同步 HTTP 请求里跑会超时：请求先创建回测记录，
-再交给 Celery 执行，完整结果落盘到 BacktestRepository，前端凭 run_id
+再交给后台线程执行，完整结果落盘到 BacktestRepository，前端凭 run_id
 轮询 /backtest/runs/<id>（summary.status）与 /backtest/runs/<id>/result。
 
 任何异常都必须把 run 标记为 failed，否则状态会永远停在 running。
