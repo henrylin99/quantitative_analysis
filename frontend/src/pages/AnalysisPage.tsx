@@ -4,8 +4,12 @@ import { OLD_SITE_BASE } from '../App'
 import { fetchStockFactors, fetchStockHistory, fetchStockInfo } from '../api/stocks'
 import type { DailyBar, FactorRow, StockBasic } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
-import MainChart, { type MainChartType, type MainChartView } from '../charts/MainChart'
-import IndicatorChart, { INDICATOR_TITLES, type IndicatorType } from '../charts/IndicatorChart'
+import TechnicalChart, {
+  INDICATOR_LABELS,
+  type IndicatorType,
+  type MainChartType,
+  type MainChartView,
+} from '../charts/TechnicalChart'
 import { formatNumber, formatPercent, pctClass } from '../utils/format'
 
 const STOCK_CODE_RE = /^[0-9]{6}\.(SZ|SH)$/
@@ -39,6 +43,7 @@ export default function AnalysisPage() {
   const [chartType, setChartType] = useState<MainChartType>('candlestick')
   const [mainView, setMainView] = useState<MainChartView>('price')
   const [indicator, setIndicator] = useState<IndicatorType>('macd')
+  const [bollOverlay, setBollOverlay] = useState(false)
 
   const [stockInfo, setStockInfo] = useState<StockBasic | null>(null)
   const [historyData, setHistoryData] = useState<DailyBar[] | null>(null)
@@ -235,27 +240,51 @@ export default function AnalysisPage() {
             </div>
           </div>
 
-          {/* 主图表 */}
+          {/* 行情与技术指标：单图表实例，主图+成交量+指标三窗格联动 */}
           <div className="panel">
             <div className="panel-head">
               <h6 className="panel-title">
                 <span className="kicker" />
-                价格走势
+                行情与技术指标
               </h6>
-              <div className="seg" role="group">
+              <div className="d-flex gap-2 flex-wrap">
+                <div className="seg" role="group">
+                  <button
+                    type="button"
+                    className={`seg-item ${mainView === 'price' ? 'active' : ''}`}
+                    onClick={() => setMainView('price')}
+                  >
+                    价格
+                  </button>
+                  <button
+                    type="button"
+                    className={`seg-item ${mainView === 'volume' ? 'active' : ''}`}
+                    onClick={() => setMainView('volume')}
+                  >
+                    成交量
+                  </button>
+                </div>
+                <div className="seg" role="group">
+                  {(['macd', 'kdj', 'rsi'] as IndicatorType[]).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`seg-item ${indicator === item ? 'active' : ''}`}
+                      onClick={() => setIndicator(item)}
+                    >
+                      {INDICATOR_LABELS[item]}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
-                  className={`seg-item ${mainView === 'price' ? 'active' : ''}`}
-                  onClick={() => setMainView('price')}
+                  className={`seg-item ${bollOverlay ? 'active' : ''}`}
+                  style={mainView === 'volume' ? { opacity: 0.45 } : undefined}
+                  disabled={mainView === 'volume'}
+                  onClick={() => setBollOverlay((v) => !v)}
+                  title={mainView === 'volume' ? '布林带叠加仅在价格视图可用' : '在主图叠加布林带'}
                 >
-                  价格
-                </button>
-                <button
-                  type="button"
-                  className={`seg-item ${mainView === 'volume' ? 'active' : ''}`}
-                  onClick={() => setMainView('volume')}
-                >
-                  成交量
+                  BOLL
                 </button>
               </div>
             </div>
@@ -264,43 +293,19 @@ export default function AnalysisPage() {
                 <Loading text="加载行情数据..." />
               ) : errorMsg ? (
                 <ErrorState message={errorMsg} onRetry={() => handleAnalyze()} />
-              ) : historyData && historyData.length > 0 ? (
-                <MainChart view={mainView} chartType={chartType} history={historyData} />
-              ) : (
-                <EmptyState icon="📉" text="暂无行情数据" />
-              )}
-            </div>
-          </div>
-
-          {/* 技术指标 */}
-          <div className="panel">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                {INDICATOR_TITLES[indicator].replace(/^\S+\s/, '')}
-              </h6>
-              <div className="seg" role="group">
-                {(['macd', 'kdj', 'rsi', 'boll'] as IndicatorType[]).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`seg-item ${indicator === item ? 'active' : ''}`}
-                    onClick={() => setIndicator(item)}
-                  >
-                    {item === 'boll' ? '布林带' : item.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="panel-body">
-              {loading ? (
-                <Loading text="加载指标数据..." />
+              ) : historyData && historyData.length > 0 && factorsData && factorsData.length > 0 ? (
+                <TechnicalChart
+                  view={mainView}
+                  chartType={chartType}
+                  indicator={indicator}
+                  bollOverlay={bollOverlay}
+                  history={historyData}
+                  factors={factorsData}
+                />
               ) : errorMsg ? (
                 <ErrorState message={errorMsg} />
-              ) : factorsData && factorsData.length > 0 ? (
-                <IndicatorChart indicator={indicator} history={historyData} factors={factorsData} />
               ) : (
-                <EmptyState icon="📊" text="暂无指标数据" />
+                <EmptyState icon="📉" text="暂无行情数据" />
               )}
             </div>
           </div>

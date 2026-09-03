@@ -1,0 +1,74 @@
+- generic [ref=f9e2]:
+  - complementary [ref=f9e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f9e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f9e5]: Q
+      - generic [ref=f9e6]:
+        - text: 量化分析终端
+        - generic [ref=f9e7]: REACT EDITION
+    - navigation [ref=f9e8]:
+      - link "🏠 首页" [ref=f9e9] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f9e10]: 🏠
+        - text: 首页
+      - link "📋 股票列表" [ref=f9e11] [cursor=pointer]:
+        - /url: /stocks
+        - generic [ref=f9e12]: 📋
+        - text: 股票列表
+      - link "📈 技术分析" [ref=f9e13] [cursor=pointer]:
+        - /url: /analysis
+        - generic [ref=f9e14]: 📈
+        - text: 技术分析
+      - link "🔍 选股筛选" [ref=f9e15] [cursor=pointer]:
+        - /url: /screen
+        - generic [ref=f9e16]: 🔍
+        - text: 选股筛选
+      - link "🧪 回测验证" [ref=f9e17] [cursor=pointer]:
+        - /url: /backtest
+        - generic [ref=f9e18]: 🧪
+        - text: 回测验证
+    - generic [ref=f9e19]:
+      - button "☀️ 浅色模式" [ref=f9e20] [cursor=pointer]:
+        - generic [ref=f9e21]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f9e22] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f9e23]: ↗
+        - text: 旧版
+  - main [ref=f9e25]:
+    - generic [ref=f9e26]:
+      - generic [ref=f9e27]:
+        - generic [ref=f9e28]:
+          - heading "回测验证" [level=2] [ref=f9e29]
+          - paragraph [ref=f9e30]: 单股票策略回测：均线 / MACD / KDJ / RSI / 布林带
+        - generic [ref=f9e31]: 等待回测
+      - generic [ref=f9e34]:
+        - generic [ref=f9e35]:
+          - generic [ref=f9e36]:
+            - generic [ref=f9e37]: 股票 *
+            - combobox [ref=f9e38]:
+              - option "请选择股票" [selected]
+          - generic [ref=f9e39]:
+            - generic [ref=f9e40]: 策略类型 *
+            - combobox [ref=f9e41]:
+              - option "请选择策略" [selected]
+              - option "均线交叉"
+              - option "MACD"
+              - option "KDJ"
+              - option "RSI"
+              - option "布林带"
+          - generic [ref=f9e42]:
+            - generic [ref=f9e43]: 开始日期
+            - textbox [ref=f9e44]: 2025-09-03
+          - generic [ref=f9e45]:
+            - generic [ref=f9e46]: 结束日期
+            - textbox [ref=f9e47]: 2026-09-03
+          - generic [ref=f9e48]:
+            - generic [ref=f9e49]: 初始资金（元）
+            - spinbutton [ref=f9e50]: "100000"
+          - generic [ref=f9e51]:
+            - generic [ref=f9e52]: 手续费率（%）
+            - spinbutton [ref=f9e53]: "0.1"
+        - generic [ref=f9e54]:
+          - button "🚀 开始回测" [ref=f9e55] [cursor=pointer]
+          - button "重置" [ref=f9e56] [cursor=pointer]

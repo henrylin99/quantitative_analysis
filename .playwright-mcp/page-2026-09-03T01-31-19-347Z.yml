@@ -1,0 +1,347 @@
+- generic [ref=f12e2]:
+  - complementary [ref=f12e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f12e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f12e5]: Q
+      - generic [ref=f12e6]:
+        - text: 量化分析终端
+        - generic [ref=f12e7]: REACT EDITION
+    - navigation [ref=f12e8]:
+      - link "🏠 首页" [ref=f12e9] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f12e10]: 🏠
+        - text: 首页
+      - link "📋 股票列表" [ref=f12e11] [cursor=pointer]:
+        - /url: /stocks
+        - generic [ref=f12e12]: 📋
+        - text: 股票列表
+      - link "📈 技术分析" [ref=f12e13] [cursor=pointer]:
+        - /url: /analysis
+        - generic [ref=f12e14]: 📈
+        - text: 技术分析
+      - link "🔍 选股筛选" [ref=f12e15] [cursor=pointer]:
+        - /url: /screen
+        - generic [ref=f12e16]: 🔍
+        - text: 选股筛选
+      - link "🧪 回测验证" [ref=f12e17] [cursor=pointer]:
+        - /url: /backtest
+        - generic [ref=f12e18]: 🧪
+        - text: 回测验证
+    - generic [ref=f12e19]:
+      - button "☀️ 浅色模式" [ref=f12e20] [cursor=pointer]:
+        - generic [ref=f12e21]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f12e22] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f12e23]: ↗
+        - text: 旧版
+  - main [ref=f12e25]:
+    - generic [ref=f12e26]:
+      - generic [ref=f12e28]:
+        - heading "技术分析" [level=2] [ref=f12e29]
+        - paragraph [ref=f12e30]: lightweight-charts v5 · K线 / 线图 · MACD / KDJ / RSI / 布林带
+      - generic [ref=f12e33]:
+        - generic [ref=f12e34]:
+          - generic [ref=f12e35]: 股票代码
+          - textbox "000001.SZ" [ref=f12e36]: 600000.SH
+          - generic [ref=f12e37]: 6 位数字自动补后缀：0/3 → .SZ · 6 → .SH
+        - generic [ref=f12e38]:
+          - generic [ref=f12e39]: 时间周期
+          - combobox [ref=f12e40]:
+            - option "30 天"
+            - option "60 天"
+            - option "120 天"
+            - option "250 天" [selected]
+        - generic [ref=f12e41]:
+          - generic [ref=f12e42]: 图表类型
+          - combobox [ref=f12e43]:
+            - option "K线图"
+            - option "线图" [selected]
+        - button "⚡ 分析" [ref=f12e46] [cursor=pointer]
+      - generic [ref=f12e51]:
+        - generic [ref=f12e52]:
+          - text: 浦发银行
+          - code [ref=f12e53]: 600000.SH
+          - generic [ref=f12e54]: 上海
+          - generic [ref=f12e55]:
+            - generic [ref=f12e56]: 行业 · 银行
+            - generic [ref=f12e57]: 地域 · 上海
+            - generic [ref=f12e58]: 上市 · 1999-11-10
+        - generic [ref=f12e59]:
+          - button "旧版详情 ↗" [ref=f12e60] [cursor=pointer]
+          - button "☆ 自选" [ref=f12e61] [cursor=pointer]
+      - generic [ref=f12e62]:
+        - generic [ref=f12e63]:
+          - generic [ref=f12e64]: "9.05"
+          - generic [ref=f12e65]: 当前价格
+        - generic [ref=f12e66]:
+          - generic [ref=f12e67]: ↓ -0.66%
+          - generic [ref=f12e69]: 涨跌幅
+        - generic [ref=f12e70]:
+          - generic [ref=f12e71]: 51.3万
+          - generic [ref=f12e72]: 成交量（手）
+        - generic [ref=f12e73]:
+          - generic [ref=f12e74]: 4.65亿
+          - generic [ref=f12e75]: 成交额
+      - generic [ref=f12e76]:
+        - generic [ref=f12e77]:
+          - heading "行情与技术指标" [level=6] [ref=f12e78]
+          - generic [ref=f12e80]:
+            - group [ref=f12e81]:
+              - button "价格" [ref=f12e82] [cursor=pointer]
+              - button "成交量" [ref=f12e83] [cursor=pointer]
+            - group [ref=f12e84]:
+              - button "MACD" [ref=f12e85] [cursor=pointer]
+              - button "KDJ" [ref=f12e86] [cursor=pointer]
+              - button "RSI" [ref=f12e87] [cursor=pointer]
+            - button "BOLL" [ref=f12e88] [cursor=pointer]
+        - generic [ref=f12e90]:
+          - generic:
+            - generic:
+              - text: 开 9.09 高 9.15 低 9.03
+              - generic: 收 9.05
+              - text: "-0.66% 量 51.27 万手"
+          - generic:
+            - generic: MACD -0.0910
+            - generic: DIF 0.0220
+            - generic: DEA 0.0680
+          - table [ref=f12e360]:
+            - row [ref=f12e361]:
+              - cell
+              - cell [ref=f12e362]
+              - cell [ref=f12e366]
+            - row [ref=f12e370]:
+              - cell [ref=f12e371]
+            - row [ref=f12e373]:
+              - cell
+              - cell [ref=f12e374]
+              - cell [ref=f12e378]
+            - row [ref=f12e382]:
+              - cell [ref=f12e383]
+            - row [ref=f12e385]:
+              - cell
+              - cell [ref=f12e386]:
+                - link "Charting by TradingView" [ref=f12e390] [cursor=pointer]:
+                  - /url: https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=localhost/analysis
+              - cell [ref=f12e395]
+            - row [ref=f12e399]:
+              - cell
+              - cell [ref=f12e400]
+              - cell [ref=f12e404]
+      - generic [ref=f12e140]:
+        - heading "详细数据 20 条" [level=6] [ref=f12e142]:
+          - text: 详细数据
+          - generic [ref=f12e144]: 20 条
+        - table [ref=f12e146]:
+          - rowgroup [ref=f12e147]:
+            - row [ref=f12e148]:
+              - columnheader "日期" [ref=f12e149]
+              - columnheader "开盘" [ref=f12e150]
+              - columnheader "最高" [ref=f12e151]
+              - columnheader "最低" [ref=f12e152]
+              - columnheader "收盘" [ref=f12e153]
+              - columnheader "成交量" [ref=f12e154]
+              - columnheader "涨跌幅" [ref=f12e155]
+              - columnheader "RSI" [ref=f12e156]
+              - columnheader "MACD" [ref=f12e157]
+          - rowgroup [ref=f12e158]:
+            - row [ref=f12e159]:
+              - cell "2026-08-21" [ref=f12e160]
+              - cell "9.09" [ref=f12e161]
+              - cell "9.15" [ref=f12e162]
+              - cell "9.03" [ref=f12e163]
+              - cell "9.05" [ref=f12e164]
+              - cell "51.3万" [ref=f12e165]
+              - cell "-0.66%" [ref=f12e166]
+              - cell "40.35" [ref=f12e167]
+              - cell "-0.0910" [ref=f12e168]
+            - row [ref=f12e169]:
+              - cell "2026-08-20" [ref=f12e170]
+              - cell "9.03" [ref=f12e171]
+              - cell "9.14" [ref=f12e172]
+              - cell "8.98" [ref=f12e173]
+              - cell "9.11" [ref=f12e174]
+              - cell "67.3万" [ref=f12e175]
+              - cell "+0.33%" [ref=f12e176]
+              - cell "46.82" [ref=f12e177]
+              - cell "-0.0950" [ref=f12e178]
+            - row [ref=f12e179]:
+              - cell "2026-08-19" [ref=f12e180]
+              - cell "9.01" [ref=f12e181]
+              - cell "9.09" [ref=f12e182]
+              - cell "8.98" [ref=f12e183]
+              - cell "9.08" [ref=f12e184]
+              - cell "75.2万" [ref=f12e185]
+              - cell "+1.23%" [ref=f12e186]
+              - cell "43.01" [ref=f12e187]
+              - cell "-0.1080" [ref=f12e188]
+            - row [ref=f12e189]:
+              - cell "2026-08-18" [ref=f12e190]
+              - cell "9.07" [ref=f12e191]
+              - cell "9.08" [ref=f12e192]
+              - cell "8.96" [ref=f12e193]
+              - cell "8.97" [ref=f12e194]
+              - cell "61.1万" [ref=f12e195]
+              - cell "-0.77%" [ref=f12e196]
+              - cell "27.04" [ref=f12e197]
+              - cell "-0.1170" [ref=f12e198]
+            - row [ref=f12e199]:
+              - cell "2026-08-17" [ref=f12e200]
+              - cell "9.09" [ref=f12e201]
+              - cell "9.09" [ref=f12e202]
+              - cell "8.98" [ref=f12e203]
+              - cell "9.04" [ref=f12e204]
+              - cell "57.2万" [ref=f12e205]
+              - cell "-0.66%" [ref=f12e206]
+              - cell "31.76" [ref=f12e207]
+              - cell "-0.1010" [ref=f12e208]
+            - row [ref=f12e209]:
+              - cell "2026-08-14" [ref=f12e210]
+              - cell "9.14" [ref=f12e211]
+              - cell "9.17" [ref=f12e212]
+              - cell "9.06" [ref=f12e213]
+              - cell "9.10" [ref=f12e214]
+              - cell "43.6万" [ref=f12e215]
+              - cell "-0.87%" [ref=f12e216]
+              - cell "36.29" [ref=f12e217]
+              - cell "-0.0850" [ref=f12e218]
+            - row [ref=f12e219]:
+              - cell "2026-08-13" [ref=f12e220]
+              - cell "9.16" [ref=f12e221]
+              - cell "9.20" [ref=f12e222]
+              - cell "9.10" [ref=f12e223]
+              - cell "9.18" [ref=f12e224]
+              - cell "52.9万" [ref=f12e225]
+              - cell "+0.11%" [ref=f12e226]
+              - cell "43.11" [ref=f12e227]
+              - cell "-0.0690" [ref=f12e228]
+            - row [ref=f12e229]:
+              - cell "2026-08-12" [ref=f12e230]
+              - cell "9.21" [ref=f12e231]
+              - cell "9.22" [ref=f12e232]
+              - cell "9.12" [ref=f12e233]
+              - cell "9.17" [ref=f12e234]
+              - cell "46.8万" [ref=f12e235]
+              - cell "-0.43%" [ref=f12e236]
+              - cell "41.98" [ref=f12e237]
+              - cell "-0.0580" [ref=f12e238]
+            - row [ref=f12e239]:
+              - cell "2026-08-11" [ref=f12e240]
+              - cell "9.27" [ref=f12e241]
+              - cell "9.34" [ref=f12e242]
+              - cell "9.18" [ref=f12e243]
+              - cell "9.21" [ref=f12e244]
+              - cell "50.9万" [ref=f12e245]
+              - cell "-0.86%" [ref=f12e246]
+              - cell "44.97" [ref=f12e247]
+              - cell "-0.0380" [ref=f12e248]
+            - row [ref=f12e249]:
+              - cell "2026-08-10" [ref=f12e250]
+              - cell "9.20" [ref=f12e251]
+              - cell "9.38" [ref=f12e252]
+              - cell "9.16" [ref=f12e253]
+              - cell "9.29" [ref=f12e254]
+              - cell "62.5万" [ref=f12e255]
+              - cell "+0.87%" [ref=f12e256]
+              - cell "51.05" [ref=f12e257]
+              - cell "-0.0160" [ref=f12e258]
+            - row [ref=f12e259]:
+              - cell "2026-08-07" [ref=f12e260]
+              - cell "9.26" [ref=f12e261]
+              - cell "9.29" [ref=f12e262]
+              - cell "9.14" [ref=f12e263]
+              - cell "9.21" [ref=f12e264]
+              - cell "56.5万" [ref=f12e265]
+              - cell "-0.86%" [ref=f12e266]
+              - cell "44.84" [ref=f12e267]
+              - cell "0.0000" [ref=f12e268]
+            - row [ref=f12e269]:
+              - cell "2026-08-06" [ref=f12e270]
+              - cell "9.28" [ref=f12e271]
+              - cell "9.35" [ref=f12e272]
+              - cell "9.16" [ref=f12e273]
+              - cell "9.29" [ref=f12e274]
+              - cell "67.2万" [ref=f12e275]
+              - cell "+0.32%" [ref=f12e276]
+              - cell "50.14" [ref=f12e277]
+              - cell "0.0370" [ref=f12e278]
+            - row [ref=f12e279]:
+              - cell "2026-08-05" [ref=f12e280]
+              - cell "9.49" [ref=f12e281]
+              - cell "9.49" [ref=f12e282]
+              - cell "9.23" [ref=f12e283]
+              - cell "9.26" [ref=f12e284]
+              - cell "79.5万" [ref=f12e285]
+              - cell "-1.49%" [ref=f12e286]
+              - cell "48.22" [ref=f12e287]
+              - cell "0.0720" [ref=f12e288]
+            - row [ref=f12e289]:
+              - cell "2026-08-04" [ref=f12e290]
+              - cell "9.56" [ref=f12e291]
+              - cell "9.58" [ref=f12e292]
+              - cell "9.35" [ref=f12e293]
+              - cell "9.40" [ref=f12e294]
+              - cell "83.5万" [ref=f12e295]
+              - cell "-2.39%" [ref=f12e296]
+              - cell "56.68" [ref=f12e297]
+              - cell "0.1240" [ref=f12e298]
+            - row [ref=f12e299]:
+              - cell "2026-08-03" [ref=f12e300]
+              - cell "9.51" [ref=f12e301]
+              - cell "9.65" [ref=f12e302]
+              - cell "9.45" [ref=f12e303]
+              - cell "9.63" [ref=f12e304]
+              - cell "89.9万" [ref=f12e305]
+              - cell "+1.26%" [ref=f12e306]
+              - cell "74.57" [ref=f12e307]
+              - cell "0.1620" [ref=f12e308]
+            - row [ref=f12e309]:
+              - cell "2026-07-31" [ref=f12e310]
+              - cell "9.59" [ref=f12e311]
+              - cell "9.59" [ref=f12e312]
+              - cell "9.28" [ref=f12e313]
+              - cell "9.51" [ref=f12e314]
+              - cell "138.3万" [ref=f12e315]
+              - cell "-2.06%" [ref=f12e316]
+              - cell "70.52" [ref=f12e317]
+              - cell "0.1590" [ref=f12e318]
+            - row [ref=f12e319]:
+              - cell "2026-07-30" [ref=f12e320]
+              - cell "9.26" [ref=f12e321]
+              - cell "9.72" [ref=f12e322]
+              - cell "9.25" [ref=f12e323]
+              - cell "9.71" [ref=f12e324]
+              - cell "161.7万" [ref=f12e325]
+              - cell "+4.63%" [ref=f12e326]
+              - cell "90.53" [ref=f12e327]
+              - cell "0.1620" [ref=f12e328]
+            - row [ref=f12e329]:
+              - cell "2026-07-29" [ref=f12e330]
+              - cell "9.19" [ref=f12e331]
+              - cell "9.35" [ref=f12e332]
+              - cell "9.17" [ref=f12e333]
+              - cell "9.28" [ref=f12e334]
+              - cell "111.0万" [ref=f12e335]
+              - cell "+0.98%" [ref=f12e336]
+              - cell "80.74" [ref=f12e337]
+              - cell "0.1100" [ref=f12e338]
+            - row [ref=f12e339]:
+              - cell "2026-07-28" [ref=f12e340]
+              - cell "9.12" [ref=f12e341]
+              - cell "9.21" [ref=f12e342]
+              - cell "9.04" [ref=f12e343]
+              - cell "9.19" [ref=f12e344]
+              - cell "102.1万" [ref=f12e345]
+              - cell "+1.55%" [ref=f12e346]
+              - cell "76.50" [ref=f12e347]
+              - cell "0.1030" [ref=f12e348]
+            - row [ref=f12e349]:
+              - cell "2026-07-27" [ref=f12e350]
+              - cell "9.00" [ref=f12e351]
+              - cell "9.13" [ref=f12e352]
+              - cell "8.96" [ref=f12e353]
+              - cell "9.05" [ref=f12e354]
+              - cell "55.7万" [ref=f12e355]
+              - cell "+0.11%" [ref=f12e356]
+              - cell "67.13" [ref=f12e357]
+              - cell "0.0990" [ref=f12e358]

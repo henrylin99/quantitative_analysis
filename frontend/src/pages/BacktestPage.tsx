@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchStockOptions, runBacktest } from '../api/analysis'
 import type { BacktestResultData, StrategyType } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
+import EquityCurve from '../charts/EquityCurve'
 import { formatNumber, formatPercent, pctClass, toLocalDate } from '../utils/format'
 
 interface StrategyMeta {
@@ -300,6 +301,21 @@ export default function BacktestPage() {
               </div>
             </div>
           </div>
+
+          {result.daily_values && result.daily_values.length > 0 && (
+            <div className="panel">
+              <div className="panel-head">
+                <h6 className="panel-title">
+                  <span className="kicker" />
+                  资金曲线
+                  <span className="chip">{result.daily_values.length} 个交易日</span>
+                </h6>
+              </div>
+              <div className="panel-body">
+                <EquityCurve dailyValues={result.daily_values} />
+              </div>
+            </div>
+          )}
 
           <div className="panel">
             <div className="panel-head">

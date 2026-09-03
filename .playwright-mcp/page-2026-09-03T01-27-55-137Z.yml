@@ -1,0 +1,174 @@
+- generic [ref=f9e2]:
+  - complementary [ref=f9e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f9e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f9e5]: Q
+      - generic [ref=f9e6]:
+        - text: 量化分析终端
+        - generic [ref=f9e7]: REACT EDITION
+    - navigation [ref=f9e8]:
+      - link "🏠 首页" [ref=f9e9] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f9e10]: 🏠
+        - text: 首页
+      - link "📋 股票列表" [ref=f9e11] [cursor=pointer]:
+        - /url: /stocks
+        - generic [ref=f9e12]: 📋
+        - text: 股票列表
+      - link "📈 技术分析" [ref=f9e13] [cursor=pointer]:
+        - /url: /analysis
+        - generic [ref=f9e14]: 📈
+        - text: 技术分析
+      - link "🔍 选股筛选" [ref=f9e15] [cursor=pointer]:
+        - /url: /screen
+        - generic [ref=f9e16]: 🔍
+        - text: 选股筛选
+      - link "🧪 回测验证" [ref=f9e17] [cursor=pointer]:
+        - /url: /backtest
+        - generic [ref=f9e18]: 🧪
+        - text: 回测验证
+    - generic [ref=f9e19]:
+      - button "☀️ 浅色模式" [ref=f9e20] [cursor=pointer]:
+        - generic [ref=f9e21]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f9e22] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f9e23]: ↗
+        - text: 旧版
+  - main [ref=f9e25]:
+    - generic [ref=f9e26]:
+      - generic [ref=f9e27]:
+        - generic [ref=f9e28]:
+          - heading "回测验证" [level=2] [ref=f9e29]
+          - paragraph [ref=f9e30]: 单股票策略回测：均线 / MACD / KDJ / RSI / 布林带
+        - generic [ref=f9e31]: 等待回测
+      - generic [ref=f9e34]:
+        - generic [ref=f9e35]:
+          - generic [ref=f9e36]:
+            - generic [ref=f9e37]: 股票 *
+            - combobox [ref=f9e38]:
+              - option "请选择股票"
+              - option "000001 - 平安银行" [selected]
+              - option "000002 - 万科A"
+              - option "000006 - 深振业A"
+              - option "000007 - 全新好"
+              - option "000008 - 神州高铁"
+              - option "000009 - 中国宝安"
+              - option "000010 - *ST美丽"
+              - option "000011 - 深物业A"
+              - option "000012 - 南玻A"
+              - option "000014 - 沙河股份"
+              - option "000016 - *ST康佳A"
+              - option "000017 - 深中华A"
+              - option "000019 - 深粮控股"
+              - option "000020 - 深华发A"
+              - option "000021 - 深科技"
+              - option "000025 - 特力A"
+              - option "000026 - 飞亚达"
+              - option "000027 - 深圳能源"
+              - option "000028 - 国药一致"
+              - option "000029 - 深深房A"
+              - option "000030 - 富奥股份"
+              - option "000031 - 大悦城"
+              - option "000032 - 深桑达A"
+              - option "000034 - 神州数码"
+              - option "000035 - 中国天楹"
+              - option "000036 - 华联控股"
+              - option "000037 - 深南电A"
+              - option "000039 - 中集集团"
+              - option "000042 - 中洲控股"
+              - option "000045 - 深纺织A"
+              - option "000048 - 京基智农"
+              - option "000049 - 德赛电池"
+              - option "000050 - 深天马A"
+              - option "000055 - 方大集团"
+              - option "000056 - *ST皇庭"
+              - option "000058 - 深赛格"
+              - option "000059 - 华锦股份"
+              - option "000060 - 中金岭南"
+              - option "000061 - 农产品"
+              - option "000062 - 深圳华强"
+              - option "000063 - 中兴通讯"
+              - option "000065 - 北方国际"
+              - option "000066 - 中国长城"
+              - option "000068 - 华控赛格"
+              - option "000069 - 华侨城A"
+              - option "000070 - 特发信息"
+              - option "000078 - ST海王"
+              - option "000088 - 盐田港"
+              - option "000089 - 深圳机场"
+              - option "000090 - 天健集团"
+              - option "000096 - 广聚能源"
+              - option "000099 - 中信海直"
+              - option "000100 - TCL科技"
+              - option "000151 - 中成股份"
+              - option "000153 - 丰原药业"
+              - option "000155 - 川能动力"
+              - option "000156 - 华数传媒"
+              - option "000157 - 中联重科"
+              - option "000158 - 常山北明"
+              - option "000159 - 国际实业"
+              - option "000166 - 申万宏源"
+              - option "000301 - 东方盛虹"
+              - option "000333 - 美的集团"
+              - option "000338 - 潍柴动力"
+              - option "000400 - 许继电气"
+              - option "000401 - 金隅冀东"
+              - option "000402 - 金融街"
+              - option "000403 - 派林生物"
+              - option "000404 - 长虹华意"
+              - option "000407 - 胜利股份"
+              - option "000408 - 藏格矿业"
+              - option "000409 - 云鼎科技"
+              - option "000410 - 沈阳机床"
+              - option "000411 - 英特集团"
+              - option "000415 - 渤海租赁"
+              - option "000417 - 合百集团"
+              - option "000419 - 通程控股"
+              - option "000420 - 吉林化纤"
+              - option "000421 - 南京公用"
+              - option "000422 - 湖北宜化"
+              - option "000423 - 东阿阿胶"
+              - option "000425 - 徐工机械"
+              - option "000426 - 兴业银锡"
+              - option "000428 - 华天酒店"
+              - option "000429 - 粤高速A"
+              - option "000430 - 张家界"
+              - option "000488 - ST晨鸣"
+              - option "000498 - 山东路桥"
+              - option "000501 - 武商集团"
+              - option "000503 - 国新健康"
+              - option "000504 - 南华生物"
+              - option "000505 - 京粮控股"
+              - option "000506 - 招金黄金"
+              - option "000507 - 珠海港"
+              - option "000509 - 华塑控股"
+              - option "000510 - 新金路"
+              - option "000513 - 丽珠集团"
+              - option "000514 - 渝开发"
+              - option "000516 - 国际医学"
+              - option "000517 - 荣安地产"
+          - generic [ref=f9e39]:
+            - generic [ref=f9e40]: 策略类型 *
+            - combobox [ref=f9e41]:
+              - option "请选择策略" [selected]
+              - option "均线交叉"
+              - option "MACD"
+              - option "KDJ"
+              - option "RSI"
+              - option "布林带"
+          - generic [ref=f9e42]:
+            - generic [ref=f9e43]: 开始日期
+            - textbox [ref=f9e44]: 2025-09-03
+          - generic [ref=f9e45]:
+            - generic [ref=f9e46]: 结束日期
+            - textbox [ref=f9e47]: 2026-09-03
+          - generic [ref=f9e48]:
+            - generic [ref=f9e49]: 初始资金（元）
+            - spinbutton [ref=f9e50]: "100000"
+          - generic [ref=f9e51]:
+            - generic [ref=f9e52]: 手续费率（%）
+            - spinbutton [ref=f9e53]: "0.1"
+        - generic [ref=f9e54]:
+          - button "🚀 开始回测" [ref=f9e55] [cursor=pointer]
+          - button "重置" [ref=f9e56] [cursor=pointer]
