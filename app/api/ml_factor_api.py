@@ -727,6 +727,30 @@ def latest_prediction_trade_date():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/factors/latest-coverage-date', methods=['GET'])
+def latest_factor_coverage_date():
+    """返回指定因子集合在因子库中均有数据的最近交易日。
+
+    增量接口（旧前端未使用）：动量/资金流类因子与财务类因子的入库日期不同步，
+    因子库全局最新日期上目标因子组合可能无任何行，按集合反查最近覆盖日期。
+    """
+    try:
+        raw = request.args.get('factor_ids', '')
+        factor_ids = [item.strip() for item in raw.split(',') if item.strip()] or None
+        latest_date = get_scoring_engine().latest_factor_coverage_date(factor_ids)
+        if latest_date is None:
+            return jsonify({'success': False, 'error': '未找到因子数据'}), 404
+
+        return jsonify({
+            'success': True,
+            'latest_coverage_date': latest_date,
+            'factor_ids': factor_ids,
+        })
+    except Exception as e:
+        logger.error(f"获取因子覆盖日期失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/scoring/ml-based', methods=['POST'])
 def ml_based_scoring():
     """基于机器学习的股票选择"""
@@ -1707,7 +1731,7 @@ def integrated_portfolio_selection():
 def run_backtest():
     """运行回测
 
-    mode=async 时改为 Celery 异步执行：立即返回 run_id，前端轮询
+    mode=async 时改为后台线程异步执行：立即返回 run_id，前端轮询
     /backtest/runs/<id> 的 summary.status，完成后取
     /backtest/runs/<id>/result。默认同步执行，行为与历史版本一致。
     """
@@ -1736,17 +1760,21 @@ def run_backtest():
             )
             run_id = int(run['id'])
             _backtest_repo.update_summary(run_id, {'status': 'queued'})
-            # 延迟导入，避免 API 模块加载期拉起 Celery 任务链
+            # 去 Redis 化后无 Celery worker：后台线程执行，任务自写
+            # BacktestRepository，前端凭 run_id 轮询状态
+            import threading
             from app.tasks.backtest_tasks import run_backtest_task
-            async_result = run_backtest_task.delay(
-                run_id, strategy_config, start_date, end_date,
-                initial_capital, rebalance_frequency,
-            )
+            threading.Thread(
+                target=run_backtest_task,
+                args=(run_id, strategy_config, start_date, end_date,
+                      initial_capital, rebalance_frequency),
+                name=f"backtest-{run_id}",
+                daemon=True,
+            ).start()
             return jsonify({
                 'success': True,
                 'queued': True,
                 'run_id': run_id,
-                'task_id': getattr(async_result, 'id', None),
                 'status_url': f'/api/ml-factor/backtest/runs/{run_id}',
                 'result_url': f'/api/ml-factor/backtest/runs/{run_id}/result',
             })

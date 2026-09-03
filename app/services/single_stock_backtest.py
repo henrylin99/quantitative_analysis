@@ -70,7 +70,10 @@ class SingleStockBacktestEngine:
             return {
                 'performance': performance,
                 'trades': self.trades[-20:],  # 返回最近20笔交易
-                'config': self.config
+                'config': self.config,
+                # 每日资产序列（date/cash/position_value/total_value），
+                # 供前端绘制资金曲线；旧前端不消费该字段，纯增量
+                'daily_values': self.daily_values
             }
 
         except Exception as e:

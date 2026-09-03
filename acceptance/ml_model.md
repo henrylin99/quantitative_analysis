@@ -13,6 +13,9 @@ XGBoost/LightGBM/RandomForest 模型生命周期管理，包含真实训练、�
 | 模型删除 API | tests/api/test_ml_model_delete_api.py | module_ml_model |
 | 训练任务服务 | tests/services/test_model_training_job_service.py | module_ml_model |
 | 训练任务 API | tests/api/test_ml_factor_training_job_api.py | module_ml_model |
+| 模型库合约 | tests/services/test_model_repository_contract.py | module_ml_model |
+| ML 管理器 Parquet 集成 | tests/services/test_ml_model_manager_parquet_integration.py | module_ml_model |
+| 训练防泄漏守卫 | tests/services/test_ml_training_no_leakage.py | module_ml_model |
 
 ## 数值软目标（M3 里程碑 review 时人工确认）
 - 训练 AUC > 0.55（样本内，XGBoost 默认参数）

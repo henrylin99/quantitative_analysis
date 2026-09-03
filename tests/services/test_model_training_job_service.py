@@ -1,4 +1,7 @@
 from app.services.model_training_job_service import ModelTrainingJobService
+import pytest
+
+pytestmark = pytest.mark.module_ml_model
 
 
 def test_training_job_service_uses_resolved_training_dates():

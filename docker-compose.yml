@@ -2,7 +2,6 @@ services:
   web:
     build: .
     environment:
-      - REDIS_HOST=redis
       - DATA_DIR=/app/data
       - SQLITE_DATABASE_PATH=/app/instance/stock_cursor.sqlite3
       - FLASK_ENV=production
@@ -15,33 +14,4 @@ services:
     volumes:
       - ./data:/app/data
       - ./instance:/app/instance
-    depends_on:
-      redis:
-        condition: service_healthy
     restart: unless-stopped
-
-  worker:
-    build: .
-    command: celery -A app.celery_app.celery worker -l info -P solo
-    environment:
-      - REDIS_HOST=redis
-      - DATA_DIR=/app/data
-      - SQLITE_DATABASE_PATH=/app/instance/stock_cursor.sqlite3
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-      - ./instance:/app/instance
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    # 不映射宿主机端口：仅容器网络内可达，避免无认证暴露
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5

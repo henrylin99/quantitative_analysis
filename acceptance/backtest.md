@@ -7,11 +7,15 @@
 | 合约 | 测试文件 | Marker |
 |---|---|---|
 | 基准收益计算 | tests/services/test_backtest_benchmark_returns.py | module_backtest |
+| 回测运行记录 API 合约 | tests/api/test_backtest_run_contract.py | module_backtest |
 | 回测响应合约 | tests/services/test_backtest_response_contract.py | module_backtest |
 | 无 fake 默认值守卫 | tests/ui/test_backtest_template_no_fake_defaults.py | module_backtest |
 | 回测模板 UI 合约 | tests/ui/test_backtest_template_contract.py | module_backtest |
 | 回测 schema 合约 | tests/ui/test_backtest_backend_schema_contract.py | module_backtest |
 | 回测执行合约 | tests/ui/test_backtest_execution_contract.py | module_backtest |
+| 回测库合约 | tests/services/test_backtest_repository_contract.py | module_backtest |
+| 回测交易规则守卫 | tests/services/test_backtest_engine_rules.py | module_backtest |
+| 单股回测引擎合约 | tests/services/test_single_stock_backtest.py | module_backtest |
 
 ## 数值软目标（M4 里程碑 review 时人工确认）
 - 样本内 Sharpe > 0.8（单因子策略，2年回测）
