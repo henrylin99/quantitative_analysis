@@ -131,10 +131,8 @@ def build_startup_report(app_config: Mapping[str, object]) -> list[str]:
     if mode == "inline":
         lines.append("日频数据中心任务将在当前 Web 进程内执行，无需单独启动 Celery worker。")
     else:
-        host = app_config.get("REDIS_HOST", "localhost")
-        port = app_config.get("REDIS_PORT", 6379)
-        db = app_config.get("REDIS_DB", 0)
-        lines.append(f"日频数据中心任务将通过 Celery 执行，请确认 Redis 可用: redis://{host}:{port}/{db}")
-        lines.append("如需使用日频数据中心，请额外启动 Celery worker。")
+        # 去 Redis 化后无外部 broker，非 inline 值仅为兼容旧配置，
+        # 任务同样在当前进程内执行（task.delay 等价于同步调用）
+        lines.append("DATA_JOB_EXECUTION_MODE 非 inline：任务同样在当前进程内本地执行。")
 
     return lines

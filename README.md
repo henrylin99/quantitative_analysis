@@ -127,7 +127,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-默认会同时启动 Web、SQLite 和 Redis；其中市场数据和 ml-factor 状态仍以本地 parquet 文件为准。
+默认只启动 Web 单容器（SQLite 与 parquet 状态均为本地文件）；市场数据和 ml-factor 状态以本地 parquet 文件为准。
 
 ### 3. 启动系统
 

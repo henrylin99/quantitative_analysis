@@ -1,11 +1,10 @@
+"""进程内任务注册表（原 Celery 入口，去 Redis 化后无外部 broker）。
+
+`@celery.task` 只负责注册任务，`task.delay(...)` 等价于同步直接调用；
+长任务的非阻塞执行由调用方自行开线程（见 ml_factor_api 的 async 回测）。
+保留模块路径 `app.celery_app.celery`，app/tasks/* 及既有调用方无需改动。
+"""
 from types import SimpleNamespace
-
-from config import config
-
-try:
-    from celery import Celery
-except ModuleNotFoundError:  # pragma: no cover - local fallback for environments without celery
-    Celery = None
 
 
 class _LocalTaskWrapper:
@@ -37,36 +36,13 @@ class _LocalCelery:
 
 
 def make_celery(config_name: str = "default"):
-    cfg = config[config_name]
-
-    if Celery is None:
-        logger = __import__("logging").getLogger(__name__)
-        logger.warning(
-            "未安装 celery，数据任务将以本地内联方式执行（不适合生产环境）"
-        )
-        return _LocalCelery()
-
-    # 优先使用完整的 CELERY_BROKER_URL / CELERY_RESULT_BACKEND，
-    # 支持带密码等无法用 host/port 拼接表达的形式
-    broker = getattr(cfg, "CELERY_BROKER_URL", None) or (
-        f"redis://{cfg.REDIS_HOST}:{cfg.REDIS_PORT}/{cfg.REDIS_DB}"
-    )
-    backend = getattr(cfg, "CELERY_RESULT_BACKEND", None) or broker
-
-    celery = Celery("quant_data_jobs", broker=broker, backend=backend)
-    celery.conf.update(
-        task_serializer="json",
-        accept_content=["json"],
-        result_serializer="json",
-        timezone="Asia/Shanghai",
-        enable_utc=False,
-    )
-    return celery
+    """保留原签名。无外部 broker，任务在调用进程内直接执行。"""
+    return _LocalCelery()
 
 
 celery = make_celery()
 
-# Ensure all task modules are imported so worker can discover registered tasks.
+# Import all task modules so they register on the local registry.
 from app.tasks import data_jobs_tasks  # noqa: E402,F401
 from app.tasks import report_tasks  # noqa: E402,F401
 from app.tasks import backtest_tasks  # noqa: E402,F401
