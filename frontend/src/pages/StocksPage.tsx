@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { OLD_SITE_BASE } from '../App'
+import { Link } from 'react-router-dom'
 import { fetchAreas, fetchIndustries, fetchStocks } from '../api/stocks'
 import type { StockListData } from '../api/types'
 import { EmptyState, ErrorState, TableSkeleton } from '../components/StateViews'
@@ -173,14 +173,9 @@ export default function StocksPage() {
                         <td>{stock.area ?? '--'}</td>
                         <td>{stock.list_date ?? '--'}</td>
                         <td className="num">
-                          <a
-                            className="btn btn-outline-primary btn-sm"
-                            href={`${OLD_SITE_BASE}/stock/${stock.ts_code}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            详情 ↗
-                          </a>
+                          <Link className="btn btn-outline-primary btn-sm" to={`/stock/${stock.ts_code}`}>
+                            详情
+                          </Link>
                         </td>
                       </tr>
                     ))

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { OLD_SITE_BASE } from '../App'
+import { Link } from 'react-router-dom'
 import { fetchAreas, fetchIndustries } from '../api/stocks'
 import { runScreen } from '../api/analysis'
 import type { DynamicCondition, ScreenCriteria, ScreenResultData } from '../api/types'
@@ -597,22 +597,12 @@ export default function ScreenPage() {
                       <td className="num">{formatNumber(row.moneyflow_net_amount as number ?? null, 0)}</td>
                       <td>{row.trade_date ?? '--'}</td>
                       <td className="num">
-                        <a
-                          className="btn btn-outline-primary btn-sm me-1"
-                          href={`${OLD_SITE_BASE}/stock/${row.ts_code}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          详情 ↗
-                        </a>
-                        <a
-                          className="btn btn-outline-secondary btn-sm"
-                          href={`${OLD_SITE_BASE}/analysis?stock=${row.ts_code}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          分析 ↗
-                        </a>
+                        <Link className="btn btn-outline-primary btn-sm me-1" to={`/stock/${row.ts_code}`}>
+                          详情
+                        </Link>
+                        <Link className="btn btn-outline-secondary btn-sm" to={`/analysis?stock=${row.ts_code}`}>
+                          分析
+                        </Link>
                       </td>
                     </tr>
                   ))}

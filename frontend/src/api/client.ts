@@ -51,10 +51,32 @@ async function unwrap<T>(promise: Promise<{ data: Envelope<T> }>): Promise<T> {
   return env.data as T
 }
 
-export function apiGet<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-  return unwrap<T>(http.get<Envelope<T>>(url, { params }))
+export function apiGet<T>(url: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T> {
+  return unwrap<T>(http.get<Envelope<T>>(url, { params, timeout: timeoutMs }))
 }
 
-export function apiPost<T>(url: string, body?: unknown): Promise<T> {
-  return unwrap<T>(http.post<Envelope<T>>(url, body ?? {}))
+export function apiPost<T>(url: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  return unwrap<T>(http.post<Envelope<T>>(url, body ?? {}, { timeout: timeoutMs }))
 }
+
+export function apiPut<T>(url: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  return unwrap<T>(http.put<Envelope<T>>(url, body ?? {}, { timeout: timeoutMs }))
+}
+
+export function apiDelete<T>(url: string, timeoutMs?: number): Promise<T> {
+  return unwrap<T>(http.delete<Envelope<T>>(url, { timeout: timeoutMs }))
+}
+
+/** 非 200 业务码也把响应体交还给调用方（部分接口用 code 表达业务状态而非抛错） */
+export async function apiGetEnvelope<T>(url: string, params?: Record<string, unknown>): Promise<Envelope<T>> {
+  const resp = await http.get<Envelope<T>>(url, { params })
+  return resp.data
+}
+
+export async function apiPostEnvelope<T>(url: string, body?: unknown, timeoutMs?: number): Promise<Envelope<T>> {
+  const resp = await http.post<Envelope<T>>(url, body ?? {}, { timeout: timeoutMs })
+  return resp.data
+}
+
+/** 原始 axios 实例：blob 下载等特殊场景 */
+export { http }
