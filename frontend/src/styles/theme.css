@@ -1,0 +1,129 @@
+:root {
+  --obs-bg: #0f172a;
+  --obs-surface: #1e293b;
+  --obs-border: #334155;
+  --obs-accent: #6366f1;
+  --obs-up: #f87171;
+  --obs-down: #4ade80;
+  --bs-body-bg: var(--obs-bg);
+  --bs-body-color: #e2e8f0;
+  --bs-primary: var(--obs-accent);
+}
+
+body {
+  font-family:
+    'DM Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+}
+
+.main-content {
+  margin-top: 72px;
+  padding-bottom: 2rem;
+}
+
+.navbar-financial {
+  background-color: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid var(--obs-border);
+}
+
+.navbar-financial .nav-link.active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.card {
+  background-color: var(--obs-surface);
+  border: 1px solid var(--obs-border);
+}
+
+.card-header {
+  background-color: rgba(51, 65, 85, 0.5);
+  border-bottom: 1px solid var(--obs-border);
+  font-weight: 600;
+}
+
+.metric-card .metric-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.metric-card .metric-label {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.text-up {
+  color: var(--obs-up);
+}
+
+.text-down {
+  color: var(--obs-down);
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+}
+
+#main-chart,
+.chart-container .chart-target {
+  height: 480px;
+}
+
+.chart-container.indicator .chart-target {
+  height: 400px;
+}
+
+.chart-legend {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 5;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.chart-tab {
+  cursor: pointer;
+  padding: 4px 14px;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.chart-tab:hover {
+  color: #e2e8f0;
+}
+
+.chart-tab.active {
+  background: var(--obs-accent);
+  color: #fff;
+}
+
+.btn-view-group .btn {
+  --bs-btn-padding-y: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.table > :not(caption) > * > * {
+  background-color: transparent;
+}
+
+.empty-state {
+  color: #64748b;
+  text-align: center;
+  padding: 3rem 1rem;
+}
