@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { OLD_SITE_BASE } from '../App'
+import { Link } from 'react-router-dom'
 import { fetchStockFactors, fetchStockHistory, fetchStockInfo } from '../api/stocks'
 import type { DailyBar, FactorRow, StockBasic } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
@@ -200,13 +200,9 @@ export default function AnalysisPage() {
                 </div>
               )}
               <div className="d-flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-outline-primary btn-sm"
-                  onClick={() => window.open(`${OLD_SITE_BASE}/stock/${normalizeStockCode(stockInput)}`, '_blank')}
-                >
-                  旧版详情 ↗
-                </button>
+                <Link className="btn btn-outline-primary btn-sm" to={`/stock/${normalizeStockCode(stockInput)}`}>
+                  个股详情
+                </Link>
                 <button
                   type="button"
                   className="btn btn-outline-secondary btn-sm"

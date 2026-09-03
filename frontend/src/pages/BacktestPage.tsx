@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { fetchStockOptions, runBacktest } from '../api/analysis'
 import type { BacktestResultData, StrategyType } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
@@ -86,6 +87,8 @@ export default function BacktestPage() {
   const [runError, setRunError] = useState<string | null>(null)
   const [result, setResult] = useState<BacktestResultData | null>(null)
 
+  const [searchParams] = useSearchParams()
+
   useEffect(() => {
     const end = new Date()
     const start = new Date()
@@ -93,9 +96,15 @@ export default function BacktestPage() {
     setEndDate(toLocalDate(end))
     setStartDate(toLocalDate(start))
 
+    // 旧版契约：/backtest?stock=CODE 预选股票
+    const preset = searchParams.get('stock')?.trim().toUpperCase()
     fetchStockOptions()
-      .then((data) => setStocks(data.stocks))
+      .then((data) => {
+        setStocks(data.stocks)
+        if (preset && data.stocks.some((s) => s.ts_code === preset)) setTsCode(preset)
+      })
       .catch(() => setStocks([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const strategyMeta = useMemo(() => STRATEGIES.find((s) => s.type === strategyType) ?? null, [strategyType])

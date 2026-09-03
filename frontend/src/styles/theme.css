@@ -140,6 +140,24 @@ body {
   flex-direction: column;
   gap: 3px;
   flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+
+.side-group-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 4px 12px 2px;
 }
 
 .side-link {
@@ -173,6 +191,42 @@ body {
 
 [data-theme='light'] .side-link.active {
   color: #fff;
+}
+
+/* 键值两列表（财务/公司信息等） */
+.kv-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px;
+}
+.kv-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* 形态选股左右布局 */
+.screen-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.screen-layout .side-panel {
+  width: 300px;
+  flex-shrink: 0;
+}
+@media (max-width: 991.98px) {
+  .screen-layout {
+    flex-direction: column;
+  }
+  .screen-layout .side-panel {
+    width: 100%;
+  }
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: var(--accent);
 }
 
 .sidebar-foot {
