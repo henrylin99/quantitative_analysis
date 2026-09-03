@@ -1,13 +1,13 @@
-from flask import Flask
+"""数据任务 API 合约：真实 Flask app fixture + 服务边界 mock。"""
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.api.data_jobs_api import data_jobs_bp
+import pytest
+
+pytestmark = pytest.mark.module_data_jobs
 
 
-def test_submit_endpoint_returns_job_id():
-    app = Flask(__name__)
-    app.register_blueprint(data_jobs_bp)
+def test_submit_endpoint_returns_job_id(app):
     client = app.test_client()
 
     fake_service = SimpleNamespace(
@@ -24,9 +24,7 @@ def test_submit_endpoint_returns_job_id():
     assert data["success"] is True
 
 
-def test_jobs_endpoint_uses_visible_only_by_default():
-    app = Flask(__name__)
-    app.register_blueprint(data_jobs_bp)
+def test_jobs_endpoint_uses_visible_only_by_default(app):
     client = app.test_client()
 
     fake_job = SimpleNamespace(
@@ -49,9 +47,7 @@ def test_jobs_endpoint_uses_visible_only_by_default():
     assert data["jobs"][0]["display_name"] == "股票基础资料"
 
 
-def test_jobs_endpoint_can_include_hidden():
-    app = Flask(__name__)
-    app.register_blueprint(data_jobs_bp)
+def test_jobs_endpoint_can_include_hidden(app):
     client = app.test_client()
 
     visible_job = SimpleNamespace(job_type="stock_basic", group="基础资料", script_path="app/utils/stock_basic.py", display_name="股票基础资料", description="", recommended_order=2, dependencies=[])
@@ -69,9 +65,7 @@ def test_jobs_endpoint_can_include_hidden():
     assert data["count"] == 2
 
 
-def test_get_run_endpoint_returns_audit_fields():
-    app = Flask(__name__)
-    app.register_blueprint(data_jobs_bp)
+def test_get_run_endpoint_returns_audit_fields(app):
     client = app.test_client()
 
     fake_run = SimpleNamespace(

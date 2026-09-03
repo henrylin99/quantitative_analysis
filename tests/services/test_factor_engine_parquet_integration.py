@@ -4,6 +4,8 @@ import pandas as pd
 from app.services.factor_engine import FactorEngine
 from app.services.parquet_state_store import ParquetStateStore
 
+pytestmark = pytest.mark.module_factor_engine
+
 
 def test_factor_engine_persists_and_reloads_custom_definitions(tmp_path):
     store = ParquetStateStore(base_dir=str(tmp_path / "state"))

@@ -1,6 +1,9 @@
 import pandas as pd
 
 from app.services.parquet_state_store import ModelRepository, ParquetStateStore
+import pytest
+
+pytestmark = pytest.mark.module_ml_model
 
 
 def test_model_repository_round_trips_definitions_and_predictions(tmp_path):

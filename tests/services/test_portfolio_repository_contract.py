@@ -1,4 +1,7 @@
 from app.services.parquet_state_store import ParquetStateStore, PortfolioRepository
+import pytest
+
+pytestmark = pytest.mark.module_portfolio
 
 
 def test_portfolio_repository_soft_delete_preserves_metrics_contract(tmp_path):

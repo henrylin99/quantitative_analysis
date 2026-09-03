@@ -10,6 +10,9 @@
 | 内置因子样本验证 | tests/services/test_builtin_factor_validation_samples.py | module_factor_engine |
 | 自定义因子 API 合约 | tests/api/test_custom_factor_contract.py | module_factor_engine |
 | 内置因子样本 API | tests/api/test_builtin_factor_validation_samples_api.py | module_factor_engine |
+| 因子引擎 Parquet 集成 | tests/services/test_factor_engine_parquet_integration.py | module_factor_engine |
+| 因子库合约 | tests/services/test_factor_repository_contract.py | module_factor_engine |
+| 因子 point-in-time 守卫 | tests/services/test_factor_point_in_time.py | module_factor_engine |
 
 ## 数值软目标（M2 里程碑 review 时人工确认）
 - IC 均值 > 0.03（样本期内，至少 3 个因子）

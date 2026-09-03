@@ -10,6 +10,7 @@
 | 因子覆盖日期合约 | tests/api/test_factor_coverage_date_contract.py | module_scoring |
 | 打分模板 UI 合约 | tests/ui/test_scoring_template_contract.py | module_scoring |
 | 打分入口 UI 合约 | tests/ui/test_model_and_scoring_entry_copy_contract.py | module_scoring |
+| 打分 Parquet 集成 | tests/services/test_stock_scoring_parquet_integration.py | module_scoring |
 
 ## 数值软目标（M3 里程碑 review 时人工确认）
 - 打分输出覆盖率 > 80%（有效打分股票数 / 股票池总数）

@@ -9,6 +9,8 @@ import pytest
 
 from app.services.factor_engine import FactorEngine
 
+pytestmark = pytest.mark.module_factor_engine
+
 
 @pytest.fixture
 def engine():

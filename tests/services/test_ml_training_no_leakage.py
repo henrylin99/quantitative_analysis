@@ -14,6 +14,8 @@ from sklearn.preprocessing import RobustScaler
 
 from app.services.ml_models import MLModelManager
 
+pytestmark = pytest.mark.module_ml_model
+
 
 def _make_manager(tmp_path, model_type="random_forest"):
     manager = MLModelManager()

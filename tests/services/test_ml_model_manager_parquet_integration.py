@@ -4,6 +4,9 @@ import pandas as pd
 
 from app.services.ml_models import MLModelManager
 from app.services.parquet_state_store import ParquetStateStore
+import pytest
+
+pytestmark = pytest.mark.module_ml_model
 
 
 def _write_daily_history(data_dir, ts_code="000001.SZ", days=12):
