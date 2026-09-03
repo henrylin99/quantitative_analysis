@@ -134,3 +134,9 @@ data/.superpowers/
 
 .superpowers/
 .claude/
+
+frontend/node_modules
+# React frontend
+frontend/node_modules/
+frontend/dist/
+*.local
