@@ -189,6 +189,12 @@ export interface ScoreTopStock {
 export const fetchScoringLatestTradeDate = () =>
   rawGet<{ success: boolean; latest_trade_date: string }>('/ml-factor/scoring/latest-trade-date')
 
+/** 指定因子集合在因子库中均有数据的最近交易日（今日/全局最新日期可能缺该组合的数据） */
+export const fetchLatestFactorCoverageDate = (factorIds: string[]) =>
+  rawGet<{ success: boolean; latest_coverage_date: string; factor_ids: string[] | null }>(
+    `/ml-factor/factors/latest-coverage-date?factor_ids=${encodeURIComponent(factorIds.join(','))}`,
+  )
+
 export const scoreFactorBased = async (body: {
   trade_date: string
   factor_list?: string[]

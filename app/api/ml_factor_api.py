@@ -727,6 +727,40 @@ def latest_prediction_trade_date():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/factors/latest-coverage-date', methods=['GET'])
+def latest_factor_coverage_date():
+    """返回指定因子集合在因子库中均有数据的最近交易日。
+
+    增量接口（旧前端未使用）：动量/资金流类因子与财务类因子的入库日期不同步，
+    因子库全局最新日期上目标因子组合可能无任何行，按集合反查最近覆盖日期。
+    """
+    try:
+        raw = request.args.get('factor_ids', '')
+        factor_ids = [item.strip() for item in raw.split(',') if item.strip()] or None
+        factor_repo = get_scoring_engine().factor_repo
+        cutoff = (pd.Timestamp.now() - pd.Timedelta(days=180)).strftime("%Y%m%d")
+
+        coverage_df = factor_repo.get_values(factor_ids=factor_ids, start_date=cutoff)
+        if coverage_df.empty and factor_ids is not None:
+            coverage_df = factor_repo.get_values(factor_ids=factor_ids)
+
+        if coverage_df.empty or "trade_date" not in coverage_df.columns:
+            return jsonify({'success': False, 'error': '未找到因子数据'}), 404
+
+        latest_date = pd.to_datetime(coverage_df["trade_date"], errors="coerce").dropna().max()
+        if pd.isna(latest_date):
+            return jsonify({'success': False, 'error': '未找到因子数据'}), 404
+
+        return jsonify({
+            'success': True,
+            'latest_coverage_date': latest_date.strftime("%Y-%m-%d"),
+            'factor_ids': factor_ids,
+        })
+    except Exception as e:
+        logger.error(f"获取因子覆盖日期失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/scoring/ml-based', methods=['POST'])
 def ml_based_scoring():
     """基于机器学习的股票选择"""
