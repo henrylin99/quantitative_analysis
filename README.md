@@ -1,6 +1,6 @@
 # 多因子选股系统
 
-一个面向 A 股市场的量化分析系统，涵盖实时行情分析、因子计算、机器学习建模、交易信号、组合管理、风险管理、回测验证等完整链路。v2.0 采用 Parquet + SQLite 架构，**零外部数据库依赖，克隆即可运行**。
+一个面向 A 股市场的量化分析系统，涵盖实时行情分析、因子计算、机器学习建模、交易信号、组合管理、风险管理、回测验证等完整链路。v4.0 采用 **React 前端 + Flask API** 架构，数据层延续 Parquet + SQLite，**零外部中间件依赖（无需 MySQL / Redis），克隆即可运行**。
 
 ## 项目定位
 
@@ -23,7 +23,8 @@
 | 投资组合管理 | 已实现 | 投资组合页面已具备真实创建、详情、持仓增删改、组合删除和优化结果落库能力 |
 | 回测验证 | 已实现（研究级） | t+1 成交、涨跌停/停牌约束、逐日 mark-to-market 净值已实现；卖出印花税计入成本；注意股票池完整性依赖重新下载含退市股的 stock_basic |
 | 报告中心 | 部分实现 | 报告列表与生成功能入口已接通，导出与订阅派发仍在补齐 |
-| 实时行情分析 | 部分实现 | 监控/指标/信号/风险页面已可用；分钟数据依赖本地同步任务 |
+| 实时行情分析 | 部分实现 | React 前端六页已可用（指标/信号/监控/风险/报告/推送）；分钟数据依赖本地同步任务 |
+| 试用数据面板 | 已实现 | 市场简报、财务健康度、资金流统计、个股雷达/全景、板块热力图（`/trial/*`） |
 | Text2SQL 查询 | 部分实现 | 只读查询可用（统一只读校验），模板生态待完善 |
 | 实盘交易对接 | 未实现/未开放 | 无券商接口，不构成投资建议 |
 
@@ -38,7 +39,9 @@
 - **安全约束**：SQL 仅允许单条只读 SELECT（复用 text2sql 校验与独立只读查询库）；动作类工具可整体切换为只读模式；大宽表构建保留 18:00 校验
 - **配置方式**：在 .env 中设置 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` 即可，兼容 DeepSeek、通义、GLM、Kimi、OpenAI 及本地 Ollama 的 OpenAI 兼容接口；对话为流式输出，工具调用过程全程可见
 
-### 📊 实时行情分析（v2.0 新增）
+### 📊 实时行情分析（v4.0 起 React 前端呈现）
+
+- **页面入口**：`/realtime-analysis/*` 六页——技术指标、交易信号、实时监控、风险管理、分析报告、消息推送（SocketIO 实时推送）
 
 - **技术指标**：通达信分钟数据接入，支持 MACD/KDJ/RSI/布林带等指标计算与展示
 - **交易信号**：多策略信号生成、信号融合、信号监控、策略回测
@@ -56,13 +59,14 @@
 
 - 等权重、均值方差、风险平价、因子中性组合优化
 - 投资组合 CRUD：创建、持仓增删改、优化结果落库
-- 单策略与多策略回测
+- 单策略与多策略回测；长周期回测支持异步模式：提交后立即返回 run_id，轮询进度与结果
 
 ### 💾 数据管理
 
 - **行情数据**：Parquet 格式存储，支持通达信和 Baostock 双数据源
 - **应用状态**：SQLite 管理持仓、报告、预警等
 - **离线数据包**：提供预下载的历史数据，解压即用
+- **数据中心入口**：页面 `/data-management`，支持任务提交、查询、重试、状态过滤、进度轮询、历史展示
 
 ## 数据下载
 - 视频讲解地址：v2.0版本 https://youtu.be/SpHsZdlyii8  v3.0版本：https://youtu.be/p0iJxGveW60
@@ -97,10 +101,11 @@ https://www.python.org/downloads/windows/
 ![系统功能概览](./images/1-3.png)
 
 ### 技术架构
-- **后端**: Python 3.8+ / Flask / SQLAlchemy
+- **后端**: Python 3.10–3.12 / Flask / SQLAlchemy / SocketIO
+- **前端**: React 19 / Vite 7 / TypeScript（SPA；开发态代理 `/api` 与 `/socket.io` 到后端 5000）
 - **数据处理**: Pandas / NumPy / Scikit-learn
 - **机器学习**: XGBoost / LightGBM / CVXPY
-- **前端**: Bootstrap 5 / JavaScript
+- **任务执行**: 进程内（后台线程 / 本地任务注册表），无需 Redis / Celery
 - **市场数据源**: Parquet 文件为主，市场数据统一落在 `data/`
 - **ML 因子状态层**: Parquet 文件，状态数据统一落在 `data/ml_factor_state/`
 - **应用状态层**: 低并发状态与元数据统一使用 SQLite
@@ -120,8 +125,14 @@ https://www.python.org/downloads/windows/
 git clone <repository-url>
 cd quantitative_analysis
 
-# 安装依赖
+# 后端依赖
 pip install -r requirements.txt
+
+# 前端依赖（首次需要，Node 22 LTS）
+cd frontend && npm install && cd ..
+
+# 环境配置（LLM、Tushare Token 等按需填写）
+cp .env.example .env
 ```
 
 ### 2.1 容器化启动
@@ -137,11 +148,11 @@ docker compose up --build
 运行当前已接通功能入口：
 
 ```bash
-# 常规启动入口
+# 终端 1：后端 API + SocketIO（端口 5000）
 python run.py
 
-# 或使用初始化与诊断入口（检查依赖、校验数据库和补建基础表）
-python run_system.py
+# 终端 2：React 前端开发服务器（端口 5173）
+cd frontend && npm run dev
 ```
 
 常规 Web 启动统一使用 `python run.py`。run_system.py 用于初始化与诊断（检查依赖、校验数据库和补建基础表），不作为日常启动入口。
@@ -160,7 +171,8 @@ Traceback (most recent call last):
 ![系统启动界面](./images/1-4.png)
 
 ### 4. 访问系统
-- Web界面: http://localhost:5000
+- React 界面（推荐入口）: http://localhost:5173
+- Flask 页面: http://localhost:5000
 - API入口: http://localhost:5000/api
 
 ## 📖 使用指南
@@ -266,6 +278,11 @@ quantitative_analysis/
 │   ├── utils/                   # 数据下载脚本（通达信/Baostock/Tushare）
 │   ├── websocket/               # WebSocket 推送服务
 │   └── services/tongdaxin/      # 通达信行情客户端
+├── frontend/                     # React 前端（React 19 + Vite 7 + TypeScript）
+│   └── src/
+│       ├── pages/               # 功能页面（实时分析、多因子模型、AI 工作台等）
+│       ├── api/                 # 统一 API 客户端与类型定义
+│       └── components/          # 共享组件
 ├── data/                         # 数据目录（Parquet 行情 + SQLite 状态）
 │   ├── stock_minute/            # 分钟级行情 Parquet
 │   ├── ml_factor_state/         # ML因子状态 Parquet
@@ -391,13 +408,13 @@ pip install -r requirements_minimal.txt
    ```
 
 2. **Python版本兼容性**
-   - 推荐使用 Python 3.8-3.11
-   - Python 3.12 可能有部分包兼容性问题
+   - 推荐使用 Python 3.10–3.12
+   - 个别包兼容问题时可退回 `requirements_minimal.txt`
 
-3. **数据库连接失败**
-   - 检查数据库配置
-   - 确保数据库服务运行
-   - 验证连接权限
+3. **前端打开但接口报错 / 无数据**
+   - 确认后端已启动（`python run.py`，端口 5000）
+   - 开发模式下前端 5173 通过代理访问 `/api` 与 `/socket.io`，无需额外跨域配置
+   - 页面无数据多为行情数据未同步，先在数据管理页面下载对应数据
 
 4. **因子计算失败**
    - 检查数据是否存在
@@ -411,7 +428,26 @@ pip install -r requirements_minimal.txt
 
 ## 📝 更新日志
 
-### 量化正确性修复 (2026-08-24)
+### v4.0.0 (2026-09-03)
+
+**前端重构 + 去 Redis 化**：React 19 + Vite 7 + TypeScript 全新前端（29 个页面），移除 Redis / Celery 外部依赖，单容器即可部署。
+
+- React 前端：实时分析六页（指标/信号/监控/风险/报告/推送）、多因子模型六页（因子/训练/评分/组合优化/分析图表/异步回测）、AI 工作台（SSE 流式对话）、数据管理、Text2SQL；统一 API 客户端与错误处理
+- 去 Redis 化：缓存改为进程内 TTL 缓存，任务改为进程内执行（`DATA_JOB_EXECUTION_MODE` 保留为兼容项，任意值均为本地执行）；docker-compose 精简为 web 单服务；依赖移除 celery / redis
+- 异步回测：提交后立即返回 run_id，前端轮询进度与结果
+- 质量体系：测试套件入库（195 个文件 / 552 项），`acceptance/<module>.md` 结构性合约注册表 + pytest module marker；经三轮独立评审关闭全部发现
+- 文档：新增从零安装指南 INSTALL.md；master 分支自本版本起包含完整前端
+
+### v3.0.0 (2026-08)
+
+试用功能 + AI 智能工作台：
+
+- 试用数据面板：市场简报、财务健康度、资金流统计、个股雷达/全景、板块热力图（`/trial/*`）
+- AI 智能工作台：大模型对话驱动的数据查询与系统操作，流式输出、只读 SQL 约束
+- 量化正确性修复（明细见下方 2026-08-24 小节）
+- Docker 部署支持
+
+### 量化正确性修复 (2026-08-24，随 v3.0.0 发布)
 
 **数据底座**
 - 股票基础资料同时下载 L/D/P 全部上市状态并携带 delist_date，消除幸存者偏差；因子计算按历史时点过滤股票池（退市股、未上市股不参与）
@@ -470,8 +506,3 @@ pip install -r requirements_minimal.txt
 ---
 
 **多因子选股系统原型** - 适合继续补齐后再扩展使用。 
-
-## 日线、分钟线数据中心（新增）
-
-- 页面入口：`/data-management` -> `数据管理`
-- 任务能力：提交、查询、重试、状态过滤、进度轮询、历史展示
