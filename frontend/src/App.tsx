@@ -14,6 +14,13 @@ import MarketBriefPage from './pages/MarketBriefPage'
 import FinancialHealthPage from './pages/FinancialHealthPage'
 import StockRadarPage from './pages/StockRadarPage'
 import StockPanoramaPage from './pages/StockPanoramaPage'
+import DataManagementPage from './pages/DataManagementPage'
+import MlFactorIndexPage from './pages/MlFactorIndexPage'
+import MlModelsPage from './pages/MlModelsPage'
+import MlScoringPage from './pages/MlScoringPage'
+import MlPortfolioPage from './pages/MlPortfolioPage'
+import MlAnalysisPage from './pages/MlAnalysisPage'
+import MlBacktestPage from './pages/MlBacktestPage'
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -144,6 +151,13 @@ function Shell() {
             <Route path="/stock-radar" element={<StockRadarPage />} />
             <Route path="/stock-panorama" element={<StockPanoramaPage />} />
             <Route path="/feature-intro" element={<FeatureIntroPage />} />
+            <Route path="/data-management" element={<DataManagementPage />} />
+            <Route path="/ml-factor" element={<MlFactorIndexPage />} />
+            <Route path="/ml-factor/models" element={<MlModelsPage />} />
+            <Route path="/ml-factor/scoring" element={<MlScoringPage />} />
+            <Route path="/ml-factor/portfolio" element={<MlPortfolioPage />} />
+            <Route path="/ml-factor/analysis" element={<MlAnalysisPage />} />
+            <Route path="/ml-factor/backtest" element={<MlBacktestPage />} />
           </Routes>
         </main>
       </div>

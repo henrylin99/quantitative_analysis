@@ -78,5 +78,36 @@ export async function apiPostEnvelope<T>(url: string, body?: unknown, timeoutMs?
   return resp.data
 }
 
+// —— 裸响应接口（ml-factor / data-jobs / realtime-analysis 等返回 {success,...} 而非信封） ——
+export async function rawGet<T>(url: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T> {
+  const resp = await http.get<T>(url, { params, timeout: timeoutMs })
+  return resp.data
+}
+
+export async function rawPost<T>(url: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  const resp = await http.post<T>(url, body ?? {}, { timeout: timeoutMs })
+  return resp.data
+}
+
+export async function rawPut<T>(url: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  const resp = await http.put<T>(url, body ?? {}, { timeout: timeoutMs })
+  return resp.data
+}
+
+export async function rawDelete<T>(url: string, timeoutMs?: number): Promise<T> {
+  const resp = await http.delete<T>(url, { timeout: timeoutMs })
+  return resp.data
+}
+
+/** 从 axios/raw 错误中提取后端 message/error 字段 */
+export function extractApiError(e: unknown, fallback = '请求失败'): string {
+  if (axios.isAxiosError(e)) {
+    const data = e.response?.data as { message?: string; error?: string } | string | undefined
+    if (typeof data === 'string') return data || fallback
+    return data?.error || data?.message || e.message || fallback
+  }
+  return e instanceof Error ? e.message : fallback
+}
+
 /** 原始 axios 实例：blob 下载等特殊场景 */
 export { http }

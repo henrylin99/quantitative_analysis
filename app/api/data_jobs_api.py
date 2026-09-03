@@ -89,6 +89,17 @@ def retry_run(run_id: int):
     return jsonify({"success": True, "run_id": run.id, "status": run.status})
 
 
+@data_jobs_bp.route("/init-status", methods=["GET"])
+def init_status():
+    """数据资产初始化状态（Parquet 健康检查 + 推荐下一步），供新前端数据管理页使用。"""
+    from app.main.views import inspect_data_management_status
+
+    try:
+        return jsonify({"success": True, "status": inspect_data_management_status()})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @data_jobs_bp.route("/wide-table/status", methods=["GET"])
 def wide_table_status():
     """返回大宽表状态：是否存在、日期、是否需要更新、是否过了 18:00。"""
