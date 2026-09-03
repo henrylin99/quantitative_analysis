@@ -1,0 +1,286 @@
+- generic [ref=f46e2]:
+  - complementary [ref=f46e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f46e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f46e5]: Q
+      - generic [ref=f46e6]:
+        - text: 量化分析终端
+        - generic [ref=f46e7]: REACT EDITION
+    - navigation [ref=f46e8]:
+      - generic [ref=f46e9]:
+        - generic [ref=f46e10]: 概览
+        - link "🏠 首页" [ref=f46e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f46e12]: 🏠
+          - text: 首页
+      - generic [ref=f46e13]:
+        - generic [ref=f46e14]: 核心分析
+        - link "📋 股票列表" [ref=f46e15] [cursor=pointer]:
+          - /url: /stocks
+          - generic [ref=f46e16]: 📋
+          - text: 股票列表
+        - link "📈 技术分析" [ref=f46e17] [cursor=pointer]:
+          - /url: /analysis
+          - generic [ref=f46e18]: 📈
+          - text: 技术分析
+        - link "🔍 选股筛选" [ref=f46e19] [cursor=pointer]:
+          - /url: /screen
+          - generic [ref=f46e20]: 🔍
+          - text: 选股筛选
+        - link "🧪 策略回测" [ref=f46e21] [cursor=pointer]:
+          - /url: /backtest
+          - generic [ref=f46e22]: 🧪
+          - text: 策略回测
+      - generic [ref=f46e23]:
+        - generic [ref=f46e24]: 多因子模型
+        - link "🧬 因子管理" [ref=f46e25] [cursor=pointer]:
+          - /url: /ml-factor
+          - generic [ref=f46e26]: 🧬
+          - text: 因子管理
+        - link "🤖 模型管理" [ref=f46e27] [cursor=pointer]:
+          - /url: /ml-factor/models
+          - generic [ref=f46e28]: 🤖
+          - text: 模型管理
+        - link "⭐ 股票评分" [ref=f46e29] [cursor=pointer]:
+          - /url: /ml-factor/scoring
+          - generic [ref=f46e30]: ⭐
+          - text: 股票评分
+        - link "💼 投资组合" [ref=f46e31] [cursor=pointer]:
+          - /url: /ml-factor/portfolio
+          - generic [ref=f46e32]: 💼
+          - text: 投资组合
+        - link "📊 分析报告" [ref=f46e33] [cursor=pointer]:
+          - /url: /ml-factor/analysis
+          - generic [ref=f46e34]: 📊
+          - text: 分析报告
+        - link "🏁 组合回测" [ref=f46e35] [cursor=pointer]:
+          - /url: /ml-factor/backtest
+          - generic [ref=f46e36]: 🏁
+          - text: 组合回测
+      - generic [ref=f46e37]:
+        - generic [ref=f46e38]: 实时分析
+        - link "⏱️ 技术指标" [ref=f46e39] [cursor=pointer]:
+          - /url: /realtime-analysis/indicators
+          - generic [ref=f46e40]: ⏱️
+          - text: 技术指标
+        - link "🚦 交易信号" [ref=f46e41] [cursor=pointer]:
+          - /url: /realtime-analysis/signals
+          - generic [ref=f46e42]: 🚦
+          - text: 交易信号
+        - link "📡 实时监控" [ref=f46e43] [cursor=pointer]:
+          - /url: /realtime-analysis/monitor
+          - generic [ref=f46e44]: 📡
+          - text: 实时监控
+        - link "🛡️ 风险管理" [ref=f46e45] [cursor=pointer]:
+          - /url: /realtime-analysis/risk
+          - generic [ref=f46e46]: 🛡️
+          - text: 风险管理
+        - link "📄 报告管理" [ref=f46e47] [cursor=pointer]:
+          - /url: /realtime-analysis/reports
+          - generic [ref=f46e48]: 📄
+          - text: 报告管理
+        - link "🔌 推送管理" [ref=f46e49] [cursor=pointer]:
+          - /url: /realtime-analysis/websocket
+          - generic [ref=f46e50]: 🔌
+          - text: 推送管理
+      - generic [ref=f46e51]:
+        - generic [ref=f46e52]: 数据
+        - link "🗄️ 数据管理" [ref=f46e53] [cursor=pointer]:
+          - /url: /data-management
+          - generic [ref=f46e54]: 🗄️
+          - text: 数据管理
+      - generic [ref=f46e55]:
+        - generic [ref=f46e56]: 试用工具
+        - link "🔥 板块热力图" [ref=f46e57] [cursor=pointer]:
+          - /url: /heatmap
+          - generic [ref=f46e58]: 🔥
+          - text: 板块热力图
+        - link "🎯 形态选股" [ref=f46e59] [cursor=pointer]:
+          - /url: /pattern-screen
+          - generic [ref=f46e60]: 🎯
+          - text: 形态选股
+        - link "💰 资金流统计" [ref=f46e61] [cursor=pointer]:
+          - /url: /moneyflow
+          - generic [ref=f46e62]: 💰
+          - text: 资金流统计
+        - link "📰 市场简报" [ref=f46e63] [cursor=pointer]:
+          - /url: /market-brief
+          - generic [ref=f46e64]: 📰
+          - text: 市场简报
+        - link "❤️ 财务健康" [ref=f46e65] [cursor=pointer]:
+          - /url: /financial-health
+          - generic [ref=f46e66]: ❤️
+          - text: 财务健康
+        - link "🛰️ 个股雷达" [ref=f46e67] [cursor=pointer]:
+          - /url: /stock-radar
+          - generic [ref=f46e68]: 🛰️
+          - text: 个股雷达
+        - link "🗂️ 个股全景" [ref=f46e69] [cursor=pointer]:
+          - /url: /stock-panorama
+          - generic [ref=f46e70]: 🗂️
+          - text: 个股全景
+        - link "📖 功能介绍" [ref=f46e71] [cursor=pointer]:
+          - /url: /feature-intro
+          - generic [ref=f46e72]: 📖
+          - text: 功能介绍
+      - generic [ref=f46e73]:
+        - generic [ref=f46e74]: AI 助手
+        - link "🧠 AI 工作台" [ref=f46e75] [cursor=pointer]:
+          - /url: /ai-workbench
+          - generic [ref=f46e76]: 🧠
+          - text: AI 工作台
+        - link "💬 智能查数" [ref=f46e77] [cursor=pointer]:
+          - /url: /text2sql
+          - generic [ref=f46e78]: 💬
+          - text: 智能查数
+    - generic [ref=f46e79]:
+      - button "☀️ 浅色模式" [ref=f46e80] [cursor=pointer]:
+        - generic [ref=f46e81]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f46e82] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f46e83]: ↗
+        - text: 旧版
+  - main [ref=f46e85]:
+    - generic [ref=f46e86]:
+      - generic [ref=f46e87]:
+        - generic [ref=f46e88]:
+          - heading "数据管理" [level=2] [ref=f46e89]
+          - paragraph [ref=f46e90]: 日频任务调度 · 大宽表构建 · 分钟数据同步 / 聚合 / 质检
+        - button "⟳ 刷新" [ref=f46e91] [cursor=pointer]
+      - generic [ref=f46e92]:
+        - generic [ref=f46e93]:
+          - heading "初始化状态 检查中…" [level=6] [ref=f46e94]:
+            - text: 初始化状态
+            - generic [ref=f46e96]: 检查中…
+          - generic [ref=f46e97]: 执行模式 · --
+        - generic [ref=f46e98]:
+          - generic [ref=f46e99]: Parquet 连接 · 异常
+          - generic [ref=f46e100]: 缺失资产 · --
+          - generic [ref=f46e101]: 空资产 · --
+      - generic [ref=f46e102]:
+        - generic [ref=f46e103]:
+          - generic [ref=f46e104]: "--"
+          - generic [ref=f46e105]: 总股票数（分钟库）
+        - generic [ref=f46e106]:
+          - generic [ref=f46e107]: "--"
+          - generic [ref=f46e108]: 总记录数
+        - generic [ref=f46e109]:
+          - generic [ref=f46e110]: "--"
+          - generic [ref=f46e111]: 最新时间
+        - generic [ref=f46e112]:
+          - generic [ref=f46e113]: …
+          - generic [ref=f46e114]: 大宽表数据状态
+      - generic [ref=f46e115]:
+        - generic [ref=f46e116]:
+          - heading "大宽表（stock_business） 检查中…" [level=6] [ref=f46e117]:
+            - text: 大宽表（stock_business）
+            - generic [ref=f46e119]: 检查中…
+          - generic [ref=f46e120]:
+            - button "刷新状态" [ref=f46e121] [cursor=pointer]
+            - button "构建 / 更新大宽表" [disabled]
+        - generic [ref=f46e122]: 宽表日期 · --
+      - generic [ref=f46e124]:
+        - generic [ref=f46e126]:
+          - heading "推荐初始化顺序" [level=6] [ref=f46e128]
+          - generic [ref=f46e130]:
+            - generic [ref=f46e131]:
+              - button "1. trade_calendar" [ref=f46e132] [cursor=pointer]
+              - button "2. stock_basic" [ref=f46e133] [cursor=pointer]
+              - button "3. daily_history_by_date" [ref=f46e134] [cursor=pointer]
+              - button "4. daily_basic" [ref=f46e135] [cursor=pointer]
+            - generic [ref=f46e136]: 推荐顺序：交易日历 → 股票基础信息 → 公司信息 → 日线历史 → 财务三表 → 每日指标 → 资金流 → 技术因子 → 筹码 → 大宽表。
+        - generic [ref=f46e138]:
+          - heading "当前任务说明" [level=6] [ref=f46e140]
+          - generic [ref=f46e142]:
+            - generic [ref=f46e143]: "--"
+            - generic [ref=f46e144]: 分组 · --
+            - generic [ref=f46e145]: 数据来源 · --
+      - generic [ref=f46e146]:
+        - generic [ref=f46e147]:
+          - heading "日频数据中心" [level=6] [ref=f46e148]
+          - button "⟳ 刷新任务" [ref=f46e150] [cursor=pointer]
+        - generic [ref=f46e151]:
+          - generic [ref=f46e152]:
+            - generic [ref=f46e153]:
+              - generic [ref=f46e154]: 任务类型
+              - combobox [ref=f46e155]
+            - generic [ref=f46e156]:
+              - generic [ref=f46e157]: 开始日期
+              - textbox [ref=f46e158]: 2026-08-04
+            - generic [ref=f46e159]:
+              - generic [ref=f46e160]: 结束日期
+              - textbox [ref=f46e161]: 2026-09-03
+            - generic [ref=f46e162]:
+              - button "启动任务" [disabled]
+          - table [ref=f46e164]:
+            - rowgroup [ref=f46e165]:
+              - row [ref=f46e166]:
+                - columnheader "Run ID" [ref=f46e167]
+                - columnheader "任务" [ref=f46e168]
+                - columnheader "状态" [ref=f46e169]
+                - columnheader "进度%" [ref=f46e170]
+                - columnheader "进度消息" [ref=f46e171]
+                - columnheader "开始时间" [ref=f46e172]
+                - columnheader "结束时间" [ref=f46e173]
+                - columnheader "操作" [ref=f46e174]
+            - rowgroup [ref=f46e175]:
+              - row [ref=f46e176]:
+                - cell "🗃️ 暂无任务记录" [ref=f46e177]:
+                  - generic [ref=f46e178]:
+                    - generic [ref=f46e179]: 🗃️
+                    - generic [ref=f46e180]: 暂无任务记录
+      - generic [ref=f46e181]:
+        - generic [ref=f46e182]:
+          - heading "分钟数据同步 周期 5min / 15min / 30min / 60min" [level=6] [ref=f46e183]:
+            - text: 分钟数据同步
+            - generic [ref=f46e185]: 周期 5min / 15min / 30min / 60min
+          - button "同步状态" [ref=f46e187] [cursor=pointer]
+        - generic [ref=f46e188]:
+          - generic [ref=f46e189]:
+            - generic [ref=f46e190]:
+              - generic [ref=f46e191]: 股票代码
+              - textbox [ref=f46e192]: 000001.SZ
+            - generic [ref=f46e193]:
+              - generic [ref=f46e194]: 周期类型
+              - combobox [ref=f46e195]:
+                - option "5min" [selected]
+                - option "15min"
+                - option "30min"
+                - option "60min"
+            - generic [ref=f46e196]:
+              - generic [ref=f46e197]: 数据源
+              - combobox [ref=f46e198]:
+                - option "通达信" [selected]
+                - option "Baostock"
+            - generic [ref=f46e199]:
+              - generic [ref=f46e200]: 开始日期
+              - textbox [ref=f46e201]: 2026-08-27
+            - generic [ref=f46e202]:
+              - generic [ref=f46e203]: 结束日期
+              - textbox [ref=f46e204]: 2026-09-03
+            - button "同步数据" [ref=f46e206] [cursor=pointer]
+          - generic [ref=f46e207]:
+            - textbox "批量同步：逗号或换行分隔多只代码" [ref=f46e208]
+            - spinbutton "批处理大小" [ref=f46e209]: "10"
+            - button "批量同步" [disabled]
+          - generic [ref=f46e210]:
+            - generic [ref=f46e211]:
+              - generic [ref=f46e212]: 源周期
+              - combobox [ref=f46e213]:
+                - option "5min" [selected]
+                - option "15min"
+                - option "30min"
+                - option "60min"
+            - generic [ref=f46e214]:
+              - generic [ref=f46e215]: 目标周期
+              - combobox [ref=f46e216]:
+                - option "5min"
+                - option "15min" [selected]
+                - option "30min"
+                - option "60min"
+            - button "执行聚合" [ref=f46e217] [cursor=pointer]
+            - generic [ref=f46e218]:
+              - generic [ref=f46e219]: 质检时长(小时)
+              - spinbutton [ref=f46e220]: "24"
+            - button "数据质量检查" [ref=f46e221] [cursor=pointer]

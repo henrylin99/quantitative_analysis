@@ -21,6 +21,14 @@ import MlScoringPage from './pages/MlScoringPage'
 import MlPortfolioPage from './pages/MlPortfolioPage'
 import MlAnalysisPage from './pages/MlAnalysisPage'
 import MlBacktestPage from './pages/MlBacktestPage'
+import RtIndicatorsPage from './pages/RtIndicatorsPage'
+import RtSignalsPage from './pages/RtSignalsPage'
+import RtMonitorPage from './pages/RtMonitorPage'
+import RtRiskPage from './pages/RtRiskPage'
+import RtReportsPage from './pages/RtReportsPage'
+import RtWebsocketPage from './pages/RtWebsocketPage'
+import AiWorkbenchPage from './pages/AiWorkbenchPage'
+import Text2SqlPage from './pages/Text2SqlPage'
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -158,6 +166,15 @@ function Shell() {
             <Route path="/ml-factor/portfolio" element={<MlPortfolioPage />} />
             <Route path="/ml-factor/analysis" element={<MlAnalysisPage />} />
             <Route path="/ml-factor/backtest" element={<MlBacktestPage />} />
+            <Route path="/realtime-analysis/indicators" element={<RtIndicatorsPage />} />
+            <Route path="/realtime-analysis/signals" element={<RtSignalsPage />} />
+            <Route path="/realtime-analysis/monitor" element={<RtMonitorPage />} />
+            <Route path="/realtime-analysis/risk" element={<RtRiskPage />} />
+            <Route path="/realtime-analysis/reports" element={<RtReportsPage />} />
+            <Route path="/realtime-analysis/websocket" element={<RtWebsocketPage />} />
+            <Route path="/ai-workbench" element={<AiWorkbenchPage />} />
+            <Route path="/text2sql" element={<Text2SqlPage />} />
+            <Route path="*" element={<HomePage />} />
           </Routes>
         </main>
       </div>
