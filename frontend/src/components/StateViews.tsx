@@ -4,11 +4,21 @@ interface LoadingProps {
 
 export function Loading({ text = '加载中...' }: LoadingProps) {
   return (
-    <div className="text-center py-5">
-      <div className="spinner-border text-primary" role="status">
+    <div className="text-center py-5" style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+      <div className="spinner-border spinner-fit text-primary" role="status">
         <span className="visually-hidden">{text}</span>
       </div>
-      <div className="mt-2 text-secondary">{text}</div>
+      <div className="mt-2">{text}</div>
+    </div>
+  )
+}
+
+export function TableSkeleton({ rows = 8 }: LoadingProps & { rows?: number }) {
+  return (
+    <div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div className="skeleton-row" key={i} style={{ width: `${94 - (i % 4) * 7}%` }} />
+      ))}
     </div>
   )
 }
@@ -20,10 +30,10 @@ interface ErrorStateProps {
 
 export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (
-    <div className="alert alert-danger-financial alert d-flex align-items-center justify-content-between" role="alert">
+    <div className="alert-error" role="alert">
       <span>⚠️ {message}</span>
       {onRetry && (
-        <button type="button" className="btn btn-outline-light btn-sm" onClick={onRetry}>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onRetry}>
           重试
         </button>
       )}
@@ -31,6 +41,16 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
   )
 }
 
-export function EmptyState({ text = '暂无数据' }: LoadingProps) {
-  return <div className="empty-state">{text}</div>
+interface EmptyStateProps {
+  text?: string
+  icon?: string
+}
+
+export function EmptyState({ text = '暂无数据', icon = '📭' }: EmptyStateProps) {
+  return (
+    <div className="empty-state">
+      <span className="icon">{icon}</span>
+      <div className="hint">{text}</div>
+    </div>
+  )
 }

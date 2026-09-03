@@ -1,0 +1,1209 @@
+- generic [ref=f3e2]:
+  - banner [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - link "Q 量化分析终端 REACT EDITION" [ref=f3e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f3e6]: Q
+        - generic [ref=f3e7]:
+          - text: 量化分析终端
+          - generic [ref=f3e8]: REACT EDITION
+      - navigation [ref=f3e9]:
+        - link "首页" [ref=f3e10] [cursor=pointer]:
+          - /url: /
+        - link "股票列表" [ref=f3e11] [cursor=pointer]:
+          - /url: /stocks
+        - link "技术分析" [ref=f3e12] [cursor=pointer]:
+          - /url: /analysis
+        - link "选股筛选" [ref=f3e13] [cursor=pointer]:
+          - /url: /screen
+        - link "回测验证" [ref=f3e14] [cursor=pointer]:
+          - /url: /backtest
+      - link "旧版 ↗" [ref=f3e15] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+  - main [ref=f3e16]:
+    - generic [ref=f3e17]:
+      - generic [ref=f3e18]:
+        - generic [ref=f3e19]:
+          - heading "股票列表" [level=2] [ref=f3e20]
+          - paragraph [ref=f3e21]: 全市场股票浏览，支持按行业、地域筛选与关键字搜索
+        - generic [ref=f3e50]: 共 5888 只
+      - generic [ref=f3e24]:
+        - generic [ref=f3e25]:
+          - generic [ref=f3e26]: 行业
+          - combobox [ref=f3e27]:
+            - option "全部行业"
+            - option "IT设备"
+            - option "专用机械"
+            - option "中成药"
+            - option "乳制品"
+            - option "互联网"
+            - option "仓储物流"
+            - option "供气供热"
+            - option "保险"
+            - option "元器件"
+            - option "全国地产"
+            - option "公共交通"
+            - option "公路"
+            - option "其他商业"
+            - option "其他建材"
+            - option "农业综合"
+            - option "农用机械"
+            - option "农药化肥"
+            - option "出版业"
+            - option "化学制药"
+            - option "化工原料"
+            - option "化工机械"
+            - option "化纤"
+            - option "区域地产"
+            - option "医疗保健"
+            - option "医药商业"
+            - option "半导体"
+            - option "商品城"
+            - option "商贸代理"
+            - option "啤酒"
+            - option "园区开发"
+            - option "塑料"
+            - option "多元金融"
+            - option "家居用品"
+            - option "家用电器"
+            - option "小金属"
+            - option "工程机械"
+            - option "广告包装"
+            - option "建筑工程"
+            - option "影视音像"
+            - option "房产服务"
+            - option "批发业"
+            - option "摩托车"
+            - option "文教休闲"
+            - option "新型电力"
+            - option "旅游景点"
+            - option "旅游服务"
+            - option "日用化工"
+            - option "普钢"
+            - option "服饰"
+            - option "机场"
+            - option "机床制造"
+            - option "机械基件"
+            - option "林业"
+            - option "染料涂料"
+            - option "橡胶"
+            - option "水力发电"
+            - option "水务"
+            - option "水泥"
+            - option "水运"
+            - option "汽车整车"
+            - option "汽车服务"
+            - option "汽车配件"
+            - option "渔业"
+            - option "港口"
+            - option "火力发电"
+            - option "焦炭加工"
+            - option "煤炭开采"
+            - option "特种钢"
+            - option "环境保护"
+            - option "玻璃"
+            - option "生物制药"
+            - option "电信运营"
+            - option "电器仪表"
+            - option "电器连锁"
+            - option "电气设备"
+            - option "白酒"
+            - option "百货"
+            - option "石油加工"
+            - option "石油开采"
+            - option "石油贸易"
+            - option "矿物制品"
+            - option "种植业"
+            - option "空运"
+            - option "红黄酒"
+            - option "纺织"
+            - option "纺织机械"
+            - option "综合类"
+            - option "航空"
+            - option "船舶"
+            - option "装修装饰"
+            - option "证券"
+            - option "超市连锁"
+            - option "路桥"
+            - option "软件服务"
+            - option "软饮料"
+            - option "轻工机械"
+            - option "运输设备"
+            - option "通信设备"
+            - option "造纸"
+            - option "酒店餐饮"
+            - option "钢加工"
+            - option "铁路"
+            - option "铅锌"
+            - option "铜"
+            - option "铝"
+            - option "银行" [selected]
+            - option "陶瓷"
+            - option "食品"
+            - option "饲料"
+            - option "黄金"
+        - generic [ref=f3e28]:
+          - generic [ref=f3e29]: 地域
+          - combobox [ref=f3e30]:
+            - option "全部地域" [selected]
+            - option "上海"
+            - option "云南"
+            - option "内蒙"
+            - option "北京"
+            - option "吉林"
+            - option "四川"
+            - option "天津"
+            - option "宁夏"
+            - option "安徽"
+            - option "山东"
+            - option "山西"
+            - option "广东"
+            - option "广西"
+            - option "新疆"
+            - option "江苏"
+            - option "江西"
+            - option "河北"
+            - option "河南"
+            - option "浙江"
+            - option "海南"
+            - option "深圳"
+            - option "湖北"
+            - option "湖南"
+            - option "甘肃"
+            - option "福建"
+            - option "西藏"
+            - option "贵州"
+            - option "辽宁"
+            - option "重庆"
+            - option "陕西"
+            - option "青海"
+            - option "黑龙江"
+        - generic [ref=f3e31]:
+          - generic [ref=f3e32]: 关键字
+          - textbox "股票代码或名称" [ref=f3e33]
+        - generic [ref=f3e34]:
+          - button "筛选" [ref=f3e35] [cursor=pointer]
+          - button "重置" [ref=f3e36] [cursor=pointer]
+      - generic [ref=f3e38]:
+        - table [ref=f3e51]:
+          - rowgroup [ref=f3e52]:
+            - row [ref=f3e53]:
+              - columnheader "股票代码" [ref=f3e54]
+              - columnheader "股票名称" [ref=f3e55]
+              - columnheader "行业" [ref=f3e56]
+              - columnheader "地域" [ref=f3e57]
+              - columnheader "上市日期" [ref=f3e58]
+              - columnheader "操作" [ref=f3e59]
+          - rowgroup [ref=f3e60]:
+            - row [ref=f3e61]:
+              - cell [ref=f3e62]:
+                - code [ref=f3e63]: "000001"
+              - cell "平安银行" [ref=f3e64]
+              - cell "银行" [ref=f3e65]
+              - cell "深圳" [ref=f3e67]
+              - cell "1991-04-03" [ref=f3e68]
+              - cell [ref=f3e69]:
+                - link "详情 ↗" [ref=f3e70] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000001.SZ
+            - row [ref=f3e71]:
+              - cell [ref=f3e72]:
+                - code [ref=f3e73]: "000002"
+              - cell "万科A" [ref=f3e74]
+              - cell "全国地产" [ref=f3e75]
+              - cell "深圳" [ref=f3e77]
+              - cell "1991-01-29" [ref=f3e78]
+              - cell [ref=f3e79]:
+                - link "详情 ↗" [ref=f3e80] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000002.SZ
+            - row [ref=f3e81]:
+              - cell [ref=f3e82]:
+                - code [ref=f3e83]: "000006"
+              - cell "深振业A" [ref=f3e84]
+              - cell "区域地产" [ref=f3e85]
+              - cell "深圳" [ref=f3e87]
+              - cell "1992-04-27" [ref=f3e88]
+              - cell [ref=f3e89]:
+                - link "详情 ↗" [ref=f3e90] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000006.SZ
+            - row [ref=f3e91]:
+              - cell [ref=f3e92]:
+                - code [ref=f3e93]: "000007"
+              - cell "全新好" [ref=f3e94]
+              - cell "其他商业" [ref=f3e95]
+              - cell "深圳" [ref=f3e97]
+              - cell "1992-04-13" [ref=f3e98]
+              - cell [ref=f3e99]:
+                - link "详情 ↗" [ref=f3e100] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000007.SZ
+            - row [ref=f3e101]:
+              - cell [ref=f3e102]:
+                - code [ref=f3e103]: "000008"
+              - cell "神州高铁" [ref=f3e104]
+              - cell "运输设备" [ref=f3e105]
+              - cell "北京" [ref=f3e107]
+              - cell "1992-05-07" [ref=f3e108]
+              - cell [ref=f3e109]:
+                - link "详情 ↗" [ref=f3e110] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000008.SZ
+            - row [ref=f3e111]:
+              - cell [ref=f3e112]:
+                - code [ref=f3e113]: "000009"
+              - cell "中国宝安" [ref=f3e114]
+              - cell "电气设备" [ref=f3e115]
+              - cell "深圳" [ref=f3e117]
+              - cell "1991-06-25" [ref=f3e118]
+              - cell [ref=f3e119]:
+                - link "详情 ↗" [ref=f3e120] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000009.SZ
+            - row [ref=f3e121]:
+              - cell [ref=f3e122]:
+                - code [ref=f3e123]: "000010"
+              - cell "*ST美丽" [ref=f3e124]
+              - cell "建筑工程" [ref=f3e125]
+              - cell "深圳" [ref=f3e127]
+              - cell "1995-10-27" [ref=f3e128]
+              - cell [ref=f3e129]:
+                - link "详情 ↗" [ref=f3e130] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000010.SZ
+            - row [ref=f3e131]:
+              - cell [ref=f3e132]:
+                - code [ref=f3e133]: "000011"
+              - cell "深物业A" [ref=f3e134]
+              - cell "房产服务" [ref=f3e135]
+              - cell "深圳" [ref=f3e137]
+              - cell "1992-03-30" [ref=f3e138]
+              - cell [ref=f3e139]:
+                - link "详情 ↗" [ref=f3e140] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000011.SZ
+            - row [ref=f3e141]:
+              - cell [ref=f3e142]:
+                - code [ref=f3e143]: "000012"
+              - cell "南玻A" [ref=f3e144]
+              - cell "玻璃" [ref=f3e145]
+              - cell "深圳" [ref=f3e147]
+              - cell "1992-02-28" [ref=f3e148]
+              - cell [ref=f3e149]:
+                - link "详情 ↗" [ref=f3e150] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000012.SZ
+            - row [ref=f3e151]:
+              - cell [ref=f3e152]:
+                - code [ref=f3e153]: "000014"
+              - cell "沙河股份" [ref=f3e154]
+              - cell "全国地产" [ref=f3e155]
+              - cell "深圳" [ref=f3e157]
+              - cell "1992-06-02" [ref=f3e158]
+              - cell [ref=f3e159]:
+                - link "详情 ↗" [ref=f3e160] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000014.SZ
+            - row [ref=f3e161]:
+              - cell [ref=f3e162]:
+                - code [ref=f3e163]: "000016"
+              - cell "*ST康佳A" [ref=f3e164]
+              - cell "家用电器" [ref=f3e165]
+              - cell "深圳" [ref=f3e167]
+              - cell "1992-03-27" [ref=f3e168]
+              - cell [ref=f3e169]:
+                - link "详情 ↗" [ref=f3e170] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000016.SZ
+            - row [ref=f3e171]:
+              - cell [ref=f3e172]:
+                - code [ref=f3e173]: "000017"
+              - cell "深中华A" [ref=f3e174]
+              - cell "服饰" [ref=f3e175]
+              - cell "深圳" [ref=f3e177]
+              - cell "1992-03-31" [ref=f3e178]
+              - cell [ref=f3e179]:
+                - link "详情 ↗" [ref=f3e180] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000017.SZ
+            - row [ref=f3e181]:
+              - cell [ref=f3e182]:
+                - code [ref=f3e183]: "000019"
+              - cell "深粮控股" [ref=f3e184]
+              - cell "农业综合" [ref=f3e185]
+              - cell "深圳" [ref=f3e187]
+              - cell "1992-10-12" [ref=f3e188]
+              - cell [ref=f3e189]:
+                - link "详情 ↗" [ref=f3e190] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000019.SZ
+            - row [ref=f3e191]:
+              - cell [ref=f3e192]:
+                - code [ref=f3e193]: "000020"
+              - cell "深华发A" [ref=f3e194]
+              - cell "元器件" [ref=f3e195]
+              - cell "深圳" [ref=f3e197]
+              - cell "1992-04-28" [ref=f3e198]
+              - cell [ref=f3e199]:
+                - link "详情 ↗" [ref=f3e200] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000020.SZ
+            - row [ref=f3e201]:
+              - cell [ref=f3e202]:
+                - code [ref=f3e203]: "000021"
+              - cell "深科技" [ref=f3e204]
+              - cell "元器件" [ref=f3e205]
+              - cell "深圳" [ref=f3e207]
+              - cell "1994-02-02" [ref=f3e208]
+              - cell [ref=f3e209]:
+                - link "详情 ↗" [ref=f3e210] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000021.SZ
+            - row [ref=f3e211]:
+              - cell [ref=f3e212]:
+                - code [ref=f3e213]: "000025"
+              - cell "特力A" [ref=f3e214]
+              - cell "综合类" [ref=f3e215]
+              - cell "深圳" [ref=f3e217]
+              - cell "1993-06-21" [ref=f3e218]
+              - cell [ref=f3e219]:
+                - link "详情 ↗" [ref=f3e220] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000025.SZ
+            - row [ref=f3e221]:
+              - cell [ref=f3e222]:
+                - code [ref=f3e223]: "000026"
+              - cell "飞亚达" [ref=f3e224]
+              - cell "服饰" [ref=f3e225]
+              - cell "深圳" [ref=f3e227]
+              - cell "1993-06-03" [ref=f3e228]
+              - cell [ref=f3e229]:
+                - link "详情 ↗" [ref=f3e230] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000026.SZ
+            - row [ref=f3e231]:
+              - cell [ref=f3e232]:
+                - code [ref=f3e233]: "000027"
+              - cell "深圳能源" [ref=f3e234]
+              - cell "火力发电" [ref=f3e235]
+              - cell "深圳" [ref=f3e237]
+              - cell "1993-09-03" [ref=f3e238]
+              - cell [ref=f3e239]:
+                - link "详情 ↗" [ref=f3e240] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000027.SZ
+            - row [ref=f3e241]:
+              - cell [ref=f3e242]:
+                - code [ref=f3e243]: "000028"
+              - cell "国药一致" [ref=f3e244]
+              - cell "医药商业" [ref=f3e245]
+              - cell "深圳" [ref=f3e247]
+              - cell "1993-08-09" [ref=f3e248]
+              - cell [ref=f3e249]:
+                - link "详情 ↗" [ref=f3e250] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000028.SZ
+            - row [ref=f3e251]:
+              - cell [ref=f3e252]:
+                - code [ref=f3e253]: "000029"
+              - cell "深深房A" [ref=f3e254]
+              - cell "区域地产" [ref=f3e255]
+              - cell "深圳" [ref=f3e257]
+              - cell "1993-09-15" [ref=f3e258]
+              - cell [ref=f3e259]:
+                - link "详情 ↗" [ref=f3e260] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000029.SZ
+            - row [ref=f3e261]:
+              - cell [ref=f3e262]:
+                - code [ref=f3e263]: "000030"
+              - cell "富奥股份" [ref=f3e264]
+              - cell "汽车配件" [ref=f3e265]
+              - cell "吉林" [ref=f3e267]
+              - cell "1993-09-29" [ref=f3e268]
+              - cell [ref=f3e269]:
+                - link "详情 ↗" [ref=f3e270] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000030.SZ
+            - row [ref=f3e271]:
+              - cell [ref=f3e272]:
+                - code [ref=f3e273]: "000031"
+              - cell "大悦城" [ref=f3e274]
+              - cell "全国地产" [ref=f3e275]
+              - cell "深圳" [ref=f3e277]
+              - cell "1993-10-08" [ref=f3e278]
+              - cell [ref=f3e279]:
+                - link "详情 ↗" [ref=f3e280] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000031.SZ
+            - row [ref=f3e281]:
+              - cell [ref=f3e282]:
+                - code [ref=f3e283]: "000032"
+              - cell "深桑达A" [ref=f3e284]
+              - cell "建筑工程" [ref=f3e285]
+              - cell "深圳" [ref=f3e287]
+              - cell "1993-10-28" [ref=f3e288]
+              - cell [ref=f3e289]:
+                - link "详情 ↗" [ref=f3e290] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000032.SZ
+            - row [ref=f3e291]:
+              - cell [ref=f3e292]:
+                - code [ref=f3e293]: "000034"
+              - cell "神州数码" [ref=f3e294]
+              - cell "软件服务" [ref=f3e295]
+              - cell "深圳" [ref=f3e297]
+              - cell "1994-05-09" [ref=f3e298]
+              - cell [ref=f3e299]:
+                - link "详情 ↗" [ref=f3e300] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000034.SZ
+            - row [ref=f3e301]:
+              - cell [ref=f3e302]:
+                - code [ref=f3e303]: "000035"
+              - cell "中国天楹" [ref=f3e304]
+              - cell "环境保护" [ref=f3e305]
+              - cell "江苏" [ref=f3e307]
+              - cell "1994-04-08" [ref=f3e308]
+              - cell [ref=f3e309]:
+                - link "详情 ↗" [ref=f3e310] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000035.SZ
+            - row [ref=f3e311]:
+              - cell [ref=f3e312]:
+                - code [ref=f3e313]: "000036"
+              - cell "华联控股" [ref=f3e314]
+              - cell "全国地产" [ref=f3e315]
+              - cell "深圳" [ref=f3e317]
+              - cell "1994-06-17" [ref=f3e318]
+              - cell [ref=f3e319]:
+                - link "详情 ↗" [ref=f3e320] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000036.SZ
+            - row [ref=f3e321]:
+              - cell [ref=f3e322]:
+                - code [ref=f3e323]: "000037"
+              - cell "深南电A" [ref=f3e324]
+              - cell "火力发电" [ref=f3e325]
+              - cell "深圳" [ref=f3e327]
+              - cell "1994-07-01" [ref=f3e328]
+              - cell [ref=f3e329]:
+                - link "详情 ↗" [ref=f3e330] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000037.SZ
+            - row [ref=f3e331]:
+              - cell [ref=f3e332]:
+                - code [ref=f3e333]: "000039"
+              - cell "中集集团" [ref=f3e334]
+              - cell "运输设备" [ref=f3e335]
+              - cell "深圳" [ref=f3e337]
+              - cell "1994-04-08" [ref=f3e338]
+              - cell [ref=f3e339]:
+                - link "详情 ↗" [ref=f3e340] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000039.SZ
+            - row [ref=f3e341]:
+              - cell [ref=f3e342]:
+                - code [ref=f3e343]: "000042"
+              - cell "中洲控股" [ref=f3e344]
+              - cell "全国地产" [ref=f3e345]
+              - cell "深圳" [ref=f3e347]
+              - cell "1994-09-21" [ref=f3e348]
+              - cell [ref=f3e349]:
+                - link "详情 ↗" [ref=f3e350] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000042.SZ
+            - row [ref=f3e351]:
+              - cell [ref=f3e352]:
+                - code [ref=f3e353]: "000045"
+              - cell "深纺织A" [ref=f3e354]
+              - cell "元器件" [ref=f3e355]
+              - cell "深圳" [ref=f3e357]
+              - cell "1994-08-15" [ref=f3e358]
+              - cell [ref=f3e359]:
+                - link "详情 ↗" [ref=f3e360] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000045.SZ
+            - row [ref=f3e361]:
+              - cell [ref=f3e362]:
+                - code [ref=f3e363]: "000048"
+              - cell "京基智农" [ref=f3e364]
+              - cell "农业综合" [ref=f3e365]
+              - cell "深圳" [ref=f3e367]
+              - cell "1994-11-01" [ref=f3e368]
+              - cell [ref=f3e369]:
+                - link "详情 ↗" [ref=f3e370] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000048.SZ
+            - row [ref=f3e371]:
+              - cell [ref=f3e372]:
+                - code [ref=f3e373]: "000049"
+              - cell "德赛电池" [ref=f3e374]
+              - cell "电气设备" [ref=f3e375]
+              - cell "深圳" [ref=f3e377]
+              - cell "1995-03-20" [ref=f3e378]
+              - cell [ref=f3e379]:
+                - link "详情 ↗" [ref=f3e380] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000049.SZ
+            - row [ref=f3e381]:
+              - cell [ref=f3e382]:
+                - code [ref=f3e383]: "000050"
+              - cell "深天马A" [ref=f3e384]
+              - cell "元器件" [ref=f3e385]
+              - cell "深圳" [ref=f3e387]
+              - cell "1995-03-15" [ref=f3e388]
+              - cell [ref=f3e389]:
+                - link "详情 ↗" [ref=f3e390] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000050.SZ
+            - row [ref=f3e391]:
+              - cell [ref=f3e392]:
+                - code [ref=f3e393]: "000055"
+              - cell "方大集团" [ref=f3e394]
+              - cell "其他建材" [ref=f3e395]
+              - cell "深圳" [ref=f3e397]
+              - cell "1996-04-15" [ref=f3e398]
+              - cell [ref=f3e399]:
+                - link "详情 ↗" [ref=f3e400] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000055.SZ
+            - row [ref=f3e401]:
+              - cell [ref=f3e402]:
+                - code [ref=f3e403]: "000056"
+              - cell "*ST皇庭" [ref=f3e404]
+              - cell "其他商业" [ref=f3e405]
+              - cell "深圳" [ref=f3e407]
+              - cell "1996-07-08" [ref=f3e408]
+              - cell [ref=f3e409]:
+                - link "详情 ↗" [ref=f3e410] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000056.SZ
+            - row [ref=f3e411]:
+              - cell [ref=f3e412]:
+                - code [ref=f3e413]: "000058"
+              - cell "深赛格" [ref=f3e414]
+              - cell "商品城" [ref=f3e415]
+              - cell "深圳" [ref=f3e417]
+              - cell "1996-12-26" [ref=f3e418]
+              - cell [ref=f3e419]:
+                - link "详情 ↗" [ref=f3e420] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000058.SZ
+            - row [ref=f3e421]:
+              - cell [ref=f3e422]:
+                - code [ref=f3e423]: "000059"
+              - cell "华锦股份" [ref=f3e424]
+              - cell "石油加工" [ref=f3e425]
+              - cell "辽宁" [ref=f3e427]
+              - cell "1997-01-30" [ref=f3e428]
+              - cell [ref=f3e429]:
+                - link "详情 ↗" [ref=f3e430] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000059.SZ
+            - row [ref=f3e431]:
+              - cell [ref=f3e432]:
+                - code [ref=f3e433]: "000060"
+              - cell "中金岭南" [ref=f3e434]
+              - cell "铅锌" [ref=f3e435]
+              - cell "深圳" [ref=f3e437]
+              - cell "1997-01-23" [ref=f3e438]
+              - cell [ref=f3e439]:
+                - link "详情 ↗" [ref=f3e440] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000060.SZ
+            - row [ref=f3e441]:
+              - cell [ref=f3e442]:
+                - code [ref=f3e443]: "000061"
+              - cell "农产品" [ref=f3e444]
+              - cell "农业综合" [ref=f3e445]
+              - cell "深圳" [ref=f3e447]
+              - cell "1997-01-10" [ref=f3e448]
+              - cell [ref=f3e449]:
+                - link "详情 ↗" [ref=f3e450] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000061.SZ
+            - row [ref=f3e451]:
+              - cell [ref=f3e452]:
+                - code [ref=f3e453]: "000062"
+              - cell "深圳华强" [ref=f3e454]
+              - cell "元器件" [ref=f3e455]
+              - cell "深圳" [ref=f3e457]
+              - cell "1997-01-30" [ref=f3e458]
+              - cell [ref=f3e459]:
+                - link "详情 ↗" [ref=f3e460] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000062.SZ
+            - row [ref=f3e461]:
+              - cell [ref=f3e462]:
+                - code [ref=f3e463]: "000063"
+              - cell "中兴通讯" [ref=f3e464]
+              - cell "通信设备" [ref=f3e465]
+              - cell "深圳" [ref=f3e467]
+              - cell "1997-11-18" [ref=f3e468]
+              - cell [ref=f3e469]:
+                - link "详情 ↗" [ref=f3e470] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000063.SZ
+            - row [ref=f3e471]:
+              - cell [ref=f3e472]:
+                - code [ref=f3e473]: "000065"
+              - cell "北方国际" [ref=f3e474]
+              - cell "建筑工程" [ref=f3e475]
+              - cell "北京" [ref=f3e477]
+              - cell "1998-06-05" [ref=f3e478]
+              - cell [ref=f3e479]:
+                - link "详情 ↗" [ref=f3e480] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000065.SZ
+            - row [ref=f3e481]:
+              - cell [ref=f3e482]:
+                - code [ref=f3e483]: "000066"
+              - cell "中国长城" [ref=f3e484]
+              - cell "IT设备" [ref=f3e485]
+              - cell "深圳" [ref=f3e487]
+              - cell "1997-06-26" [ref=f3e488]
+              - cell [ref=f3e489]:
+                - link "详情 ↗" [ref=f3e490] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000066.SZ
+            - row [ref=f3e491]:
+              - cell [ref=f3e492]:
+                - code [ref=f3e493]: "000068"
+              - cell "华控赛格" [ref=f3e494]
+              - cell "环境保护" [ref=f3e495]
+              - cell "深圳" [ref=f3e497]
+              - cell "1997-06-11" [ref=f3e498]
+              - cell [ref=f3e499]:
+                - link "详情 ↗" [ref=f3e500] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000068.SZ
+            - row [ref=f3e501]:
+              - cell [ref=f3e502]:
+                - code [ref=f3e503]: "000069"
+              - cell "华侨城A" [ref=f3e504]
+              - cell "全国地产" [ref=f3e505]
+              - cell "深圳" [ref=f3e507]
+              - cell "1997-09-10" [ref=f3e508]
+              - cell [ref=f3e509]:
+                - link "详情 ↗" [ref=f3e510] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000069.SZ
+            - row [ref=f3e511]:
+              - cell [ref=f3e512]:
+                - code [ref=f3e513]: "000070"
+              - cell "特发信息" [ref=f3e514]
+              - cell "通信设备" [ref=f3e515]
+              - cell "深圳" [ref=f3e517]
+              - cell "2000-05-11" [ref=f3e518]
+              - cell [ref=f3e519]:
+                - link "详情 ↗" [ref=f3e520] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000070.SZ
+            - row [ref=f3e521]:
+              - cell [ref=f3e522]:
+                - code [ref=f3e523]: "000078"
+              - cell "ST海王" [ref=f3e524]
+              - cell "医药商业" [ref=f3e525]
+              - cell "深圳" [ref=f3e527]
+              - cell "1998-12-18" [ref=f3e528]
+              - cell [ref=f3e529]:
+                - link "详情 ↗" [ref=f3e530] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000078.SZ
+            - row [ref=f3e531]:
+              - cell [ref=f3e532]:
+                - code [ref=f3e533]: "000088"
+              - cell "盐田港" [ref=f3e534]
+              - cell "港口" [ref=f3e535]
+              - cell "深圳" [ref=f3e537]
+              - cell "1997-07-28" [ref=f3e538]
+              - cell [ref=f3e539]:
+                - link "详情 ↗" [ref=f3e540] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000088.SZ
+            - row [ref=f3e541]:
+              - cell [ref=f3e542]:
+                - code [ref=f3e543]: "000089"
+              - cell "深圳机场" [ref=f3e544]
+              - cell "机场" [ref=f3e545]
+              - cell "深圳" [ref=f3e547]
+              - cell "1998-04-20" [ref=f3e548]
+              - cell [ref=f3e549]:
+                - link "详情 ↗" [ref=f3e550] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000089.SZ
+            - row [ref=f3e551]:
+              - cell [ref=f3e552]:
+                - code [ref=f3e553]: "000090"
+              - cell "天健集团" [ref=f3e554]
+              - cell "建筑工程" [ref=f3e555]
+              - cell "深圳" [ref=f3e557]
+              - cell "1999-07-21" [ref=f3e558]
+              - cell [ref=f3e559]:
+                - link "详情 ↗" [ref=f3e560] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000090.SZ
+            - row [ref=f3e561]:
+              - cell [ref=f3e562]:
+                - code [ref=f3e563]: "000096"
+              - cell "广聚能源" [ref=f3e564]
+              - cell "石油贸易" [ref=f3e565]
+              - cell "深圳" [ref=f3e567]
+              - cell "2000-07-24" [ref=f3e568]
+              - cell [ref=f3e569]:
+                - link "详情 ↗" [ref=f3e570] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000096.SZ
+            - row [ref=f3e571]:
+              - cell [ref=f3e572]:
+                - code [ref=f3e573]: "000099"
+              - cell "中信海直" [ref=f3e574]
+              - cell "空运" [ref=f3e575]
+              - cell "深圳" [ref=f3e577]
+              - cell "2000-07-31" [ref=f3e578]
+              - cell [ref=f3e579]:
+                - link "详情 ↗" [ref=f3e580] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000099.SZ
+            - row [ref=f3e581]:
+              - cell [ref=f3e582]:
+                - code [ref=f3e583]: "000100"
+              - cell "TCL科技" [ref=f3e584]
+              - cell "元器件" [ref=f3e585]
+              - cell "广东" [ref=f3e587]
+              - cell "2004-01-30" [ref=f3e588]
+              - cell [ref=f3e589]:
+                - link "详情 ↗" [ref=f3e590] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000100.SZ
+            - row [ref=f3e591]:
+              - cell [ref=f3e592]:
+                - code [ref=f3e593]: "000151"
+              - cell "中成股份" [ref=f3e594]
+              - cell "商贸代理" [ref=f3e595]
+              - cell "北京" [ref=f3e597]
+              - cell "2000-09-06" [ref=f3e598]
+              - cell [ref=f3e599]:
+                - link "详情 ↗" [ref=f3e600] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000151.SZ
+            - row [ref=f3e601]:
+              - cell [ref=f3e602]:
+                - code [ref=f3e603]: "000153"
+              - cell "丰原药业" [ref=f3e604]
+              - cell "化学制药" [ref=f3e605]
+              - cell "安徽" [ref=f3e607]
+              - cell "2000-09-20" [ref=f3e608]
+              - cell [ref=f3e609]:
+                - link "详情 ↗" [ref=f3e610] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000153.SZ
+            - row [ref=f3e611]:
+              - cell [ref=f3e612]:
+                - code [ref=f3e613]: "000155"
+              - cell "川能动力" [ref=f3e614]
+              - cell "新型电力" [ref=f3e615]
+              - cell "四川" [ref=f3e617]
+              - cell "2000-09-26" [ref=f3e618]
+              - cell [ref=f3e619]:
+                - link "详情 ↗" [ref=f3e620] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000155.SZ
+            - row [ref=f3e621]:
+              - cell [ref=f3e622]:
+                - code [ref=f3e623]: "000156"
+              - cell "华数传媒" [ref=f3e624]
+              - cell "影视音像" [ref=f3e625]
+              - cell "浙江" [ref=f3e627]
+              - cell "2000-09-06" [ref=f3e628]
+              - cell [ref=f3e629]:
+                - link "详情 ↗" [ref=f3e630] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000156.SZ
+            - row [ref=f3e631]:
+              - cell [ref=f3e632]:
+                - code [ref=f3e633]: "000157"
+              - cell "中联重科" [ref=f3e634]
+              - cell "工程机械" [ref=f3e635]
+              - cell "湖南" [ref=f3e637]
+              - cell "2000-10-12" [ref=f3e638]
+              - cell [ref=f3e639]:
+                - link "详情 ↗" [ref=f3e640] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000157.SZ
+            - row [ref=f3e641]:
+              - cell [ref=f3e642]:
+                - code [ref=f3e643]: "000158"
+              - cell "常山北明" [ref=f3e644]
+              - cell "软件服务" [ref=f3e645]
+              - cell "河北" [ref=f3e647]
+              - cell "2000-07-24" [ref=f3e648]
+              - cell [ref=f3e649]:
+                - link "详情 ↗" [ref=f3e650] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000158.SZ
+            - row [ref=f3e651]:
+              - cell [ref=f3e652]:
+                - code [ref=f3e653]: "000159"
+              - cell "国际实业" [ref=f3e654]
+              - cell "石油贸易" [ref=f3e655]
+              - cell "新疆" [ref=f3e657]
+              - cell "2000-09-26" [ref=f3e658]
+              - cell [ref=f3e659]:
+                - link "详情 ↗" [ref=f3e660] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000159.SZ
+            - row [ref=f3e661]:
+              - cell [ref=f3e662]:
+                - code [ref=f3e663]: "000166"
+              - cell "申万宏源" [ref=f3e664]
+              - cell "证券" [ref=f3e665]
+              - cell "新疆" [ref=f3e667]
+              - cell "2015-01-26" [ref=f3e668]
+              - cell [ref=f3e669]:
+                - link "详情 ↗" [ref=f3e670] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000166.SZ
+            - row [ref=f3e671]:
+              - cell [ref=f3e672]:
+                - code [ref=f3e673]: "000301"
+              - cell "东方盛虹" [ref=f3e674]
+              - cell "化纤" [ref=f3e675]
+              - cell "江苏" [ref=f3e677]
+              - cell "2000-05-29" [ref=f3e678]
+              - cell [ref=f3e679]:
+                - link "详情 ↗" [ref=f3e680] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000301.SZ
+            - row [ref=f3e681]:
+              - cell [ref=f3e682]:
+                - code [ref=f3e683]: "000333"
+              - cell "美的集团" [ref=f3e684]
+              - cell "家用电器" [ref=f3e685]
+              - cell "广东" [ref=f3e687]
+              - cell "2013-09-18" [ref=f3e688]
+              - cell [ref=f3e689]:
+                - link "详情 ↗" [ref=f3e690] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000333.SZ
+            - row [ref=f3e691]:
+              - cell [ref=f3e692]:
+                - code [ref=f3e693]: "000338"
+              - cell "潍柴动力" [ref=f3e694]
+              - cell "汽车配件" [ref=f3e695]
+              - cell "山东" [ref=f3e697]
+              - cell "2007-04-30" [ref=f3e698]
+              - cell [ref=f3e699]:
+                - link "详情 ↗" [ref=f3e700] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000338.SZ
+            - row [ref=f3e701]:
+              - cell [ref=f3e702]:
+                - code [ref=f3e703]: "000400"
+              - cell "许继电气" [ref=f3e704]
+              - cell "电气设备" [ref=f3e705]
+              - cell "河南" [ref=f3e707]
+              - cell "1997-04-18" [ref=f3e708]
+              - cell [ref=f3e709]:
+                - link "详情 ↗" [ref=f3e710] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000400.SZ
+            - row [ref=f3e711]:
+              - cell [ref=f3e712]:
+                - code [ref=f3e713]: "000401"
+              - cell "金隅冀东" [ref=f3e714]
+              - cell "水泥" [ref=f3e715]
+              - cell "河北" [ref=f3e717]
+              - cell "1996-06-14" [ref=f3e718]
+              - cell [ref=f3e719]:
+                - link "详情 ↗" [ref=f3e720] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000401.SZ
+            - row [ref=f3e721]:
+              - cell [ref=f3e722]:
+                - code [ref=f3e723]: "000402"
+              - cell "金融街" [ref=f3e724]
+              - cell "全国地产" [ref=f3e725]
+              - cell "北京" [ref=f3e727]
+              - cell "1996-06-26" [ref=f3e728]
+              - cell [ref=f3e729]:
+                - link "详情 ↗" [ref=f3e730] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000402.SZ
+            - row [ref=f3e731]:
+              - cell [ref=f3e732]:
+                - code [ref=f3e733]: "000403"
+              - cell "派林生物" [ref=f3e734]
+              - cell "生物制药" [ref=f3e735]
+              - cell "山西" [ref=f3e737]
+              - cell "1996-06-28" [ref=f3e738]
+              - cell [ref=f3e739]:
+                - link "详情 ↗" [ref=f3e740] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000403.SZ
+            - row [ref=f3e741]:
+              - cell [ref=f3e742]:
+                - code [ref=f3e743]: "000404"
+              - cell "长虹华意" [ref=f3e744]
+              - cell "家用电器" [ref=f3e745]
+              - cell "江西" [ref=f3e747]
+              - cell "1996-06-19" [ref=f3e748]
+              - cell [ref=f3e749]:
+                - link "详情 ↗" [ref=f3e750] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000404.SZ
+            - row [ref=f3e751]:
+              - cell [ref=f3e752]:
+                - code [ref=f3e753]: "000407"
+              - cell "胜利股份" [ref=f3e754]
+              - cell "供气供热" [ref=f3e755]
+              - cell "山东" [ref=f3e757]
+              - cell "1996-07-03" [ref=f3e758]
+              - cell [ref=f3e759]:
+                - link "详情 ↗" [ref=f3e760] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000407.SZ
+            - row [ref=f3e761]:
+              - cell [ref=f3e762]:
+                - code [ref=f3e763]: "000408"
+              - cell "藏格矿业" [ref=f3e764]
+              - cell "农药化肥" [ref=f3e765]
+              - cell "青海" [ref=f3e767]
+              - cell "1996-06-28" [ref=f3e768]
+              - cell [ref=f3e769]:
+                - link "详情 ↗" [ref=f3e770] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000408.SZ
+            - row [ref=f3e771]:
+              - cell [ref=f3e772]:
+                - code [ref=f3e773]: "000409"
+              - cell "云鼎科技" [ref=f3e774]
+              - cell "软件服务" [ref=f3e775]
+              - cell "山东" [ref=f3e777]
+              - cell "1996-06-27" [ref=f3e778]
+              - cell [ref=f3e779]:
+                - link "详情 ↗" [ref=f3e780] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000409.SZ
+            - row [ref=f3e781]:
+              - cell [ref=f3e782]:
+                - code [ref=f3e783]: "000410"
+              - cell "沈阳机床" [ref=f3e784]
+              - cell "机床制造" [ref=f3e785]
+              - cell "辽宁" [ref=f3e787]
+              - cell "1996-07-18" [ref=f3e788]
+              - cell [ref=f3e789]:
+                - link "详情 ↗" [ref=f3e790] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000410.SZ
+            - row [ref=f3e791]:
+              - cell [ref=f3e792]:
+                - code [ref=f3e793]: "000411"
+              - cell "英特集团" [ref=f3e794]
+              - cell "医药商业" [ref=f3e795]
+              - cell "浙江" [ref=f3e797]
+              - cell "1996-07-16" [ref=f3e798]
+              - cell [ref=f3e799]:
+                - link "详情 ↗" [ref=f3e800] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000411.SZ
+            - row [ref=f3e801]:
+              - cell [ref=f3e802]:
+                - code [ref=f3e803]: "000415"
+              - cell "渤海租赁" [ref=f3e804]
+              - cell "多元金融" [ref=f3e805]
+              - cell "新疆" [ref=f3e807]
+              - cell "1996-07-16" [ref=f3e808]
+              - cell [ref=f3e809]:
+                - link "详情 ↗" [ref=f3e810] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000415.SZ
+            - row [ref=f3e811]:
+              - cell [ref=f3e812]:
+                - code [ref=f3e813]: "000417"
+              - cell "合百集团" [ref=f3e814]
+              - cell "百货" [ref=f3e815]
+              - cell "安徽" [ref=f3e817]
+              - cell "1996-08-12" [ref=f3e818]
+              - cell [ref=f3e819]:
+                - link "详情 ↗" [ref=f3e820] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000417.SZ
+            - row [ref=f3e821]:
+              - cell [ref=f3e822]:
+                - code [ref=f3e823]: "000419"
+              - cell "通程控股" [ref=f3e824]
+              - cell "百货" [ref=f3e825]
+              - cell "湖南" [ref=f3e827]
+              - cell "1996-08-16" [ref=f3e828]
+              - cell [ref=f3e829]:
+                - link "详情 ↗" [ref=f3e830] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000419.SZ
+            - row [ref=f3e831]:
+              - cell [ref=f3e832]:
+                - code [ref=f3e833]: "000420"
+              - cell "吉林化纤" [ref=f3e834]
+              - cell "化纤" [ref=f3e835]
+              - cell "吉林" [ref=f3e837]
+              - cell "1996-08-02" [ref=f3e838]
+              - cell [ref=f3e839]:
+                - link "详情 ↗" [ref=f3e840] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000420.SZ
+            - row [ref=f3e841]:
+              - cell [ref=f3e842]:
+                - code [ref=f3e843]: "000421"
+              - cell "南京公用" [ref=f3e844]
+              - cell "供气供热" [ref=f3e845]
+              - cell "江苏" [ref=f3e847]
+              - cell "1996-08-06" [ref=f3e848]
+              - cell [ref=f3e849]:
+                - link "详情 ↗" [ref=f3e850] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000421.SZ
+            - row [ref=f3e851]:
+              - cell [ref=f3e852]:
+                - code [ref=f3e853]: "000422"
+              - cell "湖北宜化" [ref=f3e854]
+              - cell "农药化肥" [ref=f3e855]
+              - cell "湖北" [ref=f3e857]
+              - cell "1996-08-15" [ref=f3e858]
+              - cell [ref=f3e859]:
+                - link "详情 ↗" [ref=f3e860] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000422.SZ
+            - row [ref=f3e861]:
+              - cell [ref=f3e862]:
+                - code [ref=f3e863]: "000423"
+              - cell "东阿阿胶" [ref=f3e864]
+              - cell "中成药" [ref=f3e865]
+              - cell "山东" [ref=f3e867]
+              - cell "1996-07-29" [ref=f3e868]
+              - cell [ref=f3e869]:
+                - link "详情 ↗" [ref=f3e870] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000423.SZ
+            - row [ref=f3e871]:
+              - cell [ref=f3e872]:
+                - code [ref=f3e873]: "000425"
+              - cell "徐工机械" [ref=f3e874]
+              - cell "工程机械" [ref=f3e875]
+              - cell "江苏" [ref=f3e877]
+              - cell "1996-08-28" [ref=f3e878]
+              - cell [ref=f3e879]:
+                - link "详情 ↗" [ref=f3e880] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000425.SZ
+            - row [ref=f3e881]:
+              - cell [ref=f3e882]:
+                - code [ref=f3e883]: "000426"
+              - cell "兴业银锡" [ref=f3e884]
+              - cell "铅锌" [ref=f3e885]
+              - cell "内蒙" [ref=f3e887]
+              - cell "1996-08-28" [ref=f3e888]
+              - cell [ref=f3e889]:
+                - link "详情 ↗" [ref=f3e890] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000426.SZ
+            - row [ref=f3e891]:
+              - cell [ref=f3e892]:
+                - code [ref=f3e893]: "000428"
+              - cell "华天酒店" [ref=f3e894]
+              - cell "酒店餐饮" [ref=f3e895]
+              - cell "湖南" [ref=f3e897]
+              - cell "1996-08-08" [ref=f3e898]
+              - cell [ref=f3e899]:
+                - link "详情 ↗" [ref=f3e900] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000428.SZ
+            - row [ref=f3e901]:
+              - cell [ref=f3e902]:
+                - code [ref=f3e903]: "000429"
+              - cell "粤高速A" [ref=f3e904]
+              - cell "路桥" [ref=f3e905]
+              - cell "广东" [ref=f3e907]
+              - cell "1998-02-20" [ref=f3e908]
+              - cell [ref=f3e909]:
+                - link "详情 ↗" [ref=f3e910] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000429.SZ
+            - row [ref=f3e911]:
+              - cell [ref=f3e912]:
+                - code [ref=f3e913]: "000430"
+              - cell "张家界" [ref=f3e914]
+              - cell "旅游景点" [ref=f3e915]
+              - cell "湖南" [ref=f3e917]
+              - cell "1996-08-29" [ref=f3e918]
+              - cell [ref=f3e919]:
+                - link "详情 ↗" [ref=f3e920] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000430.SZ
+            - row [ref=f3e921]:
+              - cell [ref=f3e922]:
+                - code [ref=f3e923]: "000488"
+              - cell "ST晨鸣" [ref=f3e924]
+              - cell "造纸" [ref=f3e925]
+              - cell "山东" [ref=f3e927]
+              - cell "2000-11-20" [ref=f3e928]
+              - cell [ref=f3e929]:
+                - link "详情 ↗" [ref=f3e930] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000488.SZ
+            - row [ref=f3e931]:
+              - cell [ref=f3e932]:
+                - code [ref=f3e933]: "000498"
+              - cell "山东路桥" [ref=f3e934]
+              - cell "建筑工程" [ref=f3e935]
+              - cell "山东" [ref=f3e937]
+              - cell "1997-06-09" [ref=f3e938]
+              - cell [ref=f3e939]:
+                - link "详情 ↗" [ref=f3e940] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000498.SZ
+            - row [ref=f3e941]:
+              - cell [ref=f3e942]:
+                - code [ref=f3e943]: "000501"
+              - cell "武商集团" [ref=f3e944]
+              - cell "百货" [ref=f3e945]
+              - cell "湖北" [ref=f3e947]
+              - cell "1992-11-20" [ref=f3e948]
+              - cell [ref=f3e949]:
+                - link "详情 ↗" [ref=f3e950] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000501.SZ
+            - row [ref=f3e951]:
+              - cell [ref=f3e952]:
+                - code [ref=f3e953]: "000503"
+              - cell "国新健康" [ref=f3e954]
+              - cell "软件服务" [ref=f3e955]
+              - cell "山东" [ref=f3e957]
+              - cell "1992-11-30" [ref=f3e958]
+              - cell [ref=f3e959]:
+                - link "详情 ↗" [ref=f3e960] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000503.SZ
+            - row [ref=f3e961]:
+              - cell [ref=f3e962]:
+                - code [ref=f3e963]: "000504"
+              - cell "南华生物" [ref=f3e964]
+              - cell "医疗保健" [ref=f3e965]
+              - cell "湖南" [ref=f3e967]
+              - cell "1992-12-08" [ref=f3e968]
+              - cell [ref=f3e969]:
+                - link "详情 ↗" [ref=f3e970] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000504.SZ
+            - row [ref=f3e971]:
+              - cell [ref=f3e972]:
+                - code [ref=f3e973]: "000505"
+              - cell "京粮控股" [ref=f3e974]
+              - cell "食品" [ref=f3e975]
+              - cell "海南" [ref=f3e977]
+              - cell "1992-12-21" [ref=f3e978]
+              - cell [ref=f3e979]:
+                - link "详情 ↗" [ref=f3e980] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000505.SZ
+            - row [ref=f3e981]:
+              - cell [ref=f3e982]:
+                - code [ref=f3e983]: "000506"
+              - cell "招金黄金" [ref=f3e984]
+              - cell "黄金" [ref=f3e985]
+              - cell "山东" [ref=f3e987]
+              - cell "1993-03-12" [ref=f3e988]
+              - cell [ref=f3e989]:
+                - link "详情 ↗" [ref=f3e990] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000506.SZ
+            - row [ref=f3e991]:
+              - cell [ref=f3e992]:
+                - code [ref=f3e993]: "000507"
+              - cell "珠海港" [ref=f3e994]
+              - cell "新型电力" [ref=f3e995]
+              - cell "广东" [ref=f3e997]
+              - cell "1993-03-26" [ref=f3e998]
+              - cell [ref=f3e999]:
+                - link "详情 ↗" [ref=f3e1000] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000507.SZ
+            - row [ref=f3e1001]:
+              - cell [ref=f3e1002]:
+                - code [ref=f3e1003]: "000509"
+              - cell "华塑控股" [ref=f3e1004]
+              - cell "元器件" [ref=f3e1005]
+              - cell "四川" [ref=f3e1007]
+              - cell "1993-05-07" [ref=f3e1008]
+              - cell [ref=f3e1009]:
+                - link "详情 ↗" [ref=f3e1010] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000509.SZ
+            - row [ref=f3e1011]:
+              - cell [ref=f3e1012]:
+                - code [ref=f3e1013]: "000510"
+              - cell "新金路" [ref=f3e1014]
+              - cell "化工原料" [ref=f3e1015]
+              - cell "四川" [ref=f3e1017]
+              - cell "1993-05-07" [ref=f3e1018]
+              - cell [ref=f3e1019]:
+                - link "详情 ↗" [ref=f3e1020] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000510.SZ
+            - row [ref=f3e1021]:
+              - cell [ref=f3e1022]:
+                - code [ref=f3e1023]: "000513"
+              - cell "丽珠集团" [ref=f3e1024]
+              - cell "化学制药" [ref=f3e1025]
+              - cell "广东" [ref=f3e1027]
+              - cell "1993-10-28" [ref=f3e1028]
+              - cell [ref=f3e1029]:
+                - link "详情 ↗" [ref=f3e1030] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000513.SZ
+            - row [ref=f3e1031]:
+              - cell [ref=f3e1032]:
+                - code [ref=f3e1033]: "000514"
+              - cell "渝开发" [ref=f3e1034]
+              - cell "区域地产" [ref=f3e1035]
+              - cell "重庆" [ref=f3e1037]
+              - cell "1993-07-12" [ref=f3e1038]
+              - cell [ref=f3e1039]:
+                - link "详情 ↗" [ref=f3e1040] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000514.SZ
+            - row [ref=f3e1041]:
+              - cell [ref=f3e1042]:
+                - code [ref=f3e1043]: "000516"
+              - cell "国际医学" [ref=f3e1044]
+              - cell "医疗保健" [ref=f3e1045]
+              - cell "陕西" [ref=f3e1047]
+              - cell "1993-08-09" [ref=f3e1048]
+              - cell [ref=f3e1049]:
+                - link "详情 ↗" [ref=f3e1050] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000516.SZ
+            - row [ref=f3e1051]:
+              - cell [ref=f3e1052]:
+                - code [ref=f3e1053]: "000517"
+              - cell "荣安地产" [ref=f3e1054]
+              - cell "区域地产" [ref=f3e1055]
+              - cell "浙江" [ref=f3e1057]
+              - cell "1993-08-06" [ref=f3e1058]
+              - cell [ref=f3e1059]:
+                - link "详情 ↗" [ref=f3e1060] [cursor=pointer]:
+                  - /url: http://127.0.0.1:5000/stock/000517.SZ
+        - navigation [ref=f3e1062]:
+          - list [ref=f3e1063]:
+            - listitem [ref=f3e1064]:
+              - button "上一页"
+            - listitem [ref=f3e1065]:
+              - button "1" [ref=f3e1066] [cursor=pointer]
+            - listitem [ref=f3e1067]:
+              - button "2" [ref=f3e1068] [cursor=pointer]
+            - listitem [ref=f3e1069]:
+              - button "3" [ref=f3e1070] [cursor=pointer]
+            - listitem [ref=f3e1071]:
+              - button "下一页" [ref=f3e1072] [cursor=pointer]

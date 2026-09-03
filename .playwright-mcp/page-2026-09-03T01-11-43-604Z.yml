@@ -1,0 +1,48 @@
+- generic [ref=f4e2]:
+  - banner [ref=f4e3]:
+    - generic [ref=f4e4]:
+      - link "Q 量化分析终端 REACT EDITION" [ref=f4e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f4e6]: Q
+        - generic [ref=f4e7]:
+          - text: 量化分析终端
+          - generic [ref=f4e8]: REACT EDITION
+      - navigation [ref=f4e9]:
+        - link "首页" [ref=f4e10] [cursor=pointer]:
+          - /url: /
+        - link "股票列表" [ref=f4e11] [cursor=pointer]:
+          - /url: /stocks
+        - link "技术分析" [ref=f4e12] [cursor=pointer]:
+          - /url: /analysis
+        - link "选股筛选" [ref=f4e13] [cursor=pointer]:
+          - /url: /screen
+        - link "回测验证" [ref=f4e14] [cursor=pointer]:
+          - /url: /backtest
+      - link "旧版 ↗" [ref=f4e15] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+  - main [ref=f4e16]:
+    - generic [ref=f4e17]:
+      - generic [ref=f4e19]:
+        - heading "技术分析" [level=2] [ref=f4e20]
+        - paragraph [ref=f4e21]: lightweight-charts v5 · K线 / 线图 · MACD / KDJ / RSI / 布林带
+      - generic [ref=f4e24]:
+        - generic [ref=f4e25]:
+          - generic [ref=f4e26]: 股票代码
+          - textbox "000001.SZ" [ref=f4e27]
+          - generic [ref=f4e28]: 6 位数字自动补后缀：0/3 → .SZ · 6 → .SH
+        - generic [ref=f4e29]:
+          - generic [ref=f4e30]: 时间周期
+          - combobox [ref=f4e31]:
+            - option "30 天"
+            - option "60 天" [selected]
+            - option "120 天"
+            - option "250 天"
+        - generic [ref=f4e32]:
+          - generic [ref=f4e33]: 图表类型
+          - combobox [ref=f4e34]:
+            - option "K线图" [selected]
+            - option "线图"
+        - button "⚡ 分析" [ref=f4e37] [cursor=pointer]
+      - generic [ref=f4e38]:
+        - generic [ref=f4e39]: ⚡
+        - generic [ref=f4e40]: 输入股票代码，点击「分析」查看行情与技术指标

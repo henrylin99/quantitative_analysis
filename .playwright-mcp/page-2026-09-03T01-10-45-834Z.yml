@@ -1,0 +1,52 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - link "Q 量化分析终端 REACT EDITION" [ref=f2e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f2e6]: Q
+        - generic [ref=f2e7]:
+          - text: 量化分析终端
+          - generic [ref=f2e8]: REACT EDITION
+      - navigation [ref=f2e9]:
+        - link "首页" [ref=f2e10] [cursor=pointer]:
+          - /url: /
+        - link "股票列表" [ref=f2e11] [cursor=pointer]:
+          - /url: /stocks
+        - link "技术分析" [ref=f2e12] [cursor=pointer]:
+          - /url: /analysis
+        - link "选股筛选" [ref=f2e13] [cursor=pointer]:
+          - /url: /screen
+        - link "回测验证" [ref=f2e14] [cursor=pointer]:
+          - /url: /backtest
+      - link "旧版 ↗" [ref=f2e15] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+  - main [ref=f2e16]:
+    - generic [ref=f2e17]:
+      - generic [ref=f2e18]:
+        - heading "量化分析终端" [level=1] [ref=f2e19]
+        - paragraph [ref=f2e20]: 前后端分离版 · 与旧版共用同一套 /api 数据服务 · A 股行情与策略研究
+      - generic [ref=f2e21]:
+        - link "📋 股票列表 全市场股票浏览，行业地域筛选与关键字搜索" [ref=f2e22] [cursor=pointer]:
+          - /url: /stocks
+          - generic [ref=f2e23]: 📋
+          - heading "股票列表" [level=3] [ref=f2e24]
+          - paragraph [ref=f2e25]: 全市场股票浏览，行业地域筛选与关键字搜索
+        - link "📈 技术分析 lightweight-charts v5 专业 K 线，MACD / KDJ / RSI / 布林带" [ref=f2e26] [cursor=pointer]:
+          - /url: /analysis
+          - generic [ref=f2e27]: 📈
+          - heading "技术分析" [level=3] [ref=f2e28]
+          - paragraph [ref=f2e29]: lightweight-charts v5 专业 K 线，MACD / KDJ / RSI / 布林带
+        - link "🔍 选股筛选 估值、市值、技术指标多条件组合，支持模板与导出" [ref=f2e30] [cursor=pointer]:
+          - /url: /screen
+          - generic [ref=f2e31]: 🔍
+          - heading "选股筛选" [level=3] [ref=f2e32]
+          - paragraph [ref=f2e33]: 估值、市值、技术指标多条件组合，支持模板与导出
+        - link "🧪 回测验证 均线 / MACD / KDJ / RSI / 布林带五类策略历史回测" [ref=f2e34] [cursor=pointer]:
+          - /url: /backtest
+          - generic [ref=f2e35]: 🧪
+          - heading "回测验证" [level=3] [ref=f2e36]
+          - paragraph [ref=f2e37]: 均线 / MACD / KDJ / RSI / 布林带五类策略历史回测
+      - generic [ref=f2e39]:
+        - text: 多因子模型、实时分析、AI 工作台等旧版功能未迁移，
+        - link "打开旧版 ↗" [ref=f2e40] [cursor=pointer]:
+          - /url: http://127.0.0.1:5000/
