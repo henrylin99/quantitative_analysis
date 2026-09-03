@@ -737,23 +737,13 @@ def latest_factor_coverage_date():
     try:
         raw = request.args.get('factor_ids', '')
         factor_ids = [item.strip() for item in raw.split(',') if item.strip()] or None
-        factor_repo = get_scoring_engine().factor_repo
-        cutoff = (pd.Timestamp.now() - pd.Timedelta(days=180)).strftime("%Y%m%d")
-
-        coverage_df = factor_repo.get_values(factor_ids=factor_ids, start_date=cutoff)
-        if coverage_df.empty and factor_ids is not None:
-            coverage_df = factor_repo.get_values(factor_ids=factor_ids)
-
-        if coverage_df.empty or "trade_date" not in coverage_df.columns:
-            return jsonify({'success': False, 'error': '未找到因子数据'}), 404
-
-        latest_date = pd.to_datetime(coverage_df["trade_date"], errors="coerce").dropna().max()
-        if pd.isna(latest_date):
+        latest_date = get_scoring_engine().latest_factor_coverage_date(factor_ids)
+        if latest_date is None:
             return jsonify({'success': False, 'error': '未找到因子数据'}), 404
 
         return jsonify({
             'success': True,
-            'latest_coverage_date': latest_date.strftime("%Y-%m-%d"),
+            'latest_coverage_date': latest_date,
             'factor_ids': factor_ids,
         })
     except Exception as e:
@@ -1785,7 +1775,6 @@ def run_backtest():
                 'success': True,
                 'queued': True,
                 'run_id': run_id,
-                'task_id': None,
                 'status_url': f'/api/ml-factor/backtest/runs/{run_id}',
                 'result_url': f'/api/ml-factor/backtest/runs/{run_id}/result',
             })

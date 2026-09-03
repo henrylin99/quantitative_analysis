@@ -7,6 +7,7 @@
 | 合约 | 测试文件 | Marker |
 |---|---|---|
 | 基准收益计算 | tests/services/test_backtest_benchmark_returns.py | module_backtest |
+| 回测运行记录 API 合约 | tests/api/test_backtest_run_contract.py | module_backtest |
 | 回测响应合约 | tests/services/test_backtest_response_contract.py | module_backtest |
 | 无 fake 默认值守卫 | tests/ui/test_backtest_template_no_fake_defaults.py | module_backtest |
 | 回测模板 UI 合约 | tests/ui/test_backtest_template_contract.py | module_backtest |

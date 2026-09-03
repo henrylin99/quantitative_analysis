@@ -7,6 +7,7 @@
 | 合约 | 测试文件 | Marker |
 |---|---|---|
 | 打分方法合约 | tests/services/test_stock_scoring_methods.py | module_scoring |
+| 因子覆盖日期合约 | tests/api/test_factor_coverage_date_contract.py | module_scoring |
 | 打分模板 UI 合约 | tests/ui/test_scoring_template_contract.py | module_scoring |
 | 打分入口 UI 合约 | tests/ui/test_model_and_scoring_entry_copy_contract.py | module_scoring |
 

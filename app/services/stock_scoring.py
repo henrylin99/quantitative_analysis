@@ -25,6 +25,26 @@ class StockScoringEngine:
             'ml_ensemble': self._ml_ensemble_scoring,
             'rank_ic': self._rank_ic_scoring
         }
+
+    def latest_factor_coverage_date(self, factor_ids: Optional[List[str]] = None,
+                                    lookback_days: int = 180) -> Optional[str]:
+        """指定因子集合在因子库中均有数据的最近交易日（YYYY-MM-DD），无数据返回 None。
+
+        动量/资金流类因子与财务类因子的入库日期不同步，因子库全局最新日期上
+        目标因子组合可能无任何行，按集合反查最近覆盖日期；近 lookback_days 天
+        无数据时放宽到全库再查一次。
+        """
+        cutoff = (pd.Timestamp.now() - pd.Timedelta(days=lookback_days)).strftime("%Y%m%d")
+        coverage_df = self.factor_repo.get_values(factor_ids=factor_ids, start_date=cutoff)
+        if coverage_df.empty and factor_ids is not None:
+            coverage_df = self.factor_repo.get_values(factor_ids=factor_ids)
+        if coverage_df.empty or "trade_date" not in coverage_df.columns:
+            return None
+        latest_date = pd.to_datetime(coverage_df["trade_date"], errors="coerce").dropna().max()
+        if pd.isna(latest_date):
+            return None
+        return latest_date.strftime("%Y-%m-%d")
+
     
     def calculate_factor_scores(self, trade_date: str, factor_list: List[str] = None,
                                ts_codes: List[str] = None) -> pd.DataFrame:
