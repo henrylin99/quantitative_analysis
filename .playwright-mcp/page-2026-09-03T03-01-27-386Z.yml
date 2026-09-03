@@ -1,0 +1,426 @@
+- generic [ref=f42e2]:
+  - complementary [ref=f42e3]:
+    - link "Q 量化分析终端 REACT EDITION" [ref=f42e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f42e5]: Q
+      - generic [ref=f42e6]:
+        - text: 量化分析终端
+        - generic [ref=f42e7]: REACT EDITION
+    - navigation [ref=f42e8]:
+      - generic [ref=f42e9]:
+        - generic [ref=f42e10]: 概览
+        - link "🏠 首页" [ref=f42e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f42e12]: 🏠
+          - text: 首页
+      - generic [ref=f42e13]:
+        - generic [ref=f42e14]: 核心分析
+        - link "📋 股票列表" [ref=f42e15] [cursor=pointer]:
+          - /url: /stocks
+          - generic [ref=f42e16]: 📋
+          - text: 股票列表
+        - link "📈 技术分析" [ref=f42e17] [cursor=pointer]:
+          - /url: /analysis
+          - generic [ref=f42e18]: 📈
+          - text: 技术分析
+        - link "🔍 选股筛选" [ref=f42e19] [cursor=pointer]:
+          - /url: /screen
+          - generic [ref=f42e20]: 🔍
+          - text: 选股筛选
+        - link "🧪 策略回测" [ref=f42e21] [cursor=pointer]:
+          - /url: /backtest
+          - generic [ref=f42e22]: 🧪
+          - text: 策略回测
+      - generic [ref=f42e23]:
+        - generic [ref=f42e24]: 多因子模型
+        - link "🧬 因子管理" [ref=f42e25] [cursor=pointer]:
+          - /url: /ml-factor
+          - generic [ref=f42e26]: 🧬
+          - text: 因子管理
+        - link "🤖 模型管理" [ref=f42e27] [cursor=pointer]:
+          - /url: /ml-factor/models
+          - generic [ref=f42e28]: 🤖
+          - text: 模型管理
+        - link "⭐ 股票评分" [ref=f42e29] [cursor=pointer]:
+          - /url: /ml-factor/scoring
+          - generic [ref=f42e30]: ⭐
+          - text: 股票评分
+        - link "💼 投资组合" [ref=f42e31] [cursor=pointer]:
+          - /url: /ml-factor/portfolio
+          - generic [ref=f42e32]: 💼
+          - text: 投资组合
+        - link "📊 分析报告" [ref=f42e33] [cursor=pointer]:
+          - /url: /ml-factor/analysis
+          - generic [ref=f42e34]: 📊
+          - text: 分析报告
+        - link "🏁 组合回测" [ref=f42e35] [cursor=pointer]:
+          - /url: /ml-factor/backtest
+          - generic [ref=f42e36]: 🏁
+          - text: 组合回测
+      - generic [ref=f42e37]:
+        - generic [ref=f42e38]: 实时分析
+        - link "⏱️ 技术指标" [ref=f42e39] [cursor=pointer]:
+          - /url: /realtime-analysis/indicators
+          - generic [ref=f42e40]: ⏱️
+          - text: 技术指标
+        - link "🚦 交易信号" [ref=f42e41] [cursor=pointer]:
+          - /url: /realtime-analysis/signals
+          - generic [ref=f42e42]: 🚦
+          - text: 交易信号
+        - link "📡 实时监控" [ref=f42e43] [cursor=pointer]:
+          - /url: /realtime-analysis/monitor
+          - generic [ref=f42e44]: 📡
+          - text: 实时监控
+        - link "🛡️ 风险管理" [ref=f42e45] [cursor=pointer]:
+          - /url: /realtime-analysis/risk
+          - generic [ref=f42e46]: 🛡️
+          - text: 风险管理
+        - link "📄 报告管理" [ref=f42e47] [cursor=pointer]:
+          - /url: /realtime-analysis/reports
+          - generic [ref=f42e48]: 📄
+          - text: 报告管理
+        - link "🔌 推送管理" [ref=f42e49] [cursor=pointer]:
+          - /url: /realtime-analysis/websocket
+          - generic [ref=f42e50]: 🔌
+          - text: 推送管理
+      - generic [ref=f42e51]:
+        - generic [ref=f42e52]: 数据
+        - link "🗄️ 数据管理" [ref=f42e53] [cursor=pointer]:
+          - /url: /data-management
+          - generic [ref=f42e54]: 🗄️
+          - text: 数据管理
+      - generic [ref=f42e55]:
+        - generic [ref=f42e56]: 试用工具
+        - link "🔥 板块热力图" [ref=f42e57] [cursor=pointer]:
+          - /url: /heatmap
+          - generic [ref=f42e58]: 🔥
+          - text: 板块热力图
+        - link "🎯 形态选股" [ref=f42e59] [cursor=pointer]:
+          - /url: /pattern-screen
+          - generic [ref=f42e60]: 🎯
+          - text: 形态选股
+        - link "💰 资金流统计" [ref=f42e61] [cursor=pointer]:
+          - /url: /moneyflow
+          - generic [ref=f42e62]: 💰
+          - text: 资金流统计
+        - link "📰 市场简报" [ref=f42e63] [cursor=pointer]:
+          - /url: /market-brief
+          - generic [ref=f42e64]: 📰
+          - text: 市场简报
+        - link "❤️ 财务健康" [ref=f42e65] [cursor=pointer]:
+          - /url: /financial-health
+          - generic [ref=f42e66]: ❤️
+          - text: 财务健康
+        - link "🛰️ 个股雷达" [ref=f42e67] [cursor=pointer]:
+          - /url: /stock-radar
+          - generic [ref=f42e68]: 🛰️
+          - text: 个股雷达
+        - link "🗂️ 个股全景" [ref=f42e69] [cursor=pointer]:
+          - /url: /stock-panorama
+          - generic [ref=f42e70]: 🗂️
+          - text: 个股全景
+        - link "📖 功能介绍" [ref=f42e71] [cursor=pointer]:
+          - /url: /feature-intro
+          - generic [ref=f42e72]: 📖
+          - text: 功能介绍
+      - generic [ref=f42e73]:
+        - generic [ref=f42e74]: AI 助手
+        - link "🧠 AI 工作台" [ref=f42e75] [cursor=pointer]:
+          - /url: /ai-workbench
+          - generic [ref=f42e76]: 🧠
+          - text: AI 工作台
+        - link "💬 智能查数" [ref=f42e77] [cursor=pointer]:
+          - /url: /text2sql
+          - generic [ref=f42e78]: 💬
+          - text: 智能查数
+    - generic [ref=f42e79]:
+      - button "☀️ 浅色模式" [ref=f42e80] [cursor=pointer]:
+        - generic [ref=f42e81]: ☀️
+        - text: 浅色模式
+      - link "↗ 旧版" [ref=f42e82] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+        - generic [ref=f42e83]: ↗
+        - text: 旧版
+  - main [ref=f42e85]:
+    - generic [ref=f42e86]:
+      - generic [ref=f42e88]:
+        - heading "个股详情" [level=2] [ref=f42e89]
+        - paragraph [ref=f42e90]:
+          - code [ref=f42e91]: 000001.SZ
+          - text: · 行情 / 因子 / 资金 / 筹码 / 财务 / 公司资料
+      - generic [ref=f42e93]:
+        - generic [ref=f42e94]:
+          - text: 平安银行
+          - code [ref=f42e111]: 000001.SZ
+          - generic [ref=f42e112]: 深圳
+          - generic [ref=f42e113]:
+            - generic [ref=f42e114]: 行业 · 银行
+            - generic [ref=f42e115]: 地域 · 深圳
+            - generic [ref=f42e116]: 上市 · 1991-04-03
+        - generic [ref=f42e96]:
+          - button "☆ 自选" [ref=f42e97] [cursor=pointer]
+          - link "📈 技术分析" [ref=f42e98] [cursor=pointer]:
+            - /url: /analysis?stock=000001.SZ
+          - link "🧪 策略回测" [ref=f42e99] [cursor=pointer]:
+            - /url: /backtest?stock=000001.SZ
+      - group [ref=f42e100]:
+        - button "历史数据" [ref=f42e101] [cursor=pointer]
+        - button "技术因子" [ref=f42e102] [cursor=pointer]
+        - button "资金流向" [active] [ref=f42e103] [cursor=pointer]
+        - button "筹码分布" [ref=f42e104] [cursor=pointer]
+        - button "财务数据" [ref=f42e105] [cursor=pointer]
+        - button "公司信息" [ref=f42e106] [cursor=pointer]
+      - generic [ref=f42e117]:
+        - generic [ref=f42e118]:
+          - generic [ref=f42e119]: "-9,629.30"
+          - generic [ref=f42e120]: 主力净流入（万）
+        - generic [ref=f42e121]:
+          - generic [ref=f42e122]: 19.0%
+          - generic [ref=f42e123]: 大单买入占比
+        - generic [ref=f42e124]:
+          - generic [ref=f42e125]: 14.1%
+          - generic [ref=f42e126]: 特大单买入占比
+        - generic [ref=f42e127]:
+          - generic [ref=f42e128]: 8,890.86
+          - generic [ref=f42e129]: 当日净流入（万）
+      - generic [ref=f42e130]:
+        - heading "分单资金买卖对比（2026-08-21，万元）" [level=6] [ref=f42e134]
+        - heading "净流入趋势" [level=6] [ref=f42e143]
+      - generic [ref=f42e149]:
+        - heading "资金流明细 最新 20 条 · 万元" [level=6] [ref=f42e151]:
+          - text: 资金流明细
+          - generic [ref=f42e153]: 最新 20 条 · 万元
+        - table [ref=f42e155]:
+          - rowgroup [ref=f42e156]:
+            - row [ref=f42e157]:
+              - columnheader "日期" [ref=f42e158]
+              - columnheader "净流入" [ref=f42e159]
+              - columnheader "特大买" [ref=f42e160]
+              - columnheader "特大卖" [ref=f42e161]
+              - columnheader "大单买" [ref=f42e162]
+              - columnheader "大单卖" [ref=f42e163]
+              - columnheader "中单买" [ref=f42e164]
+              - columnheader "中单卖" [ref=f42e165]
+              - columnheader "小单买" [ref=f42e166]
+              - columnheader "小单卖" [ref=f42e167]
+          - rowgroup [ref=f42e168]:
+            - row [ref=f42e169]:
+              - cell "2026-07-27" [ref=f42e170]
+              - cell "-1,443.38" [ref=f42e171]
+              - cell "15,595.80" [ref=f42e172]
+              - cell "18,876.27" [ref=f42e173]
+              - cell "18,846.71" [ref=f42e174]
+              - cell "22,150.32" [ref=f42e175]
+              - cell "35,811.12" [ref=f42e176]
+              - cell "31,699.75" [ref=f42e177]
+              - cell "36,026.01" [ref=f42e178]
+              - cell "33,553.30" [ref=f42e179]
+            - row [ref=f42e180]:
+              - cell "2026-07-28" [ref=f42e181]
+              - cell "24,370.74" [ref=f42e182]
+              - cell "24,144.93" [ref=f42e183]
+              - cell "22,104.14" [ref=f42e184]
+              - cell "32,941.00" [ref=f42e185]
+              - cell "27,100.39" [ref=f42e186]
+              - cell "28,413.46" [ref=f42e187]
+              - cell "34,392.32" [ref=f42e188]
+              - cell "33,052.10" [ref=f42e189]
+              - cell "34,954.65" [ref=f42e190]
+            - row [ref=f42e191]:
+              - cell "2026-07-29" [ref=f42e192]
+              - cell "19,961.79" [ref=f42e193]
+              - cell "32,360.91" [ref=f42e194]
+              - cell "43,994.98" [ref=f42e195]
+              - cell "37,058.70" [ref=f42e196]
+              - cell "42,463.30" [ref=f42e197]
+              - cell "59,497.99" [ref=f42e198]
+              - cell "41,021.07" [ref=f42e199]
+              - cell "41,668.80" [ref=f42e200]
+              - cell "43,107.05" [ref=f42e201]
+            - row [ref=f42e202]:
+              - cell "2026-07-30" [ref=f42e203]
+              - cell "72,616.21" [ref=f42e204]
+              - cell "80,540.26" [ref=f42e205]
+              - cell "76,691.17" [ref=f42e206]
+              - cell "104,713.61" [ref=f42e207]
+              - cell "84,136.33" [ref=f42e208]
+              - cell "75,297.76" [ref=f42e209]
+              - cell "86,620.77" [ref=f42e210]
+              - cell "58,855.62" [ref=f42e211]
+              - cell "71,958.98" [ref=f42e212]
+            - row [ref=f42e213]:
+              - cell "2026-07-31" [ref=f42e214]
+              - cell "-5,996.43" [ref=f42e215]
+              - cell "41,572.74" [ref=f42e216]
+              - cell "54,659.06" [ref=f42e217]
+              - cell "54,697.04" [ref=f42e218]
+              - cell "65,015.31" [ref=f42e219]
+              - cell "68,238.84" [ref=f42e220]
+              - cell "66,155.29" [ref=f42e221]
+              - cell "67,375.37" [ref=f42e222]
+              - cell "46,054.33" [ref=f42e223]
+            - row [ref=f42e224]:
+              - cell "2026-08-03" [ref=f42e225]
+              - cell "7,687.35" [ref=f42e226]
+              - cell "20,317.56" [ref=f42e227]
+              - cell "14,783.59" [ref=f42e228]
+              - cell "28,844.70" [ref=f42e229]
+              - cell "27,399.93" [ref=f42e230]
+              - cell "41,253.10" [ref=f42e231]
+              - cell "37,569.70" [ref=f42e232]
+              - cell "32,518.62" [ref=f42e233]
+              - cell "43,180.76" [ref=f42e234]
+            - row [ref=f42e235]:
+              - cell "2026-08-04" [ref=f42e236]
+              - cell "-22,456.35" [ref=f42e237]
+              - cell "12,537.97" [ref=f42e238]
+              - cell "38,028.96" [ref=f42e239]
+              - cell "40,501.82" [ref=f42e240]
+              - cell "30,474.35" [ref=f42e241]
+              - cell "44,758.24" [ref=f42e242]
+              - cell "37,868.50" [ref=f42e243]
+              - cell "42,323.33" [ref=f42e244]
+              - cell "33,749.55" [ref=f42e245]
+            - row [ref=f42e246]:
+              - cell "2026-08-05" [ref=f42e247]
+              - cell "-54,614.83" [ref=f42e248]
+              - cell "32,062.15" [ref=f42e249]
+              - cell "48,961.75" [ref=f42e250]
+              - cell "40,120.40" [ref=f42e251]
+              - cell "46,668.42" [ref=f42e252]
+              - cell "49,483.45" [ref=f42e253]
+              - cell "37,210.67" [ref=f42e254]
+              - cell "48,728.25" [ref=f42e255]
+              - cell "37,553.40" [ref=f42e256]
+            - row [ref=f42e257]:
+              - cell "2026-08-06" [ref=f42e258]
+              - cell "4,485.70" [ref=f42e259]
+              - cell "18,904.02" [ref=f42e260]
+              - cell "17,907.42" [ref=f42e261]
+              - cell "28,534.14" [ref=f42e262]
+              - cell "30,180.26" [ref=f42e263]
+              - cell "35,839.20" [ref=f42e264]
+              - cell "31,044.66" [ref=f42e265]
+              - cell "33,823.83" [ref=f42e266]
+              - cell "37,968.83" [ref=f42e267]
+            - row [ref=f42e268]:
+              - cell "2026-08-07" [ref=f42e269]
+              - cell "-21,169.57" [ref=f42e270]
+              - cell "15,357.99" [ref=f42e271]
+              - cell "19,612.45" [ref=f42e272]
+              - cell "26,666.11" [ref=f42e273]
+              - cell "24,569.18" [ref=f42e274]
+              - cell "24,991.15" [ref=f42e275]
+              - cell "25,044.33" [ref=f42e276]
+              - cell "31,622.12" [ref=f42e277]
+              - cell "29,411.41" [ref=f42e278]
+            - row [ref=f42e279]:
+              - cell "2026-08-10" [ref=f42e280]
+              - cell "5,796.81" [ref=f42e281]
+              - cell "11,041.62" [ref=f42e282]
+              - cell "20,878.51" [ref=f42e283]
+              - cell "23,097.86" [ref=f42e284]
+              - cell "23,258.72" [ref=f42e285]
+              - cell "30,745.45" [ref=f42e286]
+              - cell "25,142.41" [ref=f42e287]
+              - cell "35,674.20" [ref=f42e288]
+              - cell "31,279.50" [ref=f42e289]
+            - row [ref=f42e290]:
+              - cell "2026-08-11" [ref=f42e291]
+              - cell "-11,196.51" [ref=f42e292]
+              - cell "8,507.55" [ref=f42e293]
+              - cell "11,320.16" [ref=f42e294]
+              - cell "16,657.28" [ref=f42e295]
+              - cell "16,870.13" [ref=f42e296]
+              - cell "25,309.73" [ref=f42e297]
+              - cell "21,444.43" [ref=f42e298]
+              - cell "24,494.09" [ref=f42e299]
+              - cell "25,333.92" [ref=f42e300]
+            - row [ref=f42e301]:
+              - cell "2026-08-12" [ref=f42e302]
+              - cell "3,075.76" [ref=f42e303]
+              - cell "16,898.16" [ref=f42e304]
+              - cell "7,138.39" [ref=f42e305]
+              - cell "13,749.36" [ref=f42e306]
+              - cell "20,607.38" [ref=f42e307]
+              - cell "21,584.03" [ref=f42e308]
+              - cell "20,969.61" [ref=f42e309]
+              - cell "18,929.74" [ref=f42e310]
+              - cell "22,445.91" [ref=f42e311]
+            - row [ref=f42e312]:
+              - cell "2026-08-13" [ref=f42e313]
+              - cell "-6,555.86" [ref=f42e314]
+              - cell "13,872.37" [ref=f42e315]
+              - cell "7,692.55" [ref=f42e316]
+              - cell "19,340.63" [ref=f42e317]
+              - cell "18,203.55" [ref=f42e318]
+              - cell "27,960.84" [ref=f42e319]
+              - cell "30,259.56" [ref=f42e320]
+              - cell "23,662.04" [ref=f42e321]
+              - cell "28,680.22" [ref=f42e322]
+            - row [ref=f42e323]:
+              - cell "2026-08-14" [ref=f42e324]
+              - cell "-18,157.38" [ref=f42e325]
+              - cell "17,715.80" [ref=f42e326]
+              - cell "19,030.89" [ref=f42e327]
+              - cell "20,118.21" [ref=f42e328]
+              - cell "24,716.97" [ref=f42e329]
+              - cell "30,189.39" [ref=f42e330]
+              - cell "24,746.17" [ref=f42e331]
+              - cell "24,886.44" [ref=f42e332]
+              - cell "24,415.81" [ref=f42e333]
+            - row [ref=f42e334]:
+              - cell "2026-08-17" [ref=f42e335]
+              - cell "-7,719.72" [ref=f42e336]
+              - cell "15,638.40" [ref=f42e337]
+              - cell "15,458.76" [ref=f42e338]
+              - cell "22,740.93" [ref=f42e339]
+              - cell "21,689.41" [ref=f42e340]
+              - cell "33,326.85" [ref=f42e341]
+              - cell "31,236.52" [ref=f42e342]
+              - cell "31,488.96" [ref=f42e343]
+              - cell "34,810.45" [ref=f42e344]
+            - row [ref=f42e345]:
+              - cell "2026-08-18" [ref=f42e346]
+              - cell "-18,647.00" [ref=f42e347]
+              - cell "10,948.23" [ref=f42e348]
+              - cell "20,407.54" [ref=f42e349]
+              - cell "16,949.79" [ref=f42e350]
+              - cell "17,832.65" [ref=f42e351]
+              - cell "32,267.10" [ref=f42e352]
+              - cell "23,346.80" [ref=f42e353]
+              - cell "29,467.56" [ref=f42e354]
+              - cell "28,045.69" [ref=f42e355]
+            - row [ref=f42e356]:
+              - cell "2026-08-19" [ref=f42e357]
+              - cell "45,450.94" [ref=f42e358]
+              - cell "28,562.65" [ref=f42e359]
+              - cell "27,241.14" [ref=f42e360]
+              - cell "42,199.56" [ref=f42e361]
+              - cell "35,299.20" [ref=f42e362]
+              - cell "46,964.17" [ref=f42e363]
+              - cell "51,372.52" [ref=f42e364]
+              - cell "41,933.49" [ref=f42e365]
+              - cell "45,747.02" [ref=f42e366]
+            - row [ref=f42e367]:
+              - cell "2026-08-20" [ref=f42e368]
+              - cell "34,309.51" [ref=f42e369]
+              - cell "19,407.27" [ref=f42e370]
+              - cell "25,038.63" [ref=f42e371]
+              - cell "38,702.59" [ref=f42e372]
+              - cell "33,172.91" [ref=f42e373]
+              - cell "45,920.05" [ref=f42e374]
+              - cell "40,226.32" [ref=f42e375]
+              - cell "29,863.36" [ref=f42e376]
+              - cell "35,455.41" [ref=f42e377]
+            - row [ref=f42e378]:
+              - cell "2026-08-21" [ref=f42e379]
+              - cell "8,890.86" [ref=f42e380]
+              - cell "13,960.49" [ref=f42e381]
+              - cell "20,191.68" [ref=f42e382]
+              - cell "18,795.18" [ref=f42e383]
+              - cell "22,193.29" [ref=f42e384]
+              - cell "39,819.61" [ref=f42e385]
+              - cell "28,044.37" [ref=f42e386]
+              - cell "26,435.92" [ref=f42e387]
+              - cell "28,581.87" [ref=f42e388]

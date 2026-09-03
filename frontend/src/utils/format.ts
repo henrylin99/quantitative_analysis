@@ -28,6 +28,13 @@ export function toLocalDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+/** 基准日期偏移 N 天后的本地日期 */
+export function addDaysLocal(base: Date, days: number): string {
+  const d = new Date(base)
+  d.setDate(d.getDate() + days)
+  return toLocalDate(d)
+}
+
 /** 金额自适应：≥1亿 显示「x.xx亿」、≥1万 显示「x.xx万」，否则两位小数（输入为万口径原值时不换算） */
 export function formatAmount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '--'

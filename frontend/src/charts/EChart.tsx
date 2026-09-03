@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts/core'
-import { BarChart, GaugeChart, HeatmapChart, PieChart, RadarChart, TreemapChart } from 'echarts/charts'
+import { BarChart, GaugeChart, HeatmapChart, LineChart, PieChart, RadarChart, TreemapChart } from 'echarts/charts'
 import {
   DataZoomComponent,
   GridComponent,
@@ -16,6 +16,7 @@ echarts.use([
   BarChart,
   GaugeChart,
   HeatmapChart,
+  LineChart,
   PieChart,
   RadarChart,
   TreemapChart,
