@@ -95,12 +95,11 @@ npm config set registry https://registry.npmmirror.com
 ```bash
 git clone https://github.com/henrylin99/quantitative_analysis.git
 cd quantitative_analysis
-
-# ⚠️ 重要：切换到前端功能所在分支（master 主分支暂时没有 frontend/ 目录）
-git checkout feature/react-frontend
 ```
 
-验证：`ls`（Windows 用 `dir`）应能看到 `run.py`、`README.md`、`frontend/` 等文件。**看不到 `frontend/` 就是分支不对**，回去执行上面的 `git checkout`。
+验证：`ls`（Windows 用 `dir`）应能看到 `run.py`、`README.md`、`frontend/` 等文件。
+
+> 自 v4.0.0 起前端已合入 master 主分支，无需再切换任何分支。
 
 ---
 
