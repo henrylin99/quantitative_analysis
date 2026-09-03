@@ -11,7 +11,7 @@ import {
   type SupportedIndicator,
 } from '../api/realtime'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
-import { formatNumber } from '../utils/format'
+import { formatIndicatorValue, formatNumber } from '../utils/format'
 
 const TABS = [
   { key: 'calc', label: '指标计算' },
@@ -243,7 +243,7 @@ export default function RtIndicatorsPage() {
                         <td>
                           <code>{name}</code>
                         </td>
-                        <td className="num">{Array.isArray(v) ? v.map((x) => formatNumber(x, 2)).join(' / ') : formatNumber(v as number, 2)}</td>
+                        <td className="num">{formatIndicatorValue(v)}</td>
                         <td className="num">{calcResult.indicator_summary?.[name]?.stored_records ?? '--'}</td>
                       </tr>
                     ))}
@@ -305,9 +305,7 @@ export default function RtIndicatorsPage() {
                               <td>
                                 <code>{name}</code>
                               </td>
-                              <td className="num">
-                                {Array.isArray(v) ? v.map((x) => formatNumber(x as number, 2)).join(' / ') : formatNumber(v as number, 2)}
-                              </td>
+                              <td className="num">{formatIndicatorValue(v)}</td>
                             </tr>
                           ))}
                           {!r.success && (
