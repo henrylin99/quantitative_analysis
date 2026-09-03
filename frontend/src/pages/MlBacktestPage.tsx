@@ -119,15 +119,17 @@ export default function MlBacktestPage() {
       limit_up_down_policy: 'skip',
     }
     try {
+      // 与旧版一致使用同步模式：单机场景没有 Celery worker，async 任务会永久 queued
       const r = await runMlBacktest({
         strategy_config: strategyConfig,
         start_date: startDate,
         end_date: endDate,
         initial_capital: Number(capital),
         rebalance_frequency: freq,
-        mode: 'async',
+        mode: 'sync',
       })
       if (r.queued && r.run_id) {
+        // 后端在无 Celery 环境下降级为 queued 记录 + 本地执行；此时轮询结果
         setRunId(r.run_id)
         pollRef.current = setInterval(async () => {
           try {
