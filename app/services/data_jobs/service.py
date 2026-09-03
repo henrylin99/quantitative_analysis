@@ -24,7 +24,8 @@ def _resolve_execution_mode(explicit_mode: Optional[str] = None) -> str:
     except Exception:
         pass
 
-    return "celery"
+    # 去 Redis/Celery 后只有本地执行一种模式；app context 不可用时也按本地处理
+    return "inline"
 
 
 class DataJobService:

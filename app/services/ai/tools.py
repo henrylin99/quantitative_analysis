@@ -287,7 +287,7 @@ def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'jobs': jobs,
         'tushare_token_configured': _tushare_token_configured(),
-        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'celery'),
+        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'inline'),
     }
 
 
@@ -379,10 +379,10 @@ def _run_single_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         'progress': run.progress,
         'progress_message': run.progress_message,
         'error_message': run.error_message,
-        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'celery'),
+        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'inline'),
         'note': (
-            'inline 模式下任务已同步执行完成，status 即为最终状态；'
-            'celery 模式下任务已入队，可用 get_data_job_status(run_id=...) 轮询进度'
+            '任务在本地进程内执行：同步模式返回时 status 即为最终状态；'
+            '异步模式返回 run_id，可用 get_data_job_status(run_id=...) 轮询进度'
         ),
     }
 
@@ -666,7 +666,7 @@ AI_TOOLS: List[AiTool] = [
     ),
     AiTool(
         'run_data_job',
-        '提交单个数据下载/更新任务。需要已配置 TUSHARE_TOKEN。增量更新务必先用 list_data_tables 查看数据集 latest_date 与 latest_trade_date，再传 params.start_date=latest_date次日、end_date=latest_trade_date（不传日期时部分任务只下载最新交易日一天，会留缺口）。财务三表（income_statement/balance_sheet/cash_flow）走 vip 接口按报告期增量更新。inline 模式同步执行完返回结果；celery 模式返回 run_id 供轮询。',
+        '提交单个数据下载/更新任务。需要已配置 TUSHARE_TOKEN。增量更新务必先用 list_data_tables 查看数据集 latest_date 与 latest_trade_date，再传 params.start_date=latest_date次日、end_date=latest_trade_date（不传日期时部分任务只下载最新交易日一天，会留缺口）。财务三表（income_statement/balance_sheet/cash_flow）走 vip 接口按报告期增量更新。同步模式返回时任务已执行完成；异步模式返回 run_id 供 get_data_job_status 轮询。',
         {
             'type': 'object',
             'properties': {
