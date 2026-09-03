@@ -5,7 +5,7 @@ from app.utils import cache as cache_module
 from app.utils.cache import CacheManager, cached
 
 
-class _FakeRedisBackend(CacheManager):
+class _InMemoryCacheStub(CacheManager):
     """内存版 CacheManager 桩：绕过真实存储，记录写入行为。"""
 
     def __init__(self):
@@ -28,7 +28,7 @@ class _FakeRedisBackend(CacheManager):
 
 @pytest.fixture()
 def backend(monkeypatch):
-    fake = _FakeRedisBackend()
+    fake = _InMemoryCacheStub()
     monkeypatch.setattr(cache_module, "cache", fake)
     yield fake
 
