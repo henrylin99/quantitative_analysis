@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchStockOptions, runBacktest } from '../api/analysis'
 import type { BacktestResultData, StrategyType } from '../api/types'
-import { ErrorState, Loading } from '../components/StateViews'
+import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass, toLocalDate } from '../utils/format'
 
 interface StrategyMeta {
@@ -65,10 +65,10 @@ const STRATEGIES: StrategyMeta[] = [
 type Status = 'idle' | 'running' | 'done' | 'failed'
 
 const STATUS_META: Record<Status, { label: string; className: string }> = {
-  idle: { label: '等待回测', className: 'text-bg-secondary' },
-  running: { label: '回测中...', className: 'text-bg-warning' },
-  done: { label: '回测完成', className: 'text-bg-success' },
-  failed: { label: '回测失败', className: 'text-bg-danger' },
+  idle: { label: '等待回测', className: 'chip' },
+  running: { label: '回测中...', className: 'chip' },
+  done: { label: '回测完成', className: 'delta down' },
+  failed: { label: '回测失败', className: 'delta up' },
 }
 
 export default function BacktestPage() {
@@ -154,18 +154,20 @@ export default function BacktestPage() {
   const perf = result?.performance
 
   return (
-    <div className="container-fluid px-4">
-      <div className="d-flex align-items-center gap-2 mt-2">
-        <h4 className="mb-1">回测验证</h4>
-        <span className={`badge ${STATUS_META[status].className}`}>{STATUS_META[status].label}</span>
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>回测验证</h2>
+          <p className="desc">单股票策略回测：均线 / MACD / KDJ / RSI / 布林带</p>
+        </div>
+        <span className={STATUS_META[status].className}>{STATUS_META[status].label}</span>
       </div>
-      <p className="text-secondary">单股票策略回测，评估策略历史表现</p>
 
-      <div className="card mb-3">
-        <div className="card-body">
+      <div className="panel">
+        <div className="panel-body">
           <form onSubmit={handleSubmit}>
             <div className="row g-3">
-              <div className="col-md-3">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">股票 *</label>
                 <select className="form-select" value={tsCode} onChange={(e) => setTsCode(e.target.value)}>
                   <option value="">请选择股票</option>
@@ -176,9 +178,13 @@ export default function BacktestPage() {
                   ))}
                 </select>
               </div>
-              <div className="col-md-3">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">策略类型 *</label>
-                <select className="form-select" value={strategyType} onChange={(e) => setStrategyType(e.target.value as '' | StrategyType)}>
+                <select
+                  className="form-select"
+                  value={strategyType}
+                  onChange={(e) => setStrategyType(e.target.value as '' | StrategyType)}
+                >
                   <option value="">请选择策略</option>
                   {STRATEGIES.map((s) => (
                     <option key={s.type} value={s.type}>
@@ -187,32 +193,47 @@ export default function BacktestPage() {
                   ))}
                 </select>
               </div>
-              <div className="col-md-3">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">开始日期</label>
                 <input type="date" className="form-control" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
-              <div className="col-md-3">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">结束日期</label>
                 <input type="date" className="form-control" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
-              <div className="col-md-3">
-                <label className="form-label">初始资金(元)</label>
-                <input type="number" className="form-control" value={initialCapital} min={10000} step={1000} onChange={(e) => setInitialCapital(e.target.value)} />
+              <div className="col-xl-3 col-md-6">
+                <label className="form-label">初始资金（元）</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={initialCapital}
+                  min={10000}
+                  step={1000}
+                  onChange={(e) => setInitialCapital(e.target.value)}
+                />
               </div>
-              <div className="col-md-3">
-                <label className="form-label">手续费率(%)</label>
-                <input type="number" className="form-control" value={commissionRate} min={0} max={1} step={0.01} onChange={(e) => setCommissionRate(e.target.value)} />
+              <div className="col-xl-3 col-md-6">
+                <label className="form-label">手续费率（%）</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={commissionRate}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(e) => setCommissionRate(e.target.value)}
+                />
               </div>
             </div>
 
             {strategyMeta && (
               <>
-                <div className="alert alert-info py-2 mt-3 mb-2">策略说明：{strategyMeta.description}</div>
-                <div className="row g-3">
+                <div className="alert-note mt-3">策略说明：{strategyMeta.description}</div>
+                <div className="row g-3 mt-1">
                   {strategyMeta.params.map((p) => (
-                    <div className="col-md-3" key={p.key}>
+                    <div className="col-xl-3 col-md-6" key={p.key}>
                       <label className="form-label">
-                        {p.label}（{p.min}~{p.max}）
+                        {p.label}（{p.min} ~ {p.max}）
                       </label>
                       <input
                         type="number"
@@ -229,11 +250,15 @@ export default function BacktestPage() {
               </>
             )}
 
-            {formError && <div className="alert alert-danger py-2 mt-3 mb-0">{formError}</div>}
+            {formError && (
+              <div className="mt-3">
+                <ErrorState message={formError} />
+              </div>
+            )}
 
-            <div className="mt-3">
-              <button type="submit" className="btn btn-primary me-2" disabled={status === 'running'}>
-                🚀 开始回测
+            <div className="mt-3 d-flex gap-2">
+              <button type="submit" className="btn btn-primary" disabled={status === 'running'}>
+                {status === 'running' ? '回测中…' : '🚀 开始回测'}
               </button>
               <button type="button" className="btn btn-outline-secondary" onClick={handleReset}>
                 重置
@@ -244,117 +269,106 @@ export default function BacktestPage() {
       </div>
 
       {status === 'running' && <Loading text="回测进行中..." />}
-      {runError && <ErrorState message={runError} onRetry={handleSubmit} />}
+      {runError && <ErrorState message={runError} onRetry={() => handleSubmit()} />}
 
       {perf && result && (
         <>
-          <div className="row g-3 mb-3">
-            <div className="col-lg-3 col-md-6">
-              <div className="card metric-card h-100">
-                <div className="card-body">
-                  <div className="metric-label">策略信息</div>
-                  <div className="small">
-                    回测股票：<code>{result.config.ts_code}</code>
-                    <br />
-                    策略类型：{STRATEGIES.find((s) => s.type === result.config.strategy_type)?.label ?? result.config.strategy_type}
-                    <br />
-                    回测期间：{result.config.start_date} ~ {result.config.end_date}
-                    <br />
-                    初始资金：¥{formatNumber(result.config.initial_capital, 0)}
-                  </div>
-                </div>
+          <div className="stat-grid">
+            <div className="stat">
+              <div className="stat-label">累计收益</div>
+              <div className={`stat-value ${pctClass(perf.total_return * 100)}`}>{formatPercent(perf.total_return * 100)}</div>
+              <div className="sub">年化 {formatPercent(perf.annual_return * 100)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">夏普比率</div>
+              <div className="stat-value">{formatNumber(perf.sharpe_ratio, 2)}</div>
+              <div className="sub">最大回撤 {formatPercent(-Math.abs(perf.max_drawdown) * 100)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">胜率</div>
+              <div className="stat-value">{formatPercent(perf.win_rate * 100)}</div>
+              <div className="sub">
+                {perf.winning_trades} / {perf.total_trades} 笔盈利 · 平均持仓 {formatNumber(perf.avg_holding_days, 1)} 天
               </div>
             </div>
-            <div className="col-lg-3 col-md-6">
-              <div className="card metric-card h-100">
-                <div className="card-body">
-                  <div className="metric-label">收益指标</div>
-                  <div className="small lh-lg">
-                    累计收益：<span className={pctClass(perf.total_return * 100)}>{formatPercent(perf.total_return * 100)}</span>
-                    <br />
-                    年化收益：<span className={pctClass(perf.annual_return * 100)}>{formatPercent(perf.annual_return * 100)}</span>
-                    <br />
-                    夏普比率：{formatNumber(perf.sharpe_ratio, 2)}
-                    <br />
-                    最大回撤：<span className="text-down">{formatPercent(-Math.abs(perf.max_drawdown) * 100)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-lg-3 col-md-6">
-              <div className="card metric-card h-100">
-                <div className="card-body">
-                  <div className="metric-label">交易统计</div>
-                  <div className="small lh-lg">
-                    总交易次数：{perf.total_trades}
-                    <br />
-                    盈利次数：{perf.winning_trades}
-                    <br />
-                    胜率：{formatPercent(perf.win_rate * 100)}
-                    <br />
-                    平均持仓天数：{formatNumber(perf.avg_holding_days, 1)}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-lg-3 col-md-6">
-              <div className="card metric-card h-100">
-                <div className="card-body">
-                  <div className="metric-label">风险指标</div>
-                  <div className="small lh-lg">
-                    波动率：{formatPercent(perf.volatility * 100)}
-                    <br />
-                    期末资金：¥{formatNumber(perf.final_capital, 2)}
-                    <br />
-                    总成本：¥{formatNumber(perf.total_commission, 2)}
-                    <br />
-                    基准收益：<span className={pctClass(perf.benchmark_return * 100)}>{formatPercent(perf.benchmark_return * 100)}</span>
-                  </div>
-                </div>
+            <div className="stat">
+              <div className="stat-label">期末资金</div>
+              <div className="stat-value">¥{formatNumber(perf.final_capital, 2)}</div>
+              <div className="sub">
+                成本 ¥{formatNumber(perf.total_commission, 2)} · 基准{' '}
+                <span className={pctClass(perf.benchmark_return * 100)}>{formatPercent(perf.benchmark_return * 100)}</span>
               </div>
             </div>
           </div>
 
-          <div className="card mb-3">
-            <div className="card-header">交易记录（最近 20 笔，展示前 10 笔）</div>
-            <div className="card-body">
-              <div className="table-responsive">
-                <table className="table table-sm table-hover align-middle">
-                  <thead>
-                    <tr>
-                      <th>日期</th>
-                      <th>操作</th>
-                      <th>价格</th>
-                      <th>数量</th>
-                      <th>金额</th>
-                      <th>收益率</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.trades.slice(0, 10).map((trade, index) => (
-                      <tr key={`${trade.date}-${trade.action}-${index}`}>
-                        <td>{trade.date}</td>
-                        <td>
-                          <span className={`badge ${trade.action === 'buy' ? 'text-bg-success' : 'text-bg-danger'}`}>
-                            {trade.action === 'buy' ? '买入' : '卖出'}
-                          </span>
-                        </td>
-                        <td>{formatNumber(trade.price, 2)}</td>
-                        <td>{trade.quantity}</td>
-                        <td>{formatNumber(trade.amount, 2)}</td>
-                        <td className={pctClass(trade.return_rate !== null ? trade.return_rate * 100 : null)}>
-                          {trade.return_rate !== null ? formatPercent(trade.return_rate * 100) : '--'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="text-secondary small">
-                免责声明：历史回测结果不代表未来表现，本系统回测仅供参考，不构成任何投资建议；交易记录考虑了手续费与印花税影响；
-                策略参数应在合理范围内优化，避免过拟合；请结合基本面与市场环境综合判断。
-              </div>
+          <div className="panel">
+            <div className="panel-head">
+              <h6 className="panel-title">
+                <span className="kicker" />
+                回测配置
+                <span className="chip">{STRATEGIES.find((s) => s.type === result.config.strategy_type)?.label ?? result.config.strategy_type}</span>
+              </h6>
             </div>
+            <div className="panel-body d-flex gap-2 flex-wrap">
+              <span className="chip">股票 · {result.config.ts_code}</span>
+              <span className="chip">
+                期间 · {result.config.start_date} ~ {result.config.end_date}
+              </span>
+              <span className="chip">初始资金 · ¥{formatNumber(result.config.initial_capital, 0)}</span>
+              <span className="chip">波动率 · {formatPercent(perf.volatility * 100)}</span>
+              {Object.entries(result.config.params ?? {}).map(([k, v]) => (
+                <span className="chip" key={k}>
+                  {k} = {v}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <h6 className="panel-title">
+                <span className="kicker" />
+                交易记录
+                <span className="chip">最近 20 笔 · 展示前 10 笔</span>
+              </h6>
+            </div>
+            <div className="panel-body tight table-container" style={{ maxHeight: 420 }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>操作</th>
+                    <th className="num">价格</th>
+                    <th className="num">数量</th>
+                    <th className="num">金额</th>
+                    <th className="num">收益率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.trades.slice(0, 10).map((trade, index) => (
+                    <tr key={`${trade.date}-${trade.action}-${index}`}>
+                      <td>{trade.date}</td>
+                      <td>
+                        <span className={`badge ${trade.action === 'buy' ? 'text-bg-danger' : 'text-bg-success'}`}>
+                          {trade.action === 'buy' ? '买入' : '卖出'}
+                        </span>
+                      </td>
+                      <td className="num">{formatNumber(trade.price, 2)}</td>
+                      <td className="num">{trade.quantity}</td>
+                      <td className="num">{formatNumber(trade.amount, 2)}</td>
+                      <td className={`num ${pctClass(trade.return_rate !== null ? trade.return_rate * 100 : null)}`}>
+                        {trade.return_rate !== null ? formatPercent(trade.return_rate * 100) : '--'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {result.trades.length === 0 && <EmptyState icon="🧾" text="回测期间没有产生交易" />}
+            </div>
+          </div>
+
+          <div className="empty-state" style={{ paddingTop: 20 }}>
+            <div className="hint">历史回测不代表未来表现，不构成投资建议；交易记录已计入手续费与印花税；请避免参数过拟合。</div>
           </div>
         </>
       )}

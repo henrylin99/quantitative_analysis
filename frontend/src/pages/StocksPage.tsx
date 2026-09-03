@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { OLD_SITE_BASE } from '../App'
 import { fetchAreas, fetchIndustries, fetchStocks } from '../api/stocks'
 import type { StockListData } from '../api/types'
-import { ErrorState, Loading } from '../components/StateViews'
+import { EmptyState, ErrorState, TableSkeleton } from '../components/StateViews'
 
 const PAGE_SIZE = 100
 
@@ -29,29 +29,26 @@ export default function StocksPage() {
     fetchAreas().then(setAreas).catch(() => setAreas([]))
   }, [])
 
-  const load = useCallback(
-    async (targetPage: number, targetFilters: Filters) => {
-      setLoading(true)
-      setError(null)
-      try {
-        const result = await fetchStocks({
-          page: targetPage,
-          page_size: PAGE_SIZE,
-          industry: targetFilters.industry || undefined,
-          area: targetFilters.area || undefined,
-          search: targetFilters.search || undefined,
-        })
-        setData(result)
-        setPage(targetPage)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '加载股票列表失败')
-        setData(null)
-      } finally {
-        setLoading(false)
-      }
-    },
-    [],
-  )
+  const load = useCallback(async (targetPage: number, targetFilters: Filters) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await fetchStocks({
+        page: targetPage,
+        page_size: PAGE_SIZE,
+        industry: targetFilters.industry || undefined,
+        area: targetFilters.area || undefined,
+        search: targetFilters.search || undefined,
+      })
+      setData(result)
+      setPage(targetPage)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载股票列表失败')
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     load(1, EMPTY_FILTERS)
@@ -81,16 +78,25 @@ export default function StocksPage() {
   }
 
   return (
-    <div className="container-fluid px-4">
-      <h4 className="mt-2 mb-1">股票列表</h4>
-      <p className="text-secondary">浏览所有股票信息，支持按行业、地域筛选</p>
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>股票列表</h2>
+          <p className="desc">全市场股票浏览，支持按行业、地域筛选与关键字搜索</p>
+        </div>
+        {data && <span className="chip">共 {data.total} 只</span>}
+      </div>
 
-      <div className="card mb-3">
-        <div className="card-body">
-          <form className="row g-2 align-items-end" onSubmit={handleFilter}>
-            <div className="col-md-3">
+      <div className="panel">
+        <div className="panel-body">
+          <form className="row g-3 align-items-end" onSubmit={handleFilter}>
+            <div className="col-md-3 col-6">
               <label className="form-label">行业</label>
-              <select className="form-select" value={filters.industry} onChange={(e) => setFilters({ ...filters, industry: e.target.value })}>
+              <select
+                className="form-select"
+                value={filters.industry}
+                onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
+              >
                 <option value="">全部行业</option>
                 {industries.map((item) => (
                   <option key={item} value={item}>
@@ -99,7 +105,7 @@ export default function StocksPage() {
                 ))}
               </select>
             </div>
-            <div className="col-md-3">
+            <div className="col-md-3 col-6">
               <label className="form-label">地域</label>
               <select className="form-select" value={filters.area} onChange={(e) => setFilters({ ...filters, area: e.target.value })}>
                 <option value="">全部地域</option>
@@ -120,8 +126,8 @@ export default function StocksPage() {
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               />
             </div>
-            <div className="col-md-3">
-              <button type="submit" className="btn btn-primary me-2">
+            <div className="col-md-3 d-flex gap-2">
+              <button type="submit" className="btn btn-primary" style={{ minWidth: 96 }}>
                 筛选
               </button>
               <button type="button" className="btn btn-outline-secondary" onClick={handleReset}>
@@ -132,82 +138,88 @@ export default function StocksPage() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header d-flex justify-content-between align-items-center">
-          <span>股票列表</span>
-          {data && <span className="badge text-bg-primary">共 {data.total} 只</span>}
-        </div>
-        <div className="card-body">
-          {error && <ErrorState message={error} onRetry={() => load(page, applied)} />}
-          {loading ? (
-            <Loading />
-          ) : !error ? (
+      <div className="panel">
+        <div className="panel-body tight table-container">
+          {error ? (
+            <div className="p-3">
+              <ErrorState message={error} onRetry={() => load(page, applied)} />
+            </div>
+          ) : loading ? (
+            <TableSkeleton rows={10} />
+          ) : (
             <>
-              <div className="table-responsive">
-                <table className="table table-hover align-middle">
-                  <thead>
-                    <tr>
-                      <th>股票代码</th>
-                      <th>股票名称</th>
-                      <th>行业</th>
-                      <th>地域</th>
-                      <th>上市日期</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data && data.stocks.length > 0 ? (
-                      data.stocks.map((stock) => (
-                        <tr key={stock.ts_code}>
-                          <td>
-                            <code>{stock.symbol}</code>
-                          </td>
-                          <td>{stock.name}</td>
-                          <td>{stock.industry ? <span className="badge text-bg-info">{stock.industry}</span> : '--'}</td>
-                          <td>{stock.area ?? '--'}</td>
-                          <td>{stock.list_date ?? '--'}</td>
-                          <td>
-                            <a className="btn btn-outline-primary btn-sm" href={`${OLD_SITE_BASE}/stock/${stock.ts_code}`} target="_blank" rel="noreferrer">
-                              详情
-                            </a>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="text-center text-secondary py-4">
-                          暂无数据
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>股票代码</th>
+                    <th>股票名称</th>
+                    <th>行业</th>
+                    <th>地域</th>
+                    <th>上市日期</th>
+                    <th className="num">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data && data.stocks.length > 0 ? (
+                    data.stocks.map((stock) => (
+                      <tr key={stock.ts_code}>
+                        <td>
+                          <code>{stock.symbol}</code>
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{stock.name}</td>
+                        <td>
+                          <span className="chip">{stock.industry ?? '--'}</span>
+                        </td>
+                        <td>{stock.area ?? '--'}</td>
+                        <td>{stock.list_date ?? '--'}</td>
+                        <td className="num">
+                          <a
+                            className="btn btn-outline-primary btn-sm"
+                            href={`${OLD_SITE_BASE}/stock/${stock.ts_code}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            详情 ↗
+                          </a>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6}>
+                        <EmptyState icon="🔍" text="没有符合条件的股票" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
               {totalPages > 1 && (
-                <nav>
-                  <ul className="pagination pagination-sm justify-content-center mb-0">
-                    <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
-                      <button className="page-link" onClick={() => load(page - 1, applied)}>
-                        上一页
-                      </button>
-                    </li>
-                    {pageButtons().map((p) => (
-                      <li key={p} className={`page-item ${p === page ? 'active' : ''}`}>
-                        <button className="page-link" onClick={() => load(p, applied)}>
-                          {p}
+                <div className="d-flex justify-content-center py-3">
+                  <nav>
+                    <ul className="pagination pagination-sm mb-0">
+                      <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
+                        <button className="page-link" onClick={() => load(page - 1, applied)}>
+                          上一页
                         </button>
                       </li>
-                    ))}
-                    <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
-                      <button className="page-link" onClick={() => load(page + 1, applied)}>
-                        下一页
-                      </button>
-                    </li>
-                  </ul>
-                </nav>
+                      {pageButtons().map((p) => (
+                        <li key={p} className={`page-item ${p === page ? 'active' : ''}`}>
+                          <button className="page-link" onClick={() => load(p, applied)}>
+                            {p}
+                          </button>
+                        </li>
+                      ))}
+                      <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
+                        <button className="page-link" onClick={() => load(page + 1, applied)}>
+                          下一页
+                        </button>
+                      </li>
+                    </ul>
+                  </nav>
+                </div>
               )}
             </>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

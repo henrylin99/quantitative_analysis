@@ -8,62 +8,39 @@ import HomePage from './pages/HomePage'
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
 
+const NAV_ITEMS = [
+  { to: '/', label: '首页', end: true },
+  { to: '/stocks', label: '股票列表', end: false },
+  { to: '/analysis', label: '技术分析', end: false },
+  { to: '/screen', label: '选股筛选', end: false },
+  { to: '/backtest', label: '回测验证', end: false },
+]
+
 export default function App() {
   return (
     <>
-      <nav className="navbar navbar-expand-lg navbar-financial fixed-top">
-        <div className="container-fluid">
-          <NavLink className="navbar-brand" to="/">
-            📈 量化分析系统 <span className="badge text-bg-primary">React</span>
-          </NavLink>
-          <button
-            className="navbar-toggler"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#main-nav"
-            aria-controls="main-nav"
-            aria-expanded="false"
-            aria-label="切换导航"
-          >
-            <span className="navbar-toggler-icon" />
-          </button>
-          <div className="collapse navbar-collapse" id="main-nav">
-            <ul className="navbar-nav me-auto">
-              <li className="nav-item">
-                <NavLink className="nav-link" to="/" end>
-                  首页
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink className="nav-link" to="/stocks">
-                  股票列表
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink className="nav-link" to="/analysis">
-                  技术分析
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink className="nav-link" to="/screen">
-                  选股筛选
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink className="nav-link" to="/backtest">
-                  回测验证
-                </NavLink>
-              </li>
-            </ul>
-            <span className="navbar-text">
-              <a className="btn btn-outline-light btn-sm" href={`${OLD_SITE_BASE}/`}>
-                打开旧版
-              </a>
+      <header className="app-topbar">
+        <div className="topbar-inner">
+          <NavLink className="brand" to="/">
+            <span className="brand-mark">Q</span>
+            <span className="brand-text">
+              量化分析终端
+              <small>REACT EDITION</small>
             </span>
-          </div>
+          </NavLink>
+          <nav className="topnav">
+            {NAV_ITEMS.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} className="topnav-link">
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <a className="btn-ghost" href={`${OLD_SITE_BASE}/`}>
+            旧版 ↗
+          </a>
         </div>
-      </nav>
-      <main className="main-content">
+      </header>
+      <main className="app-main">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/stocks" element={<StocksPage />} />

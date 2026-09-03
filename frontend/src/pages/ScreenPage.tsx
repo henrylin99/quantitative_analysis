@@ -3,7 +3,7 @@ import { OLD_SITE_BASE } from '../App'
 import { fetchAreas, fetchIndustries } from '../api/stocks'
 import { runScreen } from '../api/analysis'
 import type { DynamicCondition, ScreenCriteria, ScreenResultData } from '../api/types'
-import { ErrorState, Loading } from '../components/StateViews'
+import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass, toLocalDate } from '../utils/format'
 
 const OPERATORS = ['>', '>=', '<', '<=', '=', '!='] as const
@@ -201,7 +201,7 @@ function exportCsv(data: ScreenResultData) {
       row.name,
       row.industry ?? '',
       row.area ?? '',
-      row.daily_close ?? '',
+      row.daily_close ?? row.close ?? '',
       row.factor_pct_change ?? '',
       row.pe ?? '',
       row.pb ?? '',
@@ -301,44 +301,83 @@ export default function ScreenPage() {
   const summary = useMemo(() => formatCriteria(form, dynamics), [form, dynamics])
 
   const rangeInput = (label: string, minKey: keyof FormState, maxKey: keyof FormState) => (
-    <div className="col-md-3 mb-2">
+    <div className="col-xl-3 col-md-6">
       <label className="form-label">{label}</label>
-      <div className="d-flex gap-1">
-        <input type="number" className="form-control" placeholder="最小" value={form[minKey]} onChange={(e) => setField(minKey, e.target.value)} />
-        <input type="number" className="form-control" placeholder="最大" value={form[maxKey]} onChange={(e) => setField(maxKey, e.target.value)} />
+      <div className="d-flex gap-2">
+        <input
+          type="number"
+          className="form-control"
+          placeholder="最小"
+          value={form[minKey]}
+          onChange={(e) => setField(minKey, e.target.value)}
+        />
+        <input
+          type="number"
+          className="form-control"
+          placeholder="最大"
+          value={form[maxKey]}
+          onChange={(e) => setField(maxKey, e.target.value)}
+        />
       </div>
     </div>
   )
 
+  const fieldGroupSelect = (value: string, onChange: (v: string) => void) => (
+    <select className="form-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {NUMERIC_FIELDS.map((group) => (
+        <optgroup key={group.group} label={group.group}>
+          {group.fields.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  )
+
   return (
-    <div className="container-fluid px-4">
-      <h4 className="mt-2 mb-1">选股筛选</h4>
-      <p className="text-secondary">多条件组合筛选，支持动态条件与模板保存</p>
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>选股筛选</h2>
+          <p className="desc">估值、市值、技术指标多条件组合，支持动态条件、模板与 CSV 导出</p>
+        </div>
+      </div>
 
       <form onSubmit={handleScreen}>
-        <div className="card mb-3">
-          <div className="card-header">基本条件</div>
-          <div className="card-body">
-            <div className="row">
-              <div className="col-md-3 mb-2">
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              基本条件
+            </h6>
+          </div>
+          <div className="panel-body">
+            <div className="row g-3">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">行业</label>
                 <select className="form-select" value={form.industry} onChange={(e) => setField('industry', e.target.value)}>
                   <option value="">全部行业</option>
                   {industries.map((item) => (
-                    <option key={item} value={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
                   ))}
                 </select>
               </div>
-              <div className="col-md-3 mb-2">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">地域</label>
                 <select className="form-select" value={form.area} onChange={(e) => setField('area', e.target.value)}>
                   <option value="">全部地域</option>
                   {areas.map((item) => (
-                    <option key={item} value={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
                   ))}
                 </select>
               </div>
-              <div className="col-md-3 mb-2">
+              <div className="col-xl-3 col-md-6">
                 <label className="form-label">市场</label>
                 <select className="form-select" value={form.market} onChange={(e) => setField('market', e.target.value)}>
                   <option value="">全部市场</option>
@@ -346,100 +385,121 @@ export default function ScreenPage() {
                   <option value="SH">上海</option>
                 </select>
               </div>
-              <div className="col-md-3 mb-2">
-                <label className="form-label">数据日期</label>
+              <div className="col-xl-3 col-md-6">
+                <label className="form-label">数据日期（留空取最新）</label>
                 <input type="date" className="form-control" value={form.trade_date} onChange={(e) => setField('trade_date', e.target.value)} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="card mb-3">
-          <div className="card-header">估值指标</div>
-          <div className="card-body row">
-            {rangeInput('PE', 'pe_min', 'pe_max')}
-            {rangeInput('PB', 'pb_min', 'pb_max')}
-            {rangeInput('PS', 'ps_min', 'ps_max')}
-            {rangeInput('股息率(%)', 'dv_min', 'dv_max')}
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              估值指标
+            </h6>
+          </div>
+          <div className="panel-body">
+            <div className="row g-3">
+              {rangeInput('PE', 'pe_min', 'pe_max')}
+              {rangeInput('PB', 'pb_min', 'pb_max')}
+              {rangeInput('PS', 'ps_min', 'ps_max')}
+              {rangeInput('股息率(%)', 'dv_min', 'dv_max')}
+            </div>
           </div>
         </div>
 
-        <div className="card mb-3">
-          <div className="card-header">市值与交易</div>
-          <div className="card-body row">
-            {rangeInput('总市值(万)', 'mv_min', 'mv_max')}
-            {rangeInput('流通市值(万)', 'circ_mv_min', 'circ_mv_max')}
-            {rangeInput('换手率(%)', 'turnover_min', 'turnover_max')}
-            {rangeInput('量比', 'volume_ratio_min', 'volume_ratio_max')}
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              市值与交易
+            </h6>
+          </div>
+          <div className="panel-body">
+            <div className="row g-3">
+              {rangeInput('总市值(万)', 'mv_min', 'mv_max')}
+              {rangeInput('流通市值(万)', 'circ_mv_min', 'circ_mv_max')}
+              {rangeInput('换手率(%)', 'turnover_min', 'turnover_max')}
+              {rangeInput('量比', 'volume_ratio_min', 'volume_ratio_max')}
+            </div>
           </div>
         </div>
 
-        <div className="card mb-3">
-          <div className="card-header">技术指标</div>
-          <div className="card-body row">
-            {rangeInput('RSI(6日)', 'rsi6_min', 'rsi6_max')}
-            {rangeInput('KDJ-K', 'kdj_k_min', 'kdj_k_max')}
-            {rangeInput('MACD', 'macd_min', 'macd_max')}
-            {rangeInput('CCI', 'cci_min', 'cci_max')}
-            {rangeInput('净流入额(万)', 'net_amount_min', 'net_amount_max')}
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              技术指标与资金流
+            </h6>
+          </div>
+          <div className="panel-body">
+            <div className="row g-3">
+              {rangeInput('RSI(6日)', 'rsi6_min', 'rsi6_max')}
+              {rangeInput('KDJ-K', 'kdj_k_min', 'kdj_k_max')}
+              {rangeInput('MACD', 'macd_min', 'macd_max')}
+              {rangeInput('CCI', 'cci_min', 'cci_max')}
+              {rangeInput('净流入额(万)', 'net_amount_min', 'net_amount_max')}
+            </div>
           </div>
         </div>
 
-        <div className="card mb-3">
-          <div className="card-header d-flex justify-content-between align-items-center">
-            <span>动态查询条件</span>
-            <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => setDynamics([...dynamics, { field_a: 'daily_close', operator: '>', field_b: null, value: '' }])}>
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              动态查询条件
+              <span className="chip">字段间比较，如 MA5 &gt; 收盘价</span>
+            </h6>
+            <button
+              type="button"
+              className="btn btn-outline-primary btn-sm"
+              onClick={() => setDynamics([...dynamics, { field_a: 'daily_close', operator: '>', field_b: null, value: '' }])}
+            >
               + 添加条件
             </button>
           </div>
-          <div className="card-body">
-            {dynamics.length === 0 && <div className="text-secondary">未添加动态条件。可用于字段间比较，如 MA5 &gt; 收盘价。</div>}
+          <div className="panel-body">
+            {dynamics.length === 0 && <EmptyState icon="🧩" text="未添加动态条件" />}
             {dynamics.map((row, index) => (
-              <div className="row g-2 align-items-end mb-2" key={index}>
-                <div className="col-md-4">
-                  <select className="form-select" value={row.field_a} onChange={(e) => updateDynamic(index, { field_a: e.target.value })}>
-                    {NUMERIC_FIELDS.map((group) => (
-                      <optgroup key={group.group} label={group.group}>
-                        {group.fields.map((f) => (
-                          <option key={f.key} value={f.key}>{f.label}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
+              <div className="row g-2 align-items-center mb-2" key={index}>
+                <div className="col-md-4">{fieldGroupSelect(row.field_a, (v) => updateDynamic(index, { field_a: v }))}</div>
                 <div className="col-md-2">
-                  <select className="form-select" value={row.operator} onChange={(e) => updateDynamic(index, { operator: e.target.value as DynamicCondition['operator'] })}>
-                    {OPERATORS.map((op) => (
-                      <option key={op} value={op}>{op}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-md-4">
                   <select
                     className="form-select"
-                    value={row.field_b ?? VALUE_SENTINEL}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      updateDynamic(index, v === VALUE_SENTINEL ? { field_b: null, value: row.value ?? '' } : { field_b: v, value: null })
-                    }}
+                    value={row.operator}
+                    onChange={(e) => updateDynamic(index, { operator: e.target.value as DynamicCondition['operator'] })}
                   >
-                    <option value={VALUE_SENTINEL}>固定数值…</option>
-                    {NUMERIC_FIELDS.map((group) => (
-                      <optgroup key={group.group} label={group.group}>
-                        {group.fields.map((f) => (
-                          <option key={f.key} value={f.key}>{f.label}</option>
-                        ))}
-                      </optgroup>
+                    {OPERATORS.map((op) => (
+                      <option key={op} value={op}>
+                        {op}
+                      </option>
                     ))}
                   </select>
+                </div>
+                <div className="col-md-4">
+                  {fieldGroupSelect(row.field_b ?? VALUE_SENTINEL, (v) => {
+                    updateDynamic(index, v === VALUE_SENTINEL ? { field_b: null, value: row.value ?? '' } : { field_b: v, value: null })
+                  })}
                 </div>
                 {(row.field_b === null || row.field_b === undefined) && (
                   <div className="col-md-1">
-                    <input type="number" className="form-control" placeholder="数值" value={row.value ?? ''} onChange={(e) => updateDynamic(index, { value: e.target.value })} />
+                    <input
+                      type="number"
+                      className="form-control"
+                      placeholder="数值"
+                      value={row.value ?? ''}
+                      onChange={(e) => updateDynamic(index, { value: e.target.value })}
+                    />
                   </div>
                 )}
                 <div className="col-md-1">
-                  <button type="button" className="btn btn-outline-danger btn-sm w-100" onClick={() => setDynamics(dynamics.filter((_, i) => i !== index))}>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm w-100"
+                    onClick={() => setDynamics(dynamics.filter((_, i) => i !== index))}
+                  >
                     删除
                   </button>
                 </div>
@@ -448,67 +508,75 @@ export default function ScreenPage() {
           </div>
         </div>
 
-        <div className="d-flex gap-2 mb-4">
+        <div className="d-flex gap-2 flex-wrap mb-4 align-items-center">
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            🔍 开始筛选
+            {loading ? '筛选中…' : '🔍 开始筛选'}
           </button>
           <button type="button" className="btn btn-outline-secondary" onClick={handleReset}>
             重置
           </button>
-          <button type="button" className="btn btn-outline-warning" onClick={handleSaveTemplate}>
-            保存模板
-          </button>
+          <div className="seg" role="group">
+            <button type="button" className="seg-item" onClick={handleSaveTemplate}>
+              保存模板
+            </button>
+            <button type="button" className={`seg-item ${selectedTemplate ? '' : 'disabled'}`} onClick={handleLoadTemplate}>
+              加载模板
+            </button>
+            <button type="button" className={`seg-item ${selectedTemplate ? '' : 'disabled'}`} onClick={handleDeleteTemplate}>
+              删除模板
+            </button>
+          </div>
           <select className="form-select w-auto" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
             <option value="">选择模板…</option>
             {templates.map((t) => (
-              <option key={t.name} value={t.name}>{t.name}</option>
+              <option key={t.name} value={t.name}>
+                {t.name}
+              </option>
             ))}
           </select>
-          <button type="button" className="btn btn-outline-info" onClick={handleLoadTemplate} disabled={!selectedTemplate}>
-            加载模板
-          </button>
-          <button type="button" className="btn btn-outline-danger" onClick={handleDeleteTemplate} disabled={!selectedTemplate}>
-            删除模板
-          </button>
         </div>
       </form>
 
       {loading && <Loading text="筛选中..." />}
-      {error && <ErrorState message={error} onRetry={handleScreen} />}
+      {error && <ErrorState message={error} onRetry={() => handleScreen()} />}
 
       {result && !loading && (
-        <div className="card">
-          <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span>
-              筛选结果 <span className="badge text-bg-primary">共 {result.total} 只</span>
-            </span>
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              筛选结果
+              <span className="chip">共 {result.total} 只</span>
+              {result.has_more && <span className="alert-note py-1">仅展示前 200 条，请缩小范围</span>}
+            </h6>
             {result.stocks.length > 0 && (
-              <button type="button" className="btn btn-outline-success btn-sm" onClick={() => exportCsv(result)}>
-                导出 CSV
+              <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => exportCsv(result)}>
+                导出 CSV ↓
               </button>
             )}
           </div>
-          <div className="card-body">
-            <div className="text-secondary mb-2">条件：{summary}</div>
-            {result.has_more && <div className="alert alert-warning py-2">结果已限制在 200 条以内（共 {result.total} 条命中），请增加条件缩小范围。</div>}
-            {result.error && <div className="alert alert-danger py-2">{result.error}</div>}
-            <div className="table-responsive">
-              <table className="table table-sm table-hover align-middle">
+          <div className="panel-body">
+            <div className="chip mb-3" style={{ whiteSpace: 'normal', lineHeight: 1.8 }}>
+              条件：{summary}
+            </div>
+            {result.error && <ErrorState message={result.error} />}
+            <div className="table-container">
+              <table className="data-table">
                 <thead>
                   <tr>
                     <th>股票代码</th>
                     <th>股票名称</th>
                     <th>行业</th>
                     <th>地域</th>
-                    <th>收盘价</th>
-                    <th>涨跌幅%</th>
-                    <th>PE</th>
-                    <th>PB</th>
-                    <th>总市值(万)</th>
-                    <th>换手率%</th>
-                    <th>净流入(万)</th>
+                    <th className="num">收盘价</th>
+                    <th className="num">涨跌幅%</th>
+                    <th className="num">PE</th>
+                    <th className="num">PB</th>
+                    <th className="num">总市值(万)</th>
+                    <th className="num">换手率%</th>
+                    <th className="num">净流入(万)</th>
                     <th>数据日期</th>
-                    <th>操作</th>
+                    <th className="num">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -517,29 +585,40 @@ export default function ScreenPage() {
                       <td>
                         <code>{row.symbol}</code>
                       </td>
-                      <td>{row.name}</td>
+                      <td style={{ fontWeight: 600 }}>{row.name}</td>
                       <td>{row.industry ?? '--'}</td>
                       <td>{row.area ?? '--'}</td>
-                      <td>{formatNumber(row.daily_close as number ?? null, 2)}</td>
-                      <td className={pctClass(row.factor_pct_change as number)}>{formatPercent(row.factor_pct_change as number)}</td>
-                      <td>{formatNumber(row.pe as number ?? null, 2)}</td>
-                      <td>{formatNumber(row.pb as number ?? null, 2)}</td>
-                      <td>{formatNumber(row.total_mv as number ?? null, 0)}</td>
-                      <td>{formatNumber(row.turnover_rate as number ?? null, 2)}</td>
-                      <td>{formatNumber(row.moneyflow_net_amount as number ?? null, 0)}</td>
+                      <td className="num">{formatNumber((row.daily_close ?? row.close) as number ?? null, 2)}</td>
+                      <td className={`num ${pctClass(row.factor_pct_change as number)}`}>{formatPercent(row.factor_pct_change as number)}</td>
+                      <td className="num">{formatNumber(row.pe as number ?? null, 2)}</td>
+                      <td className="num">{formatNumber(row.pb as number ?? null, 2)}</td>
+                      <td className="num">{formatNumber(row.total_mv as number ?? null, 0)}</td>
+                      <td className="num">{formatNumber(row.turnover_rate as number ?? null, 2)}</td>
+                      <td className="num">{formatNumber(row.moneyflow_net_amount as number ?? null, 0)}</td>
                       <td>{row.trade_date ?? '--'}</td>
-                      <td>
-                        <a className="btn btn-outline-primary btn-sm me-1" href={`${OLD_SITE_BASE}/stock/${row.ts_code}`} target="_blank" rel="noreferrer">
-                          详情
+                      <td className="num">
+                        <a
+                          className="btn btn-outline-primary btn-sm me-1"
+                          href={`${OLD_SITE_BASE}/stock/${row.ts_code}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          详情 ↗
                         </a>
-                        <a className="btn btn-outline-info btn-sm" href={`${OLD_SITE_BASE}/analysis?stock=${row.ts_code}`} target="_blank" rel="noreferrer">
-                          分析
+                        <a
+                          className="btn btn-outline-secondary btn-sm"
+                          href={`${OLD_SITE_BASE}/analysis?stock=${row.ts_code}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          分析 ↗
                         </a>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {result.stocks.length === 0 && <EmptyState icon="🔍" text="没有符合条件的股票，试试放宽条件" />}
             </div>
           </div>
         </div>

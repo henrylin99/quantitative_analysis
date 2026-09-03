@@ -1,0 +1,140 @@
+- generic [ref=f5e2]:
+  - banner [ref=f5e3]:
+    - generic [ref=f5e4]:
+      - link "Q 量化分析终端 REACT EDITION" [ref=f5e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f5e6]: Q
+        - generic [ref=f5e7]:
+          - text: 量化分析终端
+          - generic [ref=f5e8]: REACT EDITION
+      - navigation [ref=f5e9]:
+        - link "首页" [ref=f5e10] [cursor=pointer]:
+          - /url: /
+        - link "股票列表" [ref=f5e11] [cursor=pointer]:
+          - /url: /stocks
+        - link "技术分析" [ref=f5e12] [cursor=pointer]:
+          - /url: /analysis
+        - link "选股筛选" [ref=f5e13] [cursor=pointer]:
+          - /url: /screen
+        - link "回测验证" [ref=f5e14] [cursor=pointer]:
+          - /url: /backtest
+      - link "旧版 ↗" [ref=f5e15] [cursor=pointer]:
+        - /url: http://127.0.0.1:5000/
+  - main [ref=f5e16]:
+    - generic [ref=f5e17]:
+      - generic [ref=f5e19]:
+        - heading "选股筛选" [level=2] [ref=f5e20]
+        - paragraph [ref=f5e21]: 估值、市值、技术指标多条件组合，支持动态条件、模板与 CSV 导出
+      - generic [ref=f5e22]:
+        - generic [ref=f5e23]:
+          - heading "基本条件" [level=6] [ref=f5e25]
+          - generic [ref=f5e28]:
+            - generic [ref=f5e29]:
+              - generic [ref=f5e30]: 行业
+              - combobox [ref=f5e31]:
+                - option "全部行业" [selected]
+            - generic [ref=f5e32]:
+              - generic [ref=f5e33]: 地域
+              - combobox [ref=f5e34]:
+                - option "全部地域" [selected]
+            - generic [ref=f5e35]:
+              - generic [ref=f5e36]: 市场
+              - combobox [ref=f5e37]:
+                - option "全部市场" [selected]
+                - option "深圳"
+                - option "上海"
+            - generic [ref=f5e38]:
+              - generic [ref=f5e39]: 数据日期（留空取最新）
+              - textbox [ref=f5e40]
+        - generic [ref=f5e41]:
+          - heading "估值指标" [level=6] [ref=f5e43]
+          - generic [ref=f5e46]:
+            - generic [ref=f5e47]:
+              - generic [ref=f5e48]: PE
+              - generic [ref=f5e49]:
+                - spinbutton "最小" [ref=f5e50]
+                - spinbutton "最大" [ref=f5e51]
+            - generic [ref=f5e52]:
+              - generic [ref=f5e53]: PB
+              - generic [ref=f5e54]:
+                - spinbutton "最小" [ref=f5e55]
+                - spinbutton "最大" [ref=f5e56]
+            - generic [ref=f5e57]:
+              - generic [ref=f5e58]: PS
+              - generic [ref=f5e59]:
+                - spinbutton "最小" [ref=f5e60]
+                - spinbutton "最大" [ref=f5e61]
+            - generic [ref=f5e62]:
+              - generic [ref=f5e63]: 股息率(%)
+              - generic [ref=f5e64]:
+                - spinbutton "最小" [ref=f5e65]
+                - spinbutton "最大" [ref=f5e66]
+        - generic [ref=f5e67]:
+          - heading "市值与交易" [level=6] [ref=f5e69]
+          - generic [ref=f5e72]:
+            - generic [ref=f5e73]:
+              - generic [ref=f5e74]: 总市值(万)
+              - generic [ref=f5e75]:
+                - spinbutton "最小" [ref=f5e76]
+                - spinbutton "最大" [ref=f5e77]
+            - generic [ref=f5e78]:
+              - generic [ref=f5e79]: 流通市值(万)
+              - generic [ref=f5e80]:
+                - spinbutton "最小" [ref=f5e81]
+                - spinbutton "最大" [ref=f5e82]
+            - generic [ref=f5e83]:
+              - generic [ref=f5e84]: 换手率(%)
+              - generic [ref=f5e85]:
+                - spinbutton "最小" [ref=f5e86]
+                - spinbutton "最大" [ref=f5e87]
+            - generic [ref=f5e88]:
+              - generic [ref=f5e89]: 量比
+              - generic [ref=f5e90]:
+                - spinbutton "最小" [ref=f5e91]
+                - spinbutton "最大" [ref=f5e92]
+        - generic [ref=f5e93]:
+          - heading "技术指标与资金流" [level=6] [ref=f5e95]
+          - generic [ref=f5e98]:
+            - generic [ref=f5e99]:
+              - generic [ref=f5e100]: RSI(6日)
+              - generic [ref=f5e101]:
+                - spinbutton "最小" [ref=f5e102]
+                - spinbutton "最大" [ref=f5e103]
+            - generic [ref=f5e104]:
+              - generic [ref=f5e105]: KDJ-K
+              - generic [ref=f5e106]:
+                - spinbutton "最小" [ref=f5e107]
+                - spinbutton "最大" [ref=f5e108]
+            - generic [ref=f5e109]:
+              - generic [ref=f5e110]: MACD
+              - generic [ref=f5e111]:
+                - spinbutton "最小" [ref=f5e112]
+                - spinbutton "最大" [ref=f5e113]
+            - generic [ref=f5e114]:
+              - generic [ref=f5e115]: CCI
+              - generic [ref=f5e116]:
+                - spinbutton "最小" [ref=f5e117]
+                - spinbutton "最大" [ref=f5e118]
+            - generic [ref=f5e119]:
+              - generic [ref=f5e120]: 净流入额(万)
+              - generic [ref=f5e121]:
+                - spinbutton "最小" [ref=f5e122]
+                - spinbutton "最大" [ref=f5e123]
+        - generic [ref=f5e124]:
+          - generic [ref=f5e125]:
+            - heading "动态查询条件 字段间比较，如 MA5 > 收盘价" [level=6] [ref=f5e126]:
+              - text: 动态查询条件
+              - generic [ref=f5e128]: 字段间比较，如 MA5 > 收盘价
+            - button "+ 添加条件" [ref=f5e129] [cursor=pointer]
+          - generic [ref=f5e131]:
+            - generic [ref=f5e132]: 🧩
+            - generic [ref=f5e133]: 未添加动态条件
+        - generic [ref=f5e134]:
+          - button "🔍 开始筛选" [ref=f5e135] [cursor=pointer]
+          - button "重置" [ref=f5e136] [cursor=pointer]
+          - group [ref=f5e137]:
+            - button "保存模板" [ref=f5e138] [cursor=pointer]
+            - button "加载模板" [ref=f5e139] [cursor=pointer]
+            - button "删除模板" [ref=f5e140] [cursor=pointer]
+          - combobox [ref=f5e141]:
+            - option "选择模板…" [selected]
