@@ -1,11 +1,5 @@
 import type { DailyBar, FactorRow } from '../api/types'
 
-/** A股红涨绿跌配色（与旧版技术分析页一致） */
-export const UP_COLOR = '#f87171'
-export const DOWN_COLOR = '#4ade80'
-export const ACCENT_COLOR = '#818cf8'
-export const AMBER_COLOR = '#fbbf24'
-
 export type ChartPoint = { time: string }
 
 /** 后端历史/因子数组为 trade_date 倒序（最新在前），图表消费前统一转升序（与旧版 localeCompare 归一化一致） */
@@ -87,7 +81,8 @@ export interface VolumeBar {
   color: string
 }
 
-export function toVolumeBars(rows: DailyBar[]): VolumeBar[] {
+/** 成交量柱：涨跌着色（A股红涨绿跌），颜色随主题传入 */
+export function toVolumeBars(rows: DailyBar[], upColor: string, downColor: string): VolumeBar[] {
   const out: VolumeBar[] = []
   const seen = new Set<string>()
   for (const row of sortByTradeDateAsc(rows)) {
@@ -99,7 +94,7 @@ export function toVolumeBars(rows: DailyBar[]): VolumeBar[] {
     out.push({
       time,
       value: vol,
-      color: pct !== null && pct < 0 ? 'rgba(74, 222, 128, 0.65)' : 'rgba(248, 113, 113, 0.65)',
+      color: pct !== null && pct < 0 ? downColor : upColor,
     })
   }
   return out

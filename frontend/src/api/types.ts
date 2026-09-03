@@ -143,6 +143,14 @@ export interface BacktestTrade {
   return_rate: number | null
 }
 
+/** 每日资产快照（回测资金曲线数据） */
+export interface DailyValue {
+  date: string
+  cash: number
+  position_value: number
+  total_value: number
+}
+
 export interface BacktestConfig {
   ts_code: string
   strategy_type: string
@@ -157,6 +165,7 @@ export interface BacktestResultData {
   performance: BacktestPerformance
   trades: BacktestTrade[]
   config: BacktestConfig
+  daily_values?: DailyValue[]
 }
 
 export type StrategyType = 'ma_cross' | 'macd' | 'kdj' | 'rsi' | 'bollinger'
