@@ -3,6 +3,7 @@ import {
   createPortfolioPosition,
   deletePortfolio,
   deletePosition,
+  fetchLatestFactorCoverageDate,
   fetchPortfolioDetail,
   fetchPortfolios,
   rebalanceApply,
@@ -50,6 +51,7 @@ export default function MlPortfolioPage() {
   const [optBusy, setOptBusy] = useState(false)
   const [optError, setOptError] = useState<string | null>(null)
   const [optResult, setOptResult] = useState<IntegratedSelectionResult | null>(null)
+  const [optFallbackDate, setOptFallbackDate] = useState<string | null>(null)
 
   // 创建组合
   const [showCreate, setShowCreate] = useState(false)
@@ -79,10 +81,10 @@ export default function MlPortfolioPage() {
     setOptBusy(true)
     setOptError(null)
     setOptResult(null)
+    setOptFallbackDate(null)
     try {
       const constraint = RISK_LEVELS[riskLevel]
-      const r = await runIntegratedSelection({
-        trade_date: toLocalDate(new Date()).replace(/-/g, ''),
+      const body = {
         selection_method: 'factor_based',
         factor_list: SELECTION_FACTORS,
         weights: { momentum_5d: 0.4, pe_percentile: 0.3, money_flow_strength: 0.3 },
@@ -95,7 +97,18 @@ export default function MlPortfolioPage() {
           target_return: constraint.target,
           risk_tolerance: constraint.tol,
         },
-      })
+      }
+      let r: IntegratedSelectionResult
+      try {
+        // 默认用今天（与旧版口径一致）
+        r = await runIntegratedSelection({ trade_date: toLocalDate(new Date()).replace(/-/g, ''), ...body })
+      } catch {
+        // 今天可能非交易日或预设因子当日未入库，按因子组合反查最近覆盖日期重试
+        const latest = await fetchLatestFactorCoverageDate(SELECTION_FACTORS)
+        const fallbackDate = latest.latest_coverage_date.replace(/-/g, '')
+        r = await runIntegratedSelection({ trade_date: fallbackDate, ...body })
+        setOptFallbackDate(latest.latest_coverage_date)
+      }
       setOptResult(r)
     } catch (e) {
       setOptError(e instanceof Error ? e.message : '组合优化失败')
@@ -265,6 +278,11 @@ export default function MlPortfolioPage() {
             </div>
           )}
           {optBusy && <Loading text="因子打分 → 收益定标 → 协方差估计 → 权重求解..." />}
+          {optFallbackDate && !optBusy && (
+            <div className="mt-3">
+              <span className="alert-note py-1">今日无因子数据，已回退至最近因子交易日 {optFallbackDate}</span>
+            </div>
+          )}
 
           {optResult && !optBusy && (
             <div className="mt-3">
