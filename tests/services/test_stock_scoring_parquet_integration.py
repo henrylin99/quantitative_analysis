@@ -2,6 +2,9 @@ import pandas as pd
 
 from app.services.parquet_state_store import ParquetStateStore
 from app.services.stock_scoring import StockScoringEngine
+import pytest
+
+pytestmark = pytest.mark.module_scoring
 
 
 def test_ml_based_selection_reads_predictions_from_parquet(tmp_path):

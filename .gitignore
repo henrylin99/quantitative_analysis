@@ -120,9 +120,6 @@ local_settings.py
 # Local git worktrees
 .worktrees/
 
-# Local development tests
-tests/
-
 # Local backup archive
 bak/
 
@@ -134,3 +131,12 @@ data/.superpowers/
 
 .superpowers/
 .claude/
+
+# React frontend
+frontend/node_modules/
+frontend/dist/
+*.local
+frontend/*.tsbuildinfo
+*.sqlite3-wal
+*.sqlite3-shm
+.playwright-mcp/

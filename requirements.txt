@@ -26,10 +26,6 @@ plotly>=5.17.0
 
 # 定时任务
 APScheduler>=3.10.0
-celery>=5.3.0
-
-# 缓存
-redis>=5.0.0
 
 # 配置管理
 python-dotenv>=1.0.0

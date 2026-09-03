@@ -14,7 +14,7 @@ def _build_sqlalchemy_engine_options(database_uri: str) -> dict:
         return {
             "connect_args": {
                 "check_same_thread": False,
-                # web 进程与 celery worker 共写同一库文件，
+                # 多个进程/线程共写同一库文件，
                 # 没有 busy_timeout 时并发写会直接抛 database is locked
                 "timeout": 30,
             }
@@ -51,17 +51,6 @@ class Config:
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
     SOCKETIO_ASYNC_MODE = os.getenv('SOCKETIO_ASYNC_MODE', 'threading')
 
-    # Redis配置
-    REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-    REDIS_DB = int(os.getenv('REDIS_DB', 0))
-    CELERY_BROKER_URL = os.getenv(
-        'CELERY_BROKER_URL', f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-    )
-    CELERY_RESULT_BACKEND = os.getenv(
-        'CELERY_RESULT_BACKEND', f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-    )
-    
     # 日志配置
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FILE = os.getenv('LOG_FILE', 'logs/stock_analysis.log')
@@ -124,7 +113,9 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """生产环境配置"""
     DEBUG = False
-    DATA_JOB_EXECUTION_MODE = os.getenv('DATA_JOB_EXECUTION_MODE', 'celery')
+    # 去 Redis 化后 Celery broker 不存在，任务统一本地执行；
+    # 保留 DATA_JOB_EXECUTION_MODE 环境变量兼容旧部署脚本
+    DATA_JOB_EXECUTION_MODE = os.getenv('DATA_JOB_EXECUTION_MODE', 'inline')
 
     @staticmethod
     def validate(app_config):

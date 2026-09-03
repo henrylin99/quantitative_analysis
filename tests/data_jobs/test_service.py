@@ -25,16 +25,29 @@ class DummyStore:
         return run
 
 
-def test_submit_creates_run_and_dispatches_task():
+def test_submit_creates_run_and_runs_task_inline_by_default():
+    """去 Celery 后默认本地执行：submit 同步调任务而非 .delay 入队。"""
     store = DummyStore()
     service = DataJobService(state_store=store)
+
+    with patch("app.services.data_jobs.service.run_data_job") as task:
+        run = service.submit("stock_basic", {})
+
+    task.assert_called_once_with(run.id)
+    assert run.status == "queued"
+    assert store.updated is True
+
+
+def test_submit_with_legacy_celery_mode_still_dispatches_via_delay():
+    """DATA_JOB_EXECUTION_MODE=celery 属 legacy 兼容值，.delay 已是本地同步壳。"""
+    store = DummyStore()
+    service = DataJobService(state_store=store, execution_mode="celery")
 
     with patch("app.services.data_jobs.service.run_data_job.delay") as delay:
         run = service.submit("stock_basic", {})
 
     delay.assert_called_once_with(run.id)
     assert run.status == "queued"
-    assert store.updated is True
 
 
 def test_service_uses_store_for_list_runs_and_get_run(tmp_path):
