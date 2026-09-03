@@ -107,9 +107,12 @@ https://www.python.org/downloads/windows/
 
 ## 🚀 快速开始
 
+> 📘 **新手用户**：请从零开始一步步操作的话，推荐阅读详细的 **[从零安装指南（INSTALL.md）](INSTALL.md)**，涵盖环境准备、依赖安装、配置说明、前后端启动、数据下载与常见问题排查。
+
 ### 1. 环境要求
-- Python 3.8+
-- 运行系统不需要 MySQL；默认使用 SQLite + Parquet
+- Python 3.10–3.12（最低 3.8+）
+- Node.js 22 LTS（仅 React 前端界面需要；只用 API 可跳过）
+- 运行系统不需要 MySQL，也不需要 Redis；默认使用 SQLite + Parquet，克隆即可运行
 
 ### 2. 安装依赖
 ```bash
