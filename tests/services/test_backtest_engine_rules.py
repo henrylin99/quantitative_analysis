@@ -14,6 +14,8 @@ import pytest
 
 from app.services.backtest_engine import BacktestEngine
 
+pytestmark = pytest.mark.module_backtest
+
 
 def _make_reader(dates, price_map, pct_map):
     daily_df = pd.DataFrame(

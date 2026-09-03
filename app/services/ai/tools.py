@@ -267,6 +267,10 @@ def _tool_get_table_schema(args: Dict[str, Any]) -> Dict[str, Any]:
 # 只读工具：数据任务 / 因子 / 模型
 # ----------------------------------------------------------------------
 
+def _data_job_execution_mode() -> str:
+    return current_app.config.get('DATA_JOB_EXECUTION_MODE', 'inline')
+
+
 def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
     from app.services.data_jobs.registry import JobRegistry
 
@@ -287,7 +291,7 @@ def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'jobs': jobs,
         'tushare_token_configured': _tushare_token_configured(),
-        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'inline'),
+        'execution_mode': _data_job_execution_mode(),
     }
 
 
@@ -379,7 +383,7 @@ def _run_single_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         'progress': run.progress,
         'progress_message': run.progress_message,
         'error_message': run.error_message,
-        'execution_mode': current_app.config.get('DATA_JOB_EXECUTION_MODE', 'inline'),
+        'execution_mode': _data_job_execution_mode(),
         'note': (
             '任务在本地进程内执行：同步模式返回时 status 即为最终状态；'
             '异步模式返回 run_id，可用 get_data_job_status(run_id=...) 轮询进度'

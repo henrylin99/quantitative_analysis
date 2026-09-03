@@ -18,6 +18,12 @@
 | 运行参数 | tests/data_jobs/test_runner_params.py | module_data_jobs |
 | 注册表 | tests/data_jobs/test_registry.py | module_data_jobs |
 | Celery 任务 | tests/data_jobs/test_celery_tasks.py | module_data_jobs |
+| 数据任务 API 合约 | tests/api/test_data_jobs_api.py | module_data_jobs |
+| 数据任务 API 错误码合约 | tests/api/test_data_jobs_api_error_codes.py | module_data_jobs |
+| 数据任务 API 列表过滤合约 | tests/api/test_data_jobs_api_list_filters.py | module_data_jobs |
+| 数据任务 UI 入口合约 | tests/ui/test_data_jobs_ui_contract.py | module_data_jobs |
+| 数据任务 UI 进度合约 | tests/ui/test_data_jobs_ui_progress_contract.py | module_data_jobs |
+| 数据任务指引定位合约 | tests/ui/test_data_jobs_guide_positioning_contract.py | module_data_jobs |
 
 ## 数值软目标（M1 里程碑 review 时人工确认）
 - 无（数据下载模块以结构性合约为主，数值目标由下游模块负责）

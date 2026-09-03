@@ -29,14 +29,10 @@ class CacheManager:
         """获取缓存，命中返回独立副本，过期/缺失/损坏返回 None。"""
         try:
             with self._lock:
-                entry = self._store.get(key)
+                entry = self._live_entry(key)
                 if entry is None:
                     return None
-                expire_at, data = entry
-                if time.monotonic() > expire_at:
-                    del self._store[key]
-                    return None
-            return json.loads(data)
+            return json.loads(entry[1])
         except Exception as e:
             logger.error(f"获取缓存失败: {key}, 错误: {e}")
             # 解析失败说明存储损坏，删除避免反复报错
@@ -65,13 +61,17 @@ class CacheManager:
     def exists(self, key):
         """检查缓存是否存在且未过期（只查表，不做 JSON 反序列化）。"""
         with self._lock:
-            entry = self._store.get(key)
-            if entry is None:
-                return False
-            if time.monotonic() > entry[0]:
-                del self._store[key]
-                return False
-            return True
+            return self._live_entry(key) is not None
+
+    def _live_entry(self, key):
+        """存在且未过期返回 (expire_at, data)，否则清除并返回 None。须在持有锁时调用。"""
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        if time.monotonic() > entry[0]:
+            del self._store[key]
+            return None
+        return entry
 
     def _evict_if_over_capacity(self):
         """须在持有锁时调用。先清过期键，仍超限则按写入顺序淘汰一批。"""

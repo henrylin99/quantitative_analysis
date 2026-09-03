@@ -1,6 +1,9 @@
 import pandas as pd
 
 from app.services.parquet_state_store import FactorRepository, ParquetStateStore
+import pytest
+
+pytestmark = pytest.mark.module_factor_engine
 
 
 def test_factor_repository_overwrites_existing_values_by_business_key(tmp_path):

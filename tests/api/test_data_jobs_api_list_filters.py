@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.api.data_jobs_api import data_jobs_bp
+import pytest
+
+pytestmark = pytest.mark.module_data_jobs
 
 
 class _FakeService:

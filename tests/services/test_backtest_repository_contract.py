@@ -1,4 +1,7 @@
 from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
+import pytest
+
+pytestmark = pytest.mark.module_backtest
 
 
 def test_backtest_repository_allocates_ids_and_round_trips_summary(tmp_path):

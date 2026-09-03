@@ -4,6 +4,8 @@ import pytest
 
 from app.services.single_stock_backtest import SingleStockBacktestEngine
 
+pytestmark = pytest.mark.module_backtest
+
 
 def _make_data(closes):
     """构造日线 + 空 因子表：收盘价序列，日期连续。"""

@@ -1,4 +1,7 @@
 from pathlib import Path
+import pytest
+
+pytestmark = pytest.mark.module_data_jobs
 
 
 def test_data_jobs_guide_uses_current_behavior_wording():

@@ -1,4 +1,7 @@
 from pathlib import Path
+import pytest
+
+pytestmark = pytest.mark.module_data_jobs
 
 
 def test_data_management_page_contains_data_jobs_entry():
