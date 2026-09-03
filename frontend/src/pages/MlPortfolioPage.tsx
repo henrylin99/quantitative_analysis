@@ -82,7 +82,7 @@ export default function MlPortfolioPage() {
     try {
       const constraint = RISK_LEVELS[riskLevel]
       const r = await runIntegratedSelection({
-        trade_date: toLocalDate(new Date()),
+        trade_date: toLocalDate(new Date()).replace(/-/g, ''),
         selection_method: 'factor_based',
         factor_list: SELECTION_FACTORS,
         weights: { momentum_5d: 0.4, pe_percentile: 0.3, money_flow_strength: 0.3 },
@@ -537,7 +537,7 @@ export default function MlPortfolioPage() {
                           <td>
                             <code>{pos.ts_code}</code>
                           </td>
-                          <td className="num">{formatPercent(pos.weight ?? 0)}</td>
+                          <td className="num">{pos.weight != null ? formatPercent(pos.weight) : '--'}</td>
                           <td className="num">{fmtAmount(pos.market_value)}</td>
                           <td className={`num ${(pos.unrealized_pnl ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>{fmtAmount(pos.unrealized_pnl)}</td>
                           <td className="num">{formatNumber(pos.current_price, 2)}</td>

@@ -286,7 +286,7 @@ export default function RtRiskPage() {
                             <td className="num">{formatNumber(p.current_price, 2)}</td>
                             <td className="num">{formatNumber(p.market_value, 0)}</td>
                             <td className={`num ${(p.unrealized_pnl ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>{formatNumber(p.unrealized_pnl, 0)}</td>
-                            <td className="num">{formatPercent(p.weight ?? 0)}</td>
+                            <td className="num">{p.weight != null ? formatPercent(p.weight) : '--'}</td>
                           </tr>
                         ))}
                       </tbody>

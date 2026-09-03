@@ -21,6 +21,7 @@ export default function MlScoringPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modelCount, setModelCount] = useState<number | null>(null)
+  const [usedFallback, setUsedFallback] = useState(false)
 
   useEffect(() => {
     fetchScoringLatestTradeDate()
@@ -39,17 +40,29 @@ export default function MlScoringPage() {
     setLoading(true)
     setError(null)
     try {
+      // 因子库按 YYYYMMDD 索引，latest-trade-date 返回 YYYY-MM-DD，需规范化
+      const compactDate = tradeDate.replace(/-/g, '')
       if (method === 'factor_based') {
-        const r = await scoreFactorBased({ trade_date: tradeDate, factor_list: FACTOR_LIST, weights: WEIGHTS, method: 'factor_weight', top_n: topN })
+        let r: Awaited<ReturnType<typeof scoreFactorBased>>
+        try {
+          // 先按预设因子组合（与旧版口径一致）
+          r = await scoreFactorBased({ trade_date: compactDate, factor_list: FACTOR_LIST, weights: WEIGHTS, method: 'factor_weight', top_n: topN })
+          setUsedFallback(false)
+        } catch {
+          // 预设因子在当日可能无数据（如仅有财务类因子入库），回退为全部可用因子等权
+          r = await scoreFactorBased({ trade_date: compactDate, method: 'equal_weight', top_n: topN })
+          setUsedFallback(true)
+        }
         setRows(r.top_stocks ?? [])
         setTotal(r.total_stocks ?? null)
       } else {
         const models = await fetchModels()
         const ids = (models.models ?? []).map((m) => m.model_id)
         if (ids.length === 0) throw new Error('暂无可用模型，请先在「模型管理」中训练模型')
-        const r = await scoreMlBased({ trade_date: tradeDate, model_ids: ids, top_n: topN, ensemble_method: 'average' })
+        const r = await scoreMlBased({ trade_date: compactDate, model_ids: ids, top_n: topN, ensemble_method: 'average' })
         setRows(r.top_stocks ?? [])
         setTotal(null)
+        setUsedFallback(false)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '评分失败')
@@ -117,6 +130,7 @@ export default function MlScoringPage() {
               <span className="kicker" />
               评分结果
               <span className="chip">Top {rows.length}{total != null ? ` · 共评分 ${total} 只` : ''}</span>
+              {usedFallback && <span className="alert-note py-1">预设因子当日无数据，已回退为全部可用因子等权</span>}
             </h6>
           </div>
           <div className="panel-body tight table-container" style={{ maxHeight: 620 }}>

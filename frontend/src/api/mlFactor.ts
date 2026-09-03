@@ -191,9 +191,9 @@ export const fetchScoringLatestTradeDate = () =>
 
 export const scoreFactorBased = async (body: {
   trade_date: string
-  factor_list: string[]
-  weights: Record<string, number>
-  method: string
+  factor_list?: string[]
+  weights?: Record<string, number>
+  method?: string
   top_n: number
 }) => {
   try {
@@ -494,7 +494,6 @@ export const runMlBacktest = async (body: {
     throw new Error(extractApiError(e, '组合回测失败'))
   }
 }
-
 export const fetchBacktestRunStatus = (runId: string) =>
   rawGet<{ ready?: boolean; status?: string; message?: string }>(`/ml-factor/backtest/runs/${encodeURIComponent(runId)}`)
 
