@@ -1,66 +1,81 @@
 import hashlib
 import json
+import threading
+import time
 from functools import wraps
-from app.extensions import redis_client
+
 from loguru import logger
 
+
 class CacheManager:
-    """缓存管理器"""
-    
-    def __init__(self, redis_client=redis_client):
-        self.redis = redis_client
-    
+    """进程内 TTL 缓存。
+
+    原 Redis 实现已随去 Redis 化移除。与原实现的行为差异：
+    进程重启后缓存清空；多进程部署时各进程缓存互不共享。
+    存取均经 JSON 序列化，保证每次返回独立副本，调用方修改
+    返回值不会污染缓存。
+    """
+
+    # 兜底上限：键随参数组合增长（如逐股票逐日期），长期运行进程
+    # 需要防止无界膨胀。超过后先清已过期键，仍超则按写入顺序淘汰。
+    DEFAULT_MAX_ENTRIES = 4096
+
+    def __init__(self, max_entries: int = DEFAULT_MAX_ENTRIES):
+        self._store = {}  # key -> (expire_at_monotonic, json_str)
+        self._lock = threading.Lock()
+        self._max_entries = max_entries
+
     def get(self, key):
-        """获取缓存"""
+        """获取缓存，命中返回独立副本，过期/缺失/损坏返回 None。"""
         try:
-            data = self.redis.get(key)
-            if data:
-                # 处理不同类型的数据
-                if isinstance(data, bytes):
-                    data = data.decode('utf-8')
-                elif isinstance(data, str):
-                    # 数据已经是字符串，直接使用
-                    pass
-                else:
-                    # 其他类型转换为字符串
-                    data = str(data)
-                return json.loads(data)
-            return None
+            with self._lock:
+                entry = self._store.get(key)
+                if entry is None:
+                    return None
+                expire_at, data = entry
+                if time.monotonic() > expire_at:
+                    del self._store[key]
+                    return None
+            return json.loads(data)
         except Exception as e:
             logger.error(f"获取缓存失败: {key}, 错误: {e}")
-            # 如果解析失败，删除损坏的缓存
-            try:
-                self.redis.delete(key)
-            except:
-                pass
+            # 解析失败说明存储损坏，删除避免反复报错
+            self.delete(key)
             return None
-    
+
     def set(self, key, value, expire=3600):
-        """设置缓存"""
+        """设置缓存（expire 单位秒），失败返回 False 不抛出。"""
         try:
             data = json.dumps(value, ensure_ascii=False, default=str)
-            self.redis.setex(key, expire, data.encode('utf-8'))
+            expire_at = time.monotonic() + max(int(expire), 1)
+            with self._lock:
+                self._evict_if_over_capacity()
+                self._store[key] = (expire_at, data)
             return True
         except Exception as e:
             logger.error(f"设置缓存失败: {key}, 错误: {e}")
             return False
-    
+
     def delete(self, key):
-        """删除缓存"""
-        try:
-            self.redis.delete(key)
-            return True
-        except Exception as e:
-            logger.error(f"删除缓存失败: {key}, 错误: {e}")
-            return False
-    
+        """删除缓存。"""
+        with self._lock:
+            self._store.pop(key, None)
+        return True
+
     def exists(self, key):
-        """检查缓存是否存在"""
-        try:
-            return self.redis.exists(key)
-        except Exception as e:
-            logger.error(f"检查缓存失败: {key}, 错误: {e}")
-            return False
+        """检查缓存是否存在且未过期。"""
+        return self.get(key) is not None
+
+    def _evict_if_over_capacity(self):
+        """须在持有锁时调用。先清过期键，仍超限则按写入顺序淘汰一批。"""
+        if len(self._store) < self._max_entries:
+            return
+        now = time.monotonic()
+        for key in [k for k, (exp, _) in self._store.items() if exp <= now]:
+            del self._store[key]
+        if len(self._store) >= self._max_entries:
+            for key in list(self._store)[: self._max_entries // 10]:
+                del self._store[key]
 
 # 全局缓存实例
 cache = CacheManager()
@@ -100,4 +115,4 @@ def cached(expire=3600, key_prefix='', cache_empty=False):
 
             return result
         return wrapper
-    return decorator 
+    return decorator
