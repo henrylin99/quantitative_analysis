@@ -132,7 +132,6 @@ data/.superpowers/
 .superpowers/
 .claude/
 
-frontend/node_modules
 # React frontend
 frontend/node_modules/
 frontend/dist/
@@ -141,4 +140,3 @@ frontend/*.tsbuildinfo
 *.sqlite3-wal
 *.sqlite3-shm
 .playwright-mcp/
-*.jpeg
