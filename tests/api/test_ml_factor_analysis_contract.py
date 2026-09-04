@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-import pytest
 
 
 def test_analysis_endpoints_return_page_aligned_payloads(app):

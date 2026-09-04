@@ -1,7 +1,6 @@
 """AI 智能工作台工具层测试：只读约束、数据查询、任务触发、因子与模式控制。"""
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pandas as pd
 import pytest

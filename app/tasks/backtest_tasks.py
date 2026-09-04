@@ -8,7 +8,8 @@
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+import threading
+from typing import Any, Dict, List, Set
 
 import numpy as np
 from loguru import logger
@@ -45,6 +46,55 @@ def _to_jsonable(obj: Any) -> Any:
     return obj
 
 
+# ---------------------------------------------------------------------------
+# 进程内活性注册表
+#
+# 单机单进程（SocketIO threading 模式）：回测线程是 daemon 线程，只可能
+# 随进程一起消失。因此"run 是否有活着的线程"可用注册表精确判定：
+#   在册            → 线程存活，绝不清理（长回测不会被误判超时）
+#   不在册且仍处于
+#   queued/running  → 只可能是上一个进程中断留下的孤儿，安全清理
+# 这取代了 created_at + 超时的猜测式判活。
+# ---------------------------------------------------------------------------
+_active_lock = threading.Lock()
+_active_run_ids: Set[int] = set()
+_orphans_reaped_since_boot = False
+
+
+def mark_run_active(run_id: int) -> None:
+    with _active_lock:
+        _active_run_ids.add(int(run_id))
+
+
+def clear_run_active(run_id: int) -> None:
+    with _active_lock:
+        _active_run_ids.discard(int(run_id))
+
+
+def is_run_active(run_id: int) -> bool:
+    with _active_lock:
+        return int(run_id) in _active_run_ids
+
+
+def reap_orphans_once() -> List[Dict[str, Any]]:
+    """进程启动后首次调用时全量清理孤儿 run，之后 O(1) 跳过。
+
+    本进程的回测要么在注册表里、要么已被兜底标记 failed，孤儿只可能
+    来自上一个进程——清理一次后不会再新增，轮询路径无需反复全表扫描。
+    """
+    global _orphans_reaped_since_boot
+    with _active_lock:
+        first_call = not _orphans_reaped_since_boot
+        _orphans_reaped_since_boot = True
+        active = set(_active_run_ids)
+    if not first_call:
+        return []
+    reaped = _build_repo().reap_stale_runs(active_run_ids=active)
+    if reaped:
+        logger.info(f"启动后清理孤儿回测 run: {[r['id'] for r in reaped]}")
+    return reaped
+
+
 @celery.task(name="backtest.run")
 def run_backtest_task(run_id: int, strategy_config: Dict[str, Any],
                       start_date: str, end_date: str,
@@ -52,6 +102,7 @@ def run_backtest_task(run_id: int, strategy_config: Dict[str, Any],
                       rebalance_frequency: str = "monthly") -> Dict[str, Any]:
     """执行异步回测并把完整结果写入 BacktestRepository。"""
     repo = _build_repo()
+    mark_run_active(int(run_id))
 
     def merge_summary(update: Dict[str, Any]) -> None:
         # update_summary 是整行覆盖：先取现有 summary 合并，
@@ -85,3 +136,5 @@ def run_backtest_task(run_id: int, strategy_config: Dict[str, Any],
         logger.error(f"异步回测任务失败 run_id={run_id}: {e}")
         merge_summary({"status": "failed", "error": str(e)})
         return {"run_id": int(run_id), "status": "failed", "error": str(e)}
+    finally:
+        clear_run_active(int(run_id))

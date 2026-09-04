@@ -36,7 +36,7 @@ def test_gap_fill_returns_missing_dates_within_local_range(monkeypatch, tmp_path
     _patch_reader(monkeypatch)
     # 本地已有 6/3 与 6/8，缺 6/4
     for day in ("20260603", "20260608"):
-        partition = tmp_path / "t" / f"year=2026" / "month=06" / f"day={day[6:]}"
+        partition = tmp_path / "t" / "year=2026" / "month=06" / f"day={day[6:]}"
         partition.mkdir(parents=True)
 
     dates, full_refresh = parquet_job_helpers.resolve_trade_dates_with_gap_fill("t", data_dir=str(tmp_path))

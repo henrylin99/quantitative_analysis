@@ -43,7 +43,6 @@ def test_missing_file_returns_empty_frame(tmp_path):
 def test_concurrent_create_runs_do_not_lose_rows(tmp_path):
     """多线程并发 create_run：文件锁 + 原子写应保证零丢失、零重复 id。"""
     base_dir = str(tmp_path / "data_job_state")
-    store = ParquetDataJobStateStore(base_dir=base_dir)
 
     def create(i):
         return ParquetDataJobStateStore(base_dir=base_dir).create_run(

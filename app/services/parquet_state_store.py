@@ -17,21 +17,17 @@ migration.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 from datetime import datetime
-from app.utils.time_utils import now_local, now_local_iso
+from app.utils.parquet_writer import parquet_file_lock
+from app.utils.time_utils import now_local_iso
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 import pandas as pd
 from loguru import logger
 
-try:
-    import fcntl
-except ImportError:  # 非 POSIX 平台没有跨进程文件锁，退化为无锁
-    fcntl = None
 
 
 class StateStoreError(RuntimeError):
@@ -124,7 +120,6 @@ class ParquetStateStore:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
 
-    @contextlib.contextmanager
     def locked(self, name: str):
         """以独占文件锁包裹一段 read-modify-write，跨进程互斥。
 
@@ -133,17 +128,7 @@ class ParquetStateStore:
         注意：不要在 locked 内嵌套调用另一个 locked（同进程会重入死锁）。
         """
         path = self.path_for(name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = path.with_suffix(f"{path.suffix}.lock")
-        fh = open(lock_path, "a+")
-        try:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            fh.close()
+        return parquet_file_lock(path.with_suffix(f"{path.suffix}.lock"))
 
     # ------------------------------------------------------------------
     # Hive 风格分区表支持：{base_dir}/{name}/{key}={value}/data.parquet
@@ -845,37 +830,35 @@ class BacktestRepository:
             self.store.write_frame(self.TABLE_RUNS, df)
         return self.get_run(run_id)
 
-    def reap_stale_runs(self, timeout_seconds: float = 7200.0) -> List[Dict[str, Any]]:
-        """把长期停留在 queued/running 的僵尸 run 标记为 failed。
+    def reap_stale_runs(self, active_run_ids: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
+        """把状态停在 queued/running 但已无活跃线程的孤儿 run 标记为 failed。
 
-        异步回测线程是 daemon 线程，进程重启时被直接杀死，run 会永远
-        停在 running、前端永远显示"运行中"。以 created_at + 超时判定
-        （默认 2 小时，远大于正常回测时长），轮询接口在读取前调用即可自愈。
+        active_run_ids: 当前进程内确实在运行的 run id 集合（由
+        backtest_tasks 的注册表提供）。回测线程是 daemon 线程、只随进程
+        退出，因此"在册 = 存活"是精确判活：在册的一律跳过（跑几小时都
+        不会误杀）；不在册且仍处于 queued/running 的只可能是进程中断
+        留下的孤儿。
         """
+        active = {int(run_id) for run_id in (active_run_ids or ())}
         reaped: List[Dict[str, Any]] = []
         with self.store.locked(self.TABLE_RUNS):
             df = self.store.read_frame(self.TABLE_RUNS)
             if df.empty or "id" not in df.columns:
                 return []
-            now = now_local()
             changed = False
             for idx, row in df.iterrows():
+                run_id = int(_to_python_scalar(row["id"]))
+                if run_id in active:
+                    continue
                 summary = _normalize_json(row.get("summary_json")) or {}
                 status = summary.get("status")
                 if status not in {"queued", "running"}:
                     continue
-                try:
-                    started = datetime.fromisoformat(str(row.get("created_at")))
-                except (TypeError, ValueError):
-                    continue
-                if (now - started).total_seconds() <= timeout_seconds:
-                    continue
-                run_id = int(_to_python_scalar(row["id"]))
                 summary.update({
                     "status": "failed",
                     "error": (
-                        f"run 超过 {int(timeout_seconds)} 秒仍处于 {status}，"
-                        "判定为进程中断留下的僵尸任务并强制失败"
+                        "回测线程已不存在（进程可能中断或重启），"
+                        "判定为孤儿任务并强制失败"
                     ),
                 })
                 df.loc[df.index == idx, "summary_json"] = json.dumps(summary)

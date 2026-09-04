@@ -7,7 +7,6 @@ from flask import Flask
 
 from app.api.ai_assistant_api import ai_assistant_bp
 from app.extensions import db
-from app.models.ai_chat import AiChatSession
 
 
 @pytest.fixture()

@@ -60,24 +60,33 @@ class FactorExpressionEngine:
     def extract_max_rolling_window(self, expression: str) -> Optional[int]:
         """静态解析公式，返回其中 rolling() 的最大窗口；无 rolling 返回 None。
 
-        只识别整数字面量窗口，供数据预热窗 sizing 用，不执行表达式。
+        只识别整数字面量窗口（位置参数 rolling(250) 与关键字参数
+        rolling(window=250) 两种写法）；非字面量参数无法静态定尺寸，
+        不识别——与 evaluate 的数值标量约束一致。
         """
         try:
             tree = ast.parse(expression, mode="eval")
         except (SyntaxError, ValueError):
             return None
         max_window: Optional[int] = None
+
+        def _record(value: Any) -> None:
+            nonlocal max_window
+            window = int(value)
+            max_window = window if max_window is None else max(max_window, window)
+
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "rolling"
-                and node.args
-            ):
-                arg = node.args[0]
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, (int, float)):
-                    window = int(arg.value)
-                    max_window = window if max_window is None else max(max_window, window)
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "rolling"):
+                continue
+            if node.args and isinstance(node.args[0], ast.Constant) \
+                    and isinstance(node.args[0].value, (int, float)):
+                _record(node.args[0].value)
+            for kw in node.keywords:
+                if kw.arg == "window" and isinstance(kw.value, ast.Constant) \
+                        and isinstance(kw.value.value, (int, float)):
+                    _record(kw.value.value)
         return max_window
 
     def evaluate(self, expression: str, df: pd.DataFrame) -> pd.DataFrame:

@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-import pytest
 from flask import Flask
 
 from app.api.realtime_indicators import realtime_indicators_bp
