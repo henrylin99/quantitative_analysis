@@ -13,6 +13,7 @@
 | 因子引擎 Parquet 集成 | tests/services/test_factor_engine_parquet_integration.py | module_factor_engine |
 | 因子库合约 | tests/services/test_factor_repository_contract.py | module_factor_engine |
 | 因子 point-in-time 守卫 | tests/services/test_factor_point_in_time.py | module_factor_engine |
+| inf 清洗 + 预热窗合约 | tests/services/test_quality_fix_contracts.py | module_factor_engine |
 
 ## 数值软目标（M2 里程碑 review 时人工确认）
 - IC 均值 > 0.03（样本期内，至少 3 个因子）

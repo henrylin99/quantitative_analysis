@@ -81,17 +81,20 @@ def reap_orphans_once() -> List[Dict[str, Any]]:
 
     本进程的回测要么在注册表里、要么已被兜底标记 failed，孤儿只可能
     来自上一个进程——清理一次后不会再新增，轮询路径无需反复全表扫描。
+    判活直接传注册表回调，由 reap_stale_runs 在表锁内逐候选复查，
+    消除"快照后才提交并在册"的窗口；扫描抛异常时标志不置位，
+    下次提交重试（并发下最多重复扫描一次，标记 failed 幂等无害）。
     """
     global _orphans_reaped_since_boot
     with _active_lock:
         first_call = not _orphans_reaped_since_boot
-        _orphans_reaped_since_boot = True
-        active = set(_active_run_ids)
     if not first_call:
         return []
-    reaped = _build_repo().reap_stale_runs(active_run_ids=active)
+    reaped = _build_repo().reap_stale_runs(is_run_active)
     if reaped:
         logger.info(f"启动后清理孤儿回测 run: {[r['id'] for r in reaped]}")
+    with _active_lock:
+        _orphans_reaped_since_boot = True
     return reaped
 
 

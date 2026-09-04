@@ -1,14 +1,15 @@
 """上一轮质量修复的合约测试：孤儿 run 清理、模型缓存失效、inf 清洗、
 rolling 预热窗、求解器回退。
 
-对应审查指出的 8 项零测试高风险修复，逐项钉住行为。
+对应审查指出的 8 项零测试高风险修复，逐项钉住行为。一个文件覆盖
+四个模块域，marker 按用例所属域打（见 acceptance/<module>.md 注册表）。
 """
 import importlib
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 
-import cvxpy
 import joblib
 import numpy as np
 import pandas as pd
@@ -19,16 +20,43 @@ from app.services.factor_expression_engine import FactorExpressionEngine
 from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
 import app.tasks.backtest_tasks as backtest_tasks
 
-if not hasattr(cvxpy, "installed_solvers"):
-    # conftest 为 minimal CI 注入的空桩占据了 sys.modules；本模块的求解器
-    # 用例验证真实路径，恢复真实库并重载绑定过桩的被测模块
-    del sys.modules["cvxpy"]
-    cvxpy = importlib.import_module("cvxpy")
-    if "app.services.portfolio_optimizer" in sys.modules:
-        importlib.reload(sys.modules["app.services.portfolio_optimizer"])
-from app.services.portfolio_optimizer import PortfolioOptimizer
 
-pytestmark = pytest.mark.module_backtest
+def _load_real_cvxpy():
+    """conftest 为 minimal CI 注入空桩占据 sys.modules；本文件的求解器
+    用例验证真实路径，需要真实库。
+
+    真实库可用：换回真实 cvxpy 并重载绑过桩的 portfolio_optimizer；
+    真实库缺失：把桩放回 sys.modules 让其余 import 正常工作，求解器
+    用例经 skipif 跳过——绝不能在 collection 阶段 ImportError，
+    否则整个文件（含无关域的用例）报废。
+    """
+    existing = sys.modules.get("cvxpy")
+    if existing is not None and hasattr(existing, "installed_solvers"):
+        return existing
+    sys.modules.pop("cvxpy", None)
+    try:
+        real = importlib.import_module("cvxpy")
+    except ImportError:
+        if existing is not None:
+            sys.modules["cvxpy"] = existing
+        return None
+    sys.modules["cvxpy"] = real
+    return real
+
+
+_HAS_REAL_CVXPY = _load_real_cvxpy() is not None
+if _HAS_REAL_CVXPY and "app.services.portfolio_optimizer" in sys.modules:
+    importlib.reload(sys.modules["app.services.portfolio_optimizer"])
+from app.services.portfolio_optimizer import PortfolioOptimizer  # noqa: E402 — 必须在桩恢复之后导入，才能绑定真实 cvxpy
+
+_marker_backtest = pytest.mark.module_backtest
+_marker_ml_model = pytest.mark.module_ml_model
+_marker_factor_engine = pytest.mark.module_factor_engine
+_marker_portfolio = pytest.mark.module_portfolio
+_requires_real_cvxpy = pytest.mark.skipif(
+    not _HAS_REAL_CVXPY,
+    reason="环境无真实 cvxpy（minimal CI 桩），求解器真实路径无法验证",
+)
 
 
 class _PicklableModelV1:
@@ -72,6 +100,7 @@ def _make_run(repo, status):
     return run["id"]
 
 
+@_marker_backtest
 def test_reap_stale_runs_never_kills_active_runs(tmp_path):
     """在册（线程存活）的 run 即使跑了很久也绝不能被清理。"""
     repo = BacktestRepository(ParquetStateStore(base_dir=str(tmp_path / "state")))
@@ -80,7 +109,7 @@ def test_reap_stale_runs_never_kills_active_runs(tmp_path):
     done_id = _make_run(repo, "succeeded")
 
     backtest_tasks.mark_run_active(active_id)
-    reaped = repo.reap_stale_runs(active_run_ids={active_id})
+    reaped = repo.reap_stale_runs(lambda run_id: backtest_tasks.is_run_active(run_id))
 
     reaped_ids = {r["id"] for r in reaped}
     assert reaped_ids == {orphan_id}
@@ -89,17 +118,19 @@ def test_reap_stale_runs_never_kills_active_runs(tmp_path):
     assert repo.get_run(done_id)["summary"]["status"] == "succeeded"
 
 
+@_marker_backtest
 def test_reap_stale_runs_skips_queued_orphans_marked_failed(tmp_path):
     """queued 状态的孤儿同样要清理（提交后线程未起就崩了的场景）。"""
     repo = BacktestRepository(ParquetStateStore(base_dir=str(tmp_path / "state")))
     queued_id = _make_run(repo, "queued")
 
-    reaped = repo.reap_stale_runs(active_run_ids=set())
+    reaped = repo.reap_stale_runs(lambda run_id: False)
 
     assert {r["id"] for r in reaped} == {queued_id}
     assert repo.get_run(queued_id)["summary"]["status"] == "failed"
 
 
+@_marker_backtest
 def test_registry_roundtrip_and_orphan_reap_once(tmp_path, monkeypatch):
     """mark/clear/is_run_active 语义；reap_orphans_once 只在进程首次调用时落盘。"""
     monkeypatch.setattr(backtest_tasks, "_build_repo", lambda: BacktestRepository(
@@ -127,6 +158,7 @@ def test_registry_roundtrip_and_orphan_reap_once(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@_marker_ml_model
 def test_load_model_reloads_when_disk_file_changes(tmp_path):
     from app.services.ml_models import MLModelManager
 
@@ -151,6 +183,7 @@ def test_load_model_reloads_when_disk_file_changes(tmp_path):
     assert manager.models["retrain"].tag == "v2"
 
 
+@_marker_ml_model
 def test_load_model_keeps_memory_only_model_without_disk_file(tmp_path):
     """仅存在于内存的模型（如测试注入）不因磁盘无文件而被清掉。"""
     from app.services.ml_models import MLModelManager
@@ -171,6 +204,7 @@ def test_load_model_keeps_memory_only_model_without_disk_file(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@_marker_factor_engine
 def test_finalize_factor_result_cleans_inf():
     df = pd.DataFrame(
         {
@@ -195,6 +229,7 @@ class _StubReader:
         return self._frame.copy()
 
 
+@_marker_factor_engine
 def test_custom_factor_cleans_inf_from_division_by_zero():
     """自定义公式除零（1/close，close=0）产生的 inf 不得入库。"""
     dates = pd.date_range("2026-06-01", periods=4).strftime("%Y-%m-%d")
@@ -225,6 +260,7 @@ def test_custom_factor_cleans_inf_from_division_by_zero():
 # ---------------------------------------------------------------------------
 
 
+@_marker_factor_engine
 def test_extract_max_rolling_window_supports_positional_and_keyword():
     engine = FactorExpressionEngine()
 
@@ -240,6 +276,7 @@ def test_extract_max_rolling_window_supports_positional_and_keyword():
     assert engine.extract_max_rolling_window("bad formula (((") is None
 
 
+@_marker_factor_engine
 def test_custom_factor_expands_preheat_window_for_large_rolling():
     """rolling 窗口大于默认回看时，读取窗口必须外推，否则因子前段全 NaN。"""
     requested = {}
@@ -267,8 +304,6 @@ def test_custom_factor_expands_preheat_window_for_large_rolling():
     engine.factor_definitions["long_ma"] = {"factor_formula": "close.rolling(250).mean()"}
     engine._calculate_custom_factor("long_ma", ["000001.SZ"], dates[-1], dates[-1])
 
-    from datetime import datetime, timedelta
-
     expected_start = (
         datetime.strptime(dates[-1], "%Y-%m-%d")
         - timedelta(days=int(250 * FactorEngine.CALENDAR_DAYS_PER_TRADING_DAY) + FactorEngine.PREHEAT_BUFFER_DAYS)
@@ -276,11 +311,40 @@ def test_custom_factor_expands_preheat_window_for_large_rolling():
     assert requested["start_date"] == expected_start
 
 
+@_marker_factor_engine
+def test_get_factor_data_expands_window_for_needs_history_sources():
+    """needs_history=True 的源（daily_basic）必须带一年预热窗读取，
+    否则 pe/pb/ps 的 252 日滚动分位在单日截面下没有观测；codes_only
+    源（income）则只按 ts_codes 全量读取、不带窗口。"""
+    captured = {}
+
+    class _StubBasicReader:
+        def get_daily_basic(self, ts_codes=None, start_date=None, end_date=None):
+            captured["daily_basic"] = (start_date, end_date)
+            return pd.DataFrame()
+
+        def get_income_statement(self, ts_codes):
+            captured["income"] = ts_codes
+            return pd.DataFrame()
+
+    engine = FactorEngine()
+    engine.data_reader = _StubBasicReader()
+
+    engine._get_factor_data("pe_percentile", ["000001.SZ"], "2026-06-01", "2026-06-30")
+    expected_start = (datetime(2026, 6, 1) - timedelta(days=252)).strftime("%Y-%m-%d")
+    assert captured["daily_basic"] == (expected_start, "2026-06-30")
+
+    engine._get_factor_data("revenue_growth", ["000001.SZ"], "2026-06-01", "2026-06-30")
+    assert captured["income"] == ["000001.SZ"]
+
+
 # ---------------------------------------------------------------------------
 # 均值方差求解器：ECOS 移除后按安装情况回退
 # ---------------------------------------------------------------------------
 
 
+@_marker_portfolio
+@_requires_real_cvxpy
 def test_resolve_qp_solver_prefers_installed_solver():
     import cvxpy as cp
 
@@ -294,6 +358,8 @@ def test_resolve_qp_solver_prefers_installed_solver():
         assert solver is None or solver is not getattr(cp, "ECOS", object())
 
 
+@_marker_portfolio
+@_requires_real_cvxpy
 def test_mean_variance_optimization_actually_solves():
     rng = np.random.default_rng(42)
     codes = [f"{i:06d}.SZ" for i in range(1, 9)]

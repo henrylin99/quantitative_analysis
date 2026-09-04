@@ -1747,7 +1747,12 @@ def run_backtest():
         if mode == 'async':
             # 进程启动后首次异步提交时，全量清理上个进程中断留下的孤儿
             # run（本进程的活跃 run 由注册表保护，不会被误清理）
-            from app.tasks.backtest_tasks import reap_orphans_once
+            import threading
+            from app.tasks.backtest_tasks import (
+                mark_run_active,
+                reap_orphans_once,
+                run_backtest_task,
+            )
             try:
                 reap_orphans_once()
             except Exception as exc:
@@ -1761,10 +1766,13 @@ def run_backtest():
             )
             run_id = int(run['id'])
             _backtest_repo.update_summary(run_id, {'status': 'queued'})
+            # 提交即在册：线程体的 mark 要等线程真正跑起来，这中间 GET
+            # 轮询的自愈（以及启动清理的扫描）会把刚提交的 run 误判成
+            # 孤儿、用户看到一次假失败。mark 幂等，线程内的调用保留，
+            # 覆盖不经过 HTTP 的直接 task 调用
+            mark_run_active(run_id)
             # 去 Redis 化后无 Celery worker：后台线程执行，任务自写
             # BacktestRepository，前端凭 run_id 轮询状态
-            import threading
-            from app.tasks.backtest_tasks import run_backtest_task
             threading.Thread(
                 target=run_backtest_task,
                 args=(run_id, strategy_config, start_date, end_date,
@@ -1808,7 +1816,11 @@ def get_backtest_run(run_id):
         # 轮询顺带自愈：状态仍是 queued/running 但本进程注册表里没有对应
         # 线程，说明是进程中断留下的孤儿，定点标记 failed。
         # 只查注册表（O(1)），不持全表锁、不做全表扫描
-        if run and run.get('summary', {}).get('status') in ('queued', 'running')                 and not is_run_active(run_id):
+        if (
+            run
+            and (run.get('summary') or {}).get('status') in ('queued', 'running')
+            and not is_run_active(run_id)
+        ):
             summary = dict(run.get('summary') or {})
             summary.update({
                 'status': 'failed',
