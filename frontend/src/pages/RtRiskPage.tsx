@@ -86,7 +86,6 @@ export default function RtRiskPage() {
 
   useEffect(() => {
     loadPortfolio(pid)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid])
 
   const sectorPieOption = useMemo(() => {

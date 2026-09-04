@@ -32,6 +32,9 @@ class MLModelManager:
     def __init__(self, state_store: ParquetStateStore = None):
         self.models = {}  # 缓存已加载的模型
         self.scalers = {}  # 缓存特征缩放器
+        # 记录缓存模型对应的磁盘 mtime：重训会落盘新文件，
+        # load_model 据此发现缓存过期，避免预测端一直用旧模型
+        self._model_mtimes = {}
         self.state_store = state_store or ParquetStateStore()
         self.factor_repo = FactorRepository(self.state_store)
         self.model_repo = ModelRepository(self.state_store)
@@ -551,8 +554,12 @@ class MLModelManager:
                 if os.path.exists(scaler_path):
                     os.remove(scaler_path)
 
-            # 缓存模型
+            # 缓存模型（同步记录 mtime，避免 load_model 误判本实例刚训练的模型过期）
             self.models[model_id] = model
+            try:
+                self._model_mtimes[model_id] = os.path.getmtime(model_path)
+            except OSError:
+                self._model_mtimes.pop(model_id, None)
 
             # 把训练窗口持久化到模型定义：预测侧据此拒绝生成训练区间内的
             # in-sample 预测，防止拿模型见过的样本喂给回测
@@ -629,30 +636,43 @@ class MLModelManager:
             raise
     
     def load_model(self, model_id: str) -> bool:
-        """加载模型"""
+        """加载模型（磁盘文件更新后自动重载）"""
         try:
-            if model_id in self.models:
-                return True
-            
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
             scaler_path = os.path.join(self.model_dir, f"{model_id}_scaler.pkl")
-            
-            if not os.path.exists(model_path):
+
+            try:
+                disk_mtime = os.path.getmtime(model_path)
+            except OSError:
+                disk_mtime = None
+
+            if model_id in self.models:
+                if disk_mtime is None:
+                    # 磁盘上没有文件：可能是仅存在于内存的模型（如测试注入），
+                    # 没有更新的版本可加载，继续用缓存；显式删除走 delete_model
+                    return True
+                if disk_mtime == self._model_mtimes.get(model_id):
+                    return True
+                logger.info(f"模型文件已更新，重新加载: {model_id}")
+            elif disk_mtime is None:
                 logger.warning(f"模型文件不存在: {model_path}")
                 return False
-            
+
             # 加载模型
             model = joblib.load(model_path)
             self.models[model_id] = model
-            
-            # 加载缩放器（如果存在）
+            self._model_mtimes[model_id] = disk_mtime
+
+            # 加载缩放器（如果存在）；重训关闭 scaling 后旧 scaler 文件会被删除，
+            # 重载时必须同步清掉内存里的旧预处理器
             if os.path.exists(scaler_path):
-                scaler = joblib.load(scaler_path)
-                self.scalers[model_id] = scaler
-            
+                self.scalers[model_id] = joblib.load(scaler_path)
+            else:
+                self.scalers.pop(model_id, None)
+
             logger.info(f"成功加载模型: {model_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"加载模型失败: {model_id}, 错误: {e}")
             return False
@@ -741,12 +761,13 @@ class MLModelManager:
                 logger.warning(f"特征数据为空: {trade_date}")
                 return pd.DataFrame()
             
-            # 特征缩放
+            # 特征缩放（含特征选择）：与训练侧一致地不指定列名。
+            # scaler 可能是含 SelectKBest 的 Pipeline，transform 输出 k 列，
+            # 若强行套用全量特征列名，因子数超过 feature_selection_k 时必然报错
             if model_id in self.scalers:
                 scaler = self.scalers[model_id]
                 feature_scaled = pd.DataFrame(
                     scaler.transform(feature_df),
-                    columns=feature_df.columns,
                     index=feature_df.index
                 )
             else:
@@ -981,10 +1002,8 @@ class MLModelManager:
                 }
 
             pred_data = self.model_repo.get_predictions(model_id=model_id)
-            deleted_prediction_count = len(pred_data) if not pred_data.empty else 0
+            deleted_prediction_count = len(pred_data)
             self.model_repo.delete_definition(model_id)
-            if not pred_data.empty:
-                deleted_prediction_count = len(pred_data)
             # delete_definition already removes predictions for the model
             
             model_path = os.path.join(self.model_dir, f"{model_id}.pkl")
@@ -1002,6 +1021,7 @@ class MLModelManager:
                 del self.models[model_id]
             if model_id in self.scalers:
                 del self.scalers[model_id]
+            self._model_mtimes.pop(model_id, None)
             
             logger.info(f"成功删除模型: {model_id}")
             return {

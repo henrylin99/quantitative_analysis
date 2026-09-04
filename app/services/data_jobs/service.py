@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 from app.utils.time_utils import now_local, now_local_iso
 from typing import Any, Dict, Optional
@@ -87,12 +88,16 @@ class DataJobService:
             run = self.state_store.update_run_status(run, "queued", progress=0.0)
 
         if self.execution_mode == "inline":
-            run_data_job(run.id)
-            refreshed = getattr(self.state_store, "get_run", None)
-            if callable(refreshed):
-                latest = refreshed(run.id)
-                if latest is not None:
-                    return latest
+            # inline 任务在后台线程执行：同步跑会把提交请求挂住最长
+            # DATA_JOB_TIMEOUT（默认 1 小时），浏览器超时后重试还会撞上
+            # find_active_duplicate 被拒。run_data_job 自建 app context，
+            # 状态推进/失败落盘全部由它负责，提交侧立即返回 queued
+            thread = threading.Thread(
+                target=lambda: run_data_job(run.id),
+                name=f"data-job-{run.job_type}-{run.id}",
+                daemon=True,
+            )
+            thread.start()
             return run
 
         run_data_job.delay(run.id)

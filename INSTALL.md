@@ -302,7 +302,7 @@ macOS 的"隔空播放接收器"（AirPlay）默认占用 5000 端口：系统�
 Windows：安装 Python 时没勾选 "Add to PATH"，重新运行安装程序勾上；macOS：用 `python3` 代替 `python`。
 
 **Q4：`pip install` 某个包报一大片红色编译错误？**
-用精简依赖：`pip install -r requirements_minimal.txt`。之后需要 ML 功能时再单独 `pip install xgboost lightgbm cvxpy`。
+用精简依赖：`pip install -r requirements_minimal.txt`。之后需要 ML 功能时再单独 `pip install xgboost lightgbm cvxpy`；需要通达信实时行情时再单独 `pip install pytdx`。
 
 **Q5：启动报 `unable to open database file`？**
 `instance/` 目录没创建（见第 4.1 步），或 `.env` 里 `SQLITE_DATABASE_PATH` 路径写错。
