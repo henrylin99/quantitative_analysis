@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timedelta
-from app.utils.time_utils import now_local, now_local_iso
+from datetime import timedelta
+from app.utils.time_utils import now_local
 from loguru import logger
 import pandas as pd
 import numpy as np
@@ -1516,13 +1516,6 @@ def apply_portfolio_rebalance():
                 _portfolio_repo.upsert_position(position)
                 deactivated_count += 1
 
-        rebalance_summary = {
-            'updated_count': updated_count,
-            'created_count': created_count,
-            'deactivated_count': deactivated_count,
-            'target_weight_count': len(target_weights),
-        }
-
         return jsonify({
             'success': True,
             'portfolio_id': portfolio_id,
@@ -1736,7 +1729,8 @@ def run_backtest():
     /backtest/runs/<id>/result。默认同步执行，行为与历史版本一致。
     """
     try:
-        data = request.get_json()
+        # 无 JSON body 时 get_json 返回 None，直接 .get 会 AttributeError 落 500
+        data = request.get_json(silent=True) or {}
 
         # 参数验证
         strategy_config = data.get('strategy_config')
@@ -1751,6 +1745,12 @@ def run_backtest():
         mode = str(data.get('mode') or 'sync').lower()
 
         if mode == 'async':
+            # 提交前先清理进程中断留下的僵尸 run（线程随进程退出被杀，
+            # run 会永远停在 running）
+            try:
+                _backtest_repo.reap_stale_runs()
+            except Exception as exc:
+                logger.warning(f"清理僵尸回测 run 失败: {exc}")
             run = _backtest_repo.create_run(
                 strategy_config=strategy_config,
                 start_date=start_date,
@@ -1802,6 +1802,11 @@ def run_backtest():
 def get_backtest_run(run_id):
     """获取回测运行记录"""
     try:
+        # 轮询时顺带自愈：超时仍在 running 的僵尸 run 标记为 failed
+        try:
+            _backtest_repo.reap_stale_runs()
+        except Exception as exc:
+            logger.warning(f"清理僵尸回测 run 失败: {exc}")
         run = _backtest_repo.get_run(run_id)
         if run is None:
             return jsonify({'error': '回测记录不存在'}), 404

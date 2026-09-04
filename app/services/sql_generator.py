@@ -4,9 +4,8 @@ SQL生成引擎
 """
 
 import re
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 from app.models.text2sql_metadata import QueryTemplate
-from app.extensions import db
 
 # 只读校验中禁止出现的写操作/连接管理关键字（REPLACE 函数是合法的字符串函数，
 # 只单独禁止 REPLACE INTO 写入语法）
@@ -676,9 +675,9 @@ class QueryBuilder:
             
             return sql.strip()
             
-        except Exception as e:
+        except Exception:
             # 返回一个基本的查询作为fallback
-            return f"SELECT ts_code, stock_name, daily_close FROM stock_business LIMIT 20;"
+            return "SELECT ts_code, stock_name, daily_close FROM stock_business LIMIT 20;"
     
     def _determine_main_table(self, intent: str, entities: Dict[str, Any]) -> str:
         """确定主表"""

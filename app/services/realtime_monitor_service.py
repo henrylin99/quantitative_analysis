@@ -6,7 +6,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import logging
 
 from app.services.data_reader import ParquetDataReader

@@ -8,13 +8,10 @@ import os
 import re
 import sqlite3
 import time
-import traceback
 from typing import Dict, List, Any, Optional, Set
 
 logger = logging.getLogger(__name__)
 from flask import request
-from sqlalchemy import text
-from app.extensions import db
 from app.services.nlp_processor import NLPProcessor
 from app.services.sql_generator import SQLGenerator, validate_readonly_sql
 from app.services.llm_service import get_llm_service
@@ -170,7 +167,7 @@ class Text2SQLEngine:
             
             return [history.to_dict() for history in histories]
             
-        except Exception as e:
+        except Exception:
             return []
     
     def _create_error_response(self, user_query: str, intent_result: Dict[str, Any], 

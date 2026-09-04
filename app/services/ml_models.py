@@ -1,18 +1,17 @@
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-import pickle
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 import joblib
 from loguru import logger
 
 # 机器学习库
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score, precision_score, recall_score
+from sklearn.model_selection import cross_val_score, TimeSeriesSplit
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
+from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.pipeline import Pipeline
 import xgboost as xgb
 import lightgbm as lgb
@@ -80,8 +79,12 @@ class MLModelManager:
             }
         }
         
-        # 创建模型存储目录
-        self.model_dir = 'models'
+        # 创建模型存储目录：锚定项目根的绝对路径，从其他 cwd 启动进程时
+        # 训练与预测才能指向同一个目录
+        self.model_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            'models',
+        )
         os.makedirs(self.model_dir, exist_ok=True)
 
     @classmethod
@@ -707,7 +710,7 @@ class MLModelManager:
                 )
 
                 if factor_data.empty:
-                    logger.warning(f"未找到任何因子数据")
+                    logger.warning("未找到任何因子数据")
                     return pd.DataFrame()
 
                 # 使用最新日期的数据

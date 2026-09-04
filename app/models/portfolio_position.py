@@ -4,8 +4,7 @@
 """
 
 from app.extensions import db
-from app.utils.time_utils import now_local, now_local_iso
-from datetime import datetime
+from app.utils.time_utils import now_local
 from sqlalchemy import Index
 from app.services.persistence import persist_changes, persist_new
 

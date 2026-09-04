@@ -5,10 +5,8 @@
 
 import re
 import jieba
-import jieba.posseg as pseg
 from typing import Dict, List, Any, Optional
 from app.models.text2sql_metadata import BusinessDictionary
-from app.extensions import db
 
 
 class NLPProcessor:
@@ -555,7 +553,7 @@ class BusinessDictionaryManager:
                 
                 self.synonyms_cache[category][dictionary.standard_term] = dictionary.synonyms or []
             
-        except Exception as e:
+        except Exception:
             # 如果数据库还没有初始化，使用默认词典
             self._load_default_synonyms()
     

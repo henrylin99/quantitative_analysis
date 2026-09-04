@@ -4,16 +4,10 @@ WebSocket推送服务
 """
 
 import logging
-import threading
-import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-import json
+from typing import Dict, List, Any
 import pandas as pd
 
-from app.extensions import db
-from app.models.realtime_indicator import RealtimeIndicator
-from app.models.trading_signal import TradingSignal
 from app.models.risk_alert import RiskAlert
 from app.services.realtime_risk_manager import _portfolio_repo
 from app.services.realtime_data_manager import RealtimeDataManager

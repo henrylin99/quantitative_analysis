@@ -265,7 +265,7 @@ def get_top_movers():
                 'most_active': most_active,
                 'update_time': quotes_result.get('data', {}).get('update_time')
             },
-            'message': f'获取涨跌幅排行成功'
+            'message': '获取涨跌幅排行成功'
         })
         
     except Exception as e:

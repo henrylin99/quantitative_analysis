@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict
 from app.utils.cache import cached
 from app.services.data_reader import ParquetDataReader
 from loguru import logger
@@ -577,7 +576,6 @@ class StockService:
         """基于历史数据计算技术指标"""
         try:
             import pandas as pd
-            import numpy as np
             
             if not history_data or len(history_data) < 20:
                 logger.warning("历史数据不足，无法计算技术指标")

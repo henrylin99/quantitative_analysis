@@ -1,7 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 import os
 import sqlite3
-from flask_migrate import Migrate
 from flask_socketio import SocketIO
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -23,7 +22,6 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
 
 # 数据库实例
 db = SQLAlchemy()
-migrate = Migrate()
 # eventlet 模式必须在应用入口最先 monkey_patch，否则所有阻塞调用会卡死
 # 事件循环；默认 threading 模式无需补丁，本地开发更稳
 socketio = SocketIO(

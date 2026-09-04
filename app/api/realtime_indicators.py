@@ -4,7 +4,7 @@
 """
 
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import logging
 import json
@@ -114,7 +114,7 @@ def calculate_indicators():
                 try:
                     val = obj.item()
                     return clean_nan_values(val)
-                except:
+                except Exception:
                     return None
             else:
                 return obj

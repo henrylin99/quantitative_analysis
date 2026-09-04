@@ -57,6 +57,29 @@ class FactorExpressionEngine:
             ast.USub: operator.neg,
         }
 
+    def extract_max_rolling_window(self, expression: str) -> Optional[int]:
+        """静态解析公式，返回其中 rolling() 的最大窗口；无 rolling 返回 None。
+
+        只识别整数字面量窗口，供数据预热窗 sizing 用，不执行表达式。
+        """
+        try:
+            tree = ast.parse(expression, mode="eval")
+        except (SyntaxError, ValueError):
+            return None
+        max_window: Optional[int] = None
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "rolling"
+                and node.args
+            ):
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, (int, float)):
+                    window = int(arg.value)
+                    max_window = window if max_window is None else max(max_window, window)
+        return max_window
+
     def evaluate(self, expression: str, df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
             return pd.DataFrame(columns=["factor_value"])

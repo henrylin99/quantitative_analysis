@@ -211,7 +211,6 @@ class FactorRepository:
         self.store = store
 
     def upsert_definition(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        df = self.store.read_frame(self.TABLE_DEFINITIONS)
         now = _now_iso()
         record = {
             **record,
@@ -219,14 +218,16 @@ class FactorRepository:
             "created_at": _as_iso(record.get("created_at")) or now,
             "updated_at": now,
         }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            if "factor_id" not in df.columns:
-                df = pd.DataFrame(columns=list(record.keys()))
-            df = df[df["factor_id"] != record["factor_id"]]
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_DEFINITIONS, df)
+        with self.store.locked(self.TABLE_DEFINITIONS):
+            df = self.store.read_frame(self.TABLE_DEFINITIONS)
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                if "factor_id" not in df.columns:
+                    df = pd.DataFrame(columns=list(record.keys()))
+                df = df[df["factor_id"] != record["factor_id"]]
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_DEFINITIONS, df)
         return record
 
     def list_definitions(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
@@ -249,15 +250,16 @@ class FactorRepository:
         return _record_to_dict(match.iloc[-1])
 
     def deactivate_definition(self, factor_id: str) -> bool:
-        df = self.store.read_frame(self.TABLE_DEFINITIONS)
-        if df.empty or "factor_id" not in df.columns:
-            return False
-        mask = df["factor_id"] == factor_id
-        if not mask.any():
-            return False
-        df.loc[mask, "is_active"] = False
-        df.loc[mask, "updated_at"] = _now_iso()
-        self.store.write_frame(self.TABLE_DEFINITIONS, df)
+        with self.store.locked(self.TABLE_DEFINITIONS):
+            df = self.store.read_frame(self.TABLE_DEFINITIONS)
+            if df.empty or "factor_id" not in df.columns:
+                return False
+            mask = df["factor_id"] == factor_id
+            if not mask.any():
+                return False
+            df.loc[mask, "is_active"] = False
+            df.loc[mask, "updated_at"] = _now_iso()
+            self.store.write_frame(self.TABLE_DEFINITIONS, df)
         return True
 
     def save_values(self, frame: pd.DataFrame) -> int:
@@ -455,7 +457,6 @@ class ModelRepository:
         self.store = store
 
     def upsert_definition(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        df = self.store.read_frame(self.TABLE_DEFINITIONS)
         now = _now_iso()
         record = {
             **record,
@@ -466,12 +467,14 @@ class ModelRepository:
             "created_at": _as_iso(record.get("created_at")) or now,
             "updated_at": now,
         }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            df = df[df["model_id"] != record["model_id"]]
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_DEFINITIONS, df)
+        with self.store.locked(self.TABLE_DEFINITIONS):
+            df = self.store.read_frame(self.TABLE_DEFINITIONS)
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                df = df[df["model_id"] != record["model_id"]]
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_DEFINITIONS, df)
         return record
 
     def list_definitions(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
@@ -493,19 +496,21 @@ class ModelRepository:
         return _record_to_dict(match.iloc[-1], json_columns={"factor_list", "model_params", "training_config"})
 
     def delete_definition(self, model_id: str) -> bool:
-        df = self.store.read_frame(self.TABLE_DEFINITIONS)
-        if df.empty or "model_id" not in df.columns:
-            return False
-        mask = df["model_id"] == model_id
-        if not mask.any():
-            return False
-        df.loc[mask, "is_active"] = False
-        df.loc[mask, "updated_at"] = _now_iso()
-        self.store.write_frame(self.TABLE_DEFINITIONS, df)
-        pred_df = self.store.read_frame(self.TABLE_PREDICTIONS)
-        if not pred_df.empty and "model_id" in pred_df.columns:
-            pred_df = pred_df[pred_df["model_id"] != model_id]
-            self.store.write_frame(self.TABLE_PREDICTIONS, pred_df)
+        with self.store.locked(self.TABLE_DEFINITIONS):
+            df = self.store.read_frame(self.TABLE_DEFINITIONS)
+            if df.empty or "model_id" not in df.columns:
+                return False
+            mask = df["model_id"] == model_id
+            if not mask.any():
+                return False
+            df.loc[mask, "is_active"] = False
+            df.loc[mask, "updated_at"] = _now_iso()
+            self.store.write_frame(self.TABLE_DEFINITIONS, df)
+        with self.store.locked(self.TABLE_PREDICTIONS):
+            pred_df = self.store.read_frame(self.TABLE_PREDICTIONS)
+            if not pred_df.empty and "model_id" in pred_df.columns:
+                pred_df = pred_df[pred_df["model_id"] != model_id]
+                self.store.write_frame(self.TABLE_PREDICTIONS, pred_df)
         return True
 
     def save_predictions(self, frame: pd.DataFrame) -> int:
@@ -516,13 +521,14 @@ class ModelRepository:
         if missing:
             raise ValueError(f"predictions missing columns: {sorted(missing)}")
 
-        df = self.store.read_frame(self.TABLE_PREDICTIONS)
-        if df.empty:
-            combined = frame.copy()
-        else:
-            combined = pd.concat([df, frame], ignore_index=True)
-        combined = self._dedupe_predictions(combined)
-        self.store.write_frame(self.TABLE_PREDICTIONS, combined)
+        with self.store.locked(self.TABLE_PREDICTIONS):
+            df = self.store.read_frame(self.TABLE_PREDICTIONS)
+            if df.empty:
+                combined = frame.copy()
+            else:
+                combined = pd.concat([df, frame], ignore_index=True)
+            combined = self._dedupe_predictions(combined)
+            self.store.write_frame(self.TABLE_PREDICTIONS, combined)
         return len(frame)
 
     def get_predictions(
@@ -576,20 +582,22 @@ class PortfolioRepository:
         self.store = store
 
     def create_position(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        df = self.store.read_frame(self.TABLE_POSITIONS)
         now = _now_iso()
-        record = {
-            **record,
-            "id": int(record.get("id") or self.store.next_integer_id(self.TABLE_POSITIONS)),
-            "is_active": bool(record.get("is_active", True)),
-            "created_at": _as_iso(record.get("created_at")) or now,
-            "updated_at": _as_iso(record.get("updated_at")) or now,
-        }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_POSITIONS, df)
+        with self.store.locked(self.TABLE_POSITIONS):
+            # id 分配必须在锁内：并发创建时两个进程会拿到同一个 id
+            record = {
+                **record,
+                "id": int(record.get("id") or self.store.next_integer_id(self.TABLE_POSITIONS)),
+                "is_active": bool(record.get("is_active", True)),
+                "created_at": _as_iso(record.get("created_at")) or now,
+                "updated_at": _as_iso(record.get("updated_at")) or now,
+            }
+            df = self.store.read_frame(self.TABLE_POSITIONS)
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_POSITIONS, df)
         return record
 
     def list_positions(self, portfolio_id: str, active_only: bool = True) -> List[Dict[str, Any]]:
@@ -627,37 +635,39 @@ class PortfolioRepository:
         return _record_to_dict(match.iloc[-1])
 
     def deactivate_portfolio(self, portfolio_id: str) -> int:
-        df = self.store.read_frame(self.TABLE_POSITIONS)
-        if df.empty or "portfolio_id" not in df.columns:
-            return 0
-        mask = df["portfolio_id"] == portfolio_id
-        if "is_active" in df.columns:
-            mask &= df["is_active"].fillna(True).astype(bool)
-        count = int(mask.sum())
-        if count == 0:
-            return 0
-        df.loc[mask, "is_active"] = False
-        df.loc[mask, "updated_at"] = _now_iso()
-        self.store.write_frame(self.TABLE_POSITIONS, df)
+        with self.store.locked(self.TABLE_POSITIONS):
+            df = self.store.read_frame(self.TABLE_POSITIONS)
+            if df.empty or "portfolio_id" not in df.columns:
+                return 0
+            mask = df["portfolio_id"] == portfolio_id
+            if "is_active" in df.columns:
+                mask &= df["is_active"].fillna(True).astype(bool)
+            count = int(mask.sum())
+            if count == 0:
+                return 0
+            df.loc[mask, "is_active"] = False
+            df.loc[mask, "updated_at"] = _now_iso()
+            self.store.write_frame(self.TABLE_POSITIONS, df)
         return count
 
     def upsert_position(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        df = self.store.read_frame(self.TABLE_POSITIONS)
         now = _now_iso()
-        record = {
-            **record,
-            "id": int(record.get("id") or self.store.next_integer_id(self.TABLE_POSITIONS)),
-            "is_active": bool(record.get("is_active", True)),
-            "created_at": _as_iso(record.get("created_at")) or now,
-            "updated_at": _as_iso(record.get("updated_at")) or now,
-        }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            if "id" in df.columns:
-                df = df[df["id"] != record["id"]]
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_POSITIONS, df)
+        with self.store.locked(self.TABLE_POSITIONS):
+            record = {
+                **record,
+                "id": int(record.get("id") or self.store.next_integer_id(self.TABLE_POSITIONS)),
+                "is_active": bool(record.get("is_active", True)),
+                "created_at": _as_iso(record.get("created_at")) or now,
+                "updated_at": _as_iso(record.get("updated_at")) or now,
+            }
+            df = self.store.read_frame(self.TABLE_POSITIONS)
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                if "id" in df.columns:
+                    df = df[df["id"] != record["id"]]
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_POSITIONS, df)
         return record
 
     def refresh_prices(self, portfolio_id: str) -> Dict[str, Any]:
@@ -687,11 +697,10 @@ class PortfolioRepository:
         price_map: Dict[str, float] = {}
         try:
             api = create_hq_api()
-            with connected_session(api) as session:
+            with connected_session(api):
                 quotes = api.get_security_quotes(stock_params)
                 if quotes:
                     for quote in quotes:
-                        m = quote.get("market")
                         c = quote.get("code", "")
                         price = quote.get("price")
                         if price and price > 0:
@@ -706,28 +715,29 @@ class PortfolioRepository:
         if not price_map:
             return {"updated": 0, "total": len(positions)}
 
-        # 更新 Parquet
-        df = self.store.read_frame(self.TABLE_POSITIONS)
-        if df.empty or "portfolio_id" not in df.columns:
-            return {"updated": 0, "total": len(positions)}
+        # 更新 Parquet（网络报价获取已在锁外完成，锁只包住读改写）
+        with self.store.locked(self.TABLE_POSITIONS):
+            df = self.store.read_frame(self.TABLE_POSITIONS)
+            if df.empty or "portfolio_id" not in df.columns:
+                return {"updated": 0, "total": len(positions)}
 
-        now = _now_iso()
-        updated = 0
-        for ts_code, new_price in price_map.items():
-            mask = (df["portfolio_id"] == portfolio_id) & (df["ts_code"] == ts_code)
-            if "is_active" in df.columns:
-                mask &= df["is_active"].fillna(True).astype(bool)
-            if not mask.any():
-                continue
-            df.loc[mask, "current_price"] = new_price
-            pos_size = pd.to_numeric(df.loc[mask, "position_size"], errors="coerce").fillna(0)
-            avg_cost = pd.to_numeric(df.loc[mask, "avg_cost"], errors="coerce").fillna(0)
-            df.loc[mask, "market_value"] = pos_size * new_price
-            df.loc[mask, "unrealized_pnl"] = (new_price - avg_cost) * pos_size
-            df.loc[mask, "updated_at"] = now
-            updated += int(mask.sum())
+            now = _now_iso()
+            updated = 0
+            for ts_code, new_price in price_map.items():
+                mask = (df["portfolio_id"] == portfolio_id) & (df["ts_code"] == ts_code)
+                if "is_active" in df.columns:
+                    mask &= df["is_active"].fillna(True).astype(bool)
+                if not mask.any():
+                    continue
+                df.loc[mask, "current_price"] = new_price
+                pos_size = pd.to_numeric(df.loc[mask, "position_size"], errors="coerce").fillna(0)
+                avg_cost = pd.to_numeric(df.loc[mask, "avg_cost"], errors="coerce").fillna(0)
+                df.loc[mask, "market_value"] = pos_size * new_price
+                df.loc[mask, "unrealized_pnl"] = (new_price - avg_cost) * pos_size
+                df.loc[mask, "updated_at"] = now
+                updated += int(mask.sum())
 
-        self.store.write_frame(self.TABLE_POSITIONS, df)
+            self.store.write_frame(self.TABLE_POSITIONS, df)
         return {"updated": updated, "total": len(positions)}
 
     def calculate_metrics(self, portfolio_id: str) -> Dict[str, Any]:
@@ -774,10 +784,7 @@ class BacktestRepository:
         initial_capital: float,
         rebalance_frequency: str,
     ) -> Dict[str, Any]:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        run_id = int(self.store.next_integer_id(self.TABLE_RUNS))
         record = {
-            "id": run_id,
             "strategy_config_json": json.dumps(strategy_config or {}),
             "start_date": start_date,
             "end_date": end_date,
@@ -786,11 +793,16 @@ class BacktestRepository:
             "summary_json": None,
             "created_at": _now_iso(),
         }
-        if df.empty:
-            df = pd.DataFrame([record])
-        else:
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        self.store.write_frame(self.TABLE_RUNS, df)
+        with self.store.locked(self.TABLE_RUNS):
+            # id 分配必须在锁内，避免并发提交拿到同一个 id
+            df = self.store.read_frame(self.TABLE_RUNS)
+            run_id = int(self.store.next_integer_id(self.TABLE_RUNS))
+            record = {"id": run_id, **record}
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE_RUNS, df)
         return {
             "id": run_id,
             "strategy_config": strategy_config or {},
@@ -822,15 +834,56 @@ class BacktestRepository:
         }
 
     def update_summary(self, run_id: int, summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        df = self.store.read_frame(self.TABLE_RUNS)
-        if df.empty or "id" not in df.columns:
-            return None
-        mask = pd.to_numeric(df["id"], errors="coerce") == int(run_id)
-        if not mask.any():
-            return None
-        df.loc[mask, "summary_json"] = json.dumps(summary or {})
-        self.store.write_frame(self.TABLE_RUNS, df)
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            if df.empty or "id" not in df.columns:
+                return None
+            mask = pd.to_numeric(df["id"], errors="coerce") == int(run_id)
+            if not mask.any():
+                return None
+            df.loc[mask, "summary_json"] = json.dumps(summary or {})
+            self.store.write_frame(self.TABLE_RUNS, df)
         return self.get_run(run_id)
+
+    def reap_stale_runs(self, timeout_seconds: float = 7200.0) -> List[Dict[str, Any]]:
+        """把长期停留在 queued/running 的僵尸 run 标记为 failed。
+
+        异步回测线程是 daemon 线程，进程重启时被直接杀死，run 会永远
+        停在 running、前端永远显示"运行中"。以 created_at + 超时判定
+        （默认 2 小时，远大于正常回测时长），轮询接口在读取前调用即可自愈。
+        """
+        reaped: List[Dict[str, Any]] = []
+        with self.store.locked(self.TABLE_RUNS):
+            df = self.store.read_frame(self.TABLE_RUNS)
+            if df.empty or "id" not in df.columns:
+                return []
+            now = now_local()
+            changed = False
+            for idx, row in df.iterrows():
+                summary = _normalize_json(row.get("summary_json")) or {}
+                status = summary.get("status")
+                if status not in {"queued", "running"}:
+                    continue
+                try:
+                    started = datetime.fromisoformat(str(row.get("created_at")))
+                except (TypeError, ValueError):
+                    continue
+                if (now - started).total_seconds() <= timeout_seconds:
+                    continue
+                run_id = int(_to_python_scalar(row["id"]))
+                summary.update({
+                    "status": "failed",
+                    "error": (
+                        f"run 超过 {int(timeout_seconds)} 秒仍处于 {status}，"
+                        "判定为进程中断留下的僵尸任务并强制失败"
+                    ),
+                })
+                df.loc[df.index == idx, "summary_json"] = json.dumps(summary)
+                reaped.append({"id": run_id, "summary": summary})
+                changed = True
+            if changed:
+                self.store.write_frame(self.TABLE_RUNS, df)
+        return reaped
 
     def list_runs(self) -> List[Dict[str, Any]]:
         df = self.store.read_frame(self.TABLE_RUNS)
@@ -859,16 +912,17 @@ class BacktestRepository:
 
     def save_result(self, run_id: int, result: Dict[str, Any]) -> None:
         """保存回测完整结果（同一 run_id 覆盖写入）。"""
-        df = self.store.read_frame(self.TABLE_RESULTS)
-        row = {
-            "run_id": int(run_id),
-            "result_json": json.dumps(result or {}, ensure_ascii=False, default=str),
-            "created_at": _now_iso(),
-        }
-        if not df.empty and "run_id" in df.columns:
-            df = df[pd.to_numeric(df["run_id"], errors="coerce") != int(run_id)]
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        self.store.write_frame(self.TABLE_RESULTS, df)
+        with self.store.locked(self.TABLE_RESULTS):
+            df = self.store.read_frame(self.TABLE_RESULTS)
+            row = {
+                "run_id": int(run_id),
+                "result_json": json.dumps(result or {}, ensure_ascii=False, default=str),
+                "created_at": _now_iso(),
+            }
+            if not df.empty and "run_id" in df.columns:
+                df = df[pd.to_numeric(df["run_id"], errors="coerce") != int(run_id)]
+            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+            self.store.write_frame(self.TABLE_RESULTS, df)
 
     def get_result(self, run_id: int) -> Optional[Dict[str, Any]]:
         df = self.store.read_frame(self.TABLE_RESULTS)

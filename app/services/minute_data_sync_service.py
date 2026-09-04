@@ -286,7 +286,7 @@ class MinuteDataSyncService:
             
             return {
                 'success': True,
-                'message': f'同步完成',
+                'message': '同步完成',
                 'data_count': success_count,
                 'parquet_count': parquet_count,
                 'error_count': error_count,

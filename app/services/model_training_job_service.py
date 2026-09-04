@@ -1,7 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import datetime
-from app.utils.time_utils import now_local, now_local_iso
+from app.utils.time_utils import now_local_iso
 from threading import Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
@@ -12,11 +11,29 @@ from app.services.ml_models import MLModelManager
 class ModelTrainingJobService:
     """Lightweight in-process training job tracker for UI polling."""
 
+    # job_store 只进不出会随长期运行缓慢泄漏；超过上限时按 created_at
+    # 从旧到新淘汰已结束的任务（运行中的不淘汰）
+    MAX_TRACKED_JOBS = 200
+
     def __init__(self, manager: Optional[MLModelManager] = None, job_store: Optional[Dict[str, Dict[str, Any]]] = None):
         self.manager = manager or MLModelManager()
         self.job_store = job_store if job_store is not None else {}
         self._lock = Lock()
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="model-train")
+
+    def _evict_finished_jobs_locked(self) -> None:
+        if len(self.job_store) <= self.MAX_TRACKED_JOBS:
+            return
+        ordered = sorted(
+            self.job_store.items(),
+            key=lambda item: str(item[1].get("created_at") or ""),
+        )
+        finished_states = {"success", "failed", "cancelled"}
+        for stale_id, snapshot in ordered:
+            if len(self.job_store) <= self.MAX_TRACKED_JOBS:
+                break
+            if snapshot.get("status") in finished_states:
+                del self.job_store[stale_id]
 
     def submit_job(self, model_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
         resolved = self.manager.resolve_training_date_range(model_id, start_date, end_date)
@@ -46,6 +63,7 @@ class ModelTrainingJobService:
         }
         with self._lock:
             self.job_store[job_id] = snapshot
+            self._evict_finished_jobs_locked()
         self._executor.submit(self._run_job, job_id, model_id, resolved_start_date, resolved_end_date)
         return deepcopy(snapshot)
 

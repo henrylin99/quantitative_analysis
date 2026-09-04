@@ -3,10 +3,10 @@ from __future__ import annotations
 import contextlib
 import os
 from datetime import datetime
-from app.utils.time_utils import now_local, now_local_iso
+from app.utils.time_utils import now_local
 from app.utils.parquet_writer import atomic_write_parquet
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Optional, Sequence
 
 import pandas as pd
 from loguru import logger

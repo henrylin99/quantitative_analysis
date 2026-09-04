@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from datetime import timedelta
 
 # 加载环境变量
 load_dotenv()

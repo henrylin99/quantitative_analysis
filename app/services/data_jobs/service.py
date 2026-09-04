@@ -1,6 +1,5 @@
 import threading
-from datetime import datetime
-from app.utils.time_utils import now_local, now_local_iso
+from app.utils.time_utils import now_local
 from typing import Any, Dict, Optional
 
 from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore

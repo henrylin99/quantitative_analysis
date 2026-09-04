@@ -7,7 +7,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from app.utils.time_utils import now_local, now_local_iso
+from app.utils.time_utils import now_local_iso
 from typing import List, Dict, Optional
 import logging
 

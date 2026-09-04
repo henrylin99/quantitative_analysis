@@ -62,6 +62,7 @@ export default function DataManagementPage() {
   const [jobError, setJobError] = useState<string | null>(null)
   const [currentRun, setCurrentRun] = useState<DataJobRun | null>(null)
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const syncTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // —— 分钟同步 ——
   const [syncCode, setSyncCode] = useState('000001.SZ')
@@ -103,6 +104,7 @@ export default function DataManagementPage() {
 
   useEffect(() => () => {
     if (pollTimer.current) clearInterval(pollTimer.current)
+    if (syncTimer.current) clearInterval(syncTimer.current)
   }, [])
 
   const currentDef = jobDefs.find((j) => j.job_type === jobType)
@@ -163,7 +165,10 @@ export default function DataManagementPage() {
     setSyncBusy(true)
     setSyncProgress(5)
     appendLog(`开始同步 ${syncCode} ${syncPeriod} ${syncStart} ~ ${syncEnd}`)
-    const timer = setInterval(() => setSyncProgress((p) => Math.min(92, p + Math.random() * 8)), 600)
+    // 挂到 ref 上，卸载时一并清理；局部变量在切页后无人清理，
+    // 会持续对已卸载组件 setState
+    if (syncTimer.current) clearInterval(syncTimer.current)
+    syncTimer.current = setInterval(() => setSyncProgress((p) => Math.min(92, p + Math.random() * 8)), 600)
     try {
       const r = await syncMinuteData({
         ts_code: syncCode,
@@ -179,7 +184,10 @@ export default function DataManagementPage() {
       setSyncProgress(0)
       appendLog(`同步失败：${e instanceof Error ? e.message : '未知错误'}`)
     } finally {
-      clearInterval(timer)
+      if (syncTimer.current) {
+        clearInterval(syncTimer.current)
+        syncTimer.current = null
+      }
       setSyncBusy(false)
     }
   }

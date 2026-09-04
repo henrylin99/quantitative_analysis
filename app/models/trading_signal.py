@@ -3,7 +3,6 @@
 用于存储实时生成的交易信号
 """
 
-from datetime import datetime, timedelta
 from sqlalchemy import Column, String, Float, DateTime, Integer, Index, func, Text
 from app import db
 from app.services.parquet_event_store import ParquetEventStore

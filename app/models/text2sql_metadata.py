@@ -5,8 +5,6 @@ Text2SQL元数据模型
 
 from app.extensions import db
 from app.utils.time_utils import now_local
-from datetime import datetime
-import json
 from app.services.persistence import persist_changes, persist_new, remove_instance
 
 
