@@ -23,7 +23,7 @@ from datetime import datetime
 from app.utils.parquet_writer import parquet_file_lock
 from app.utils.time_utils import now_local_iso
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 from loguru import logger
@@ -830,16 +830,16 @@ class BacktestRepository:
             self.store.write_frame(self.TABLE_RUNS, df)
         return self.get_run(run_id)
 
-    def reap_stale_runs(self, active_run_ids: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
+    def reap_stale_runs(self, is_active: Callable[[int], bool]) -> List[Dict[str, Any]]:
         """把状态停在 queued/running 但已无活跃线程的孤儿 run 标记为 failed。
 
-        active_run_ids: 当前进程内确实在运行的 run id 集合（由
-        backtest_tasks 的注册表提供）。回测线程是 daemon 线程、只随进程
-        退出，因此"在册 = 存活"是精确判活：在册的一律跳过（跑几小时都
-        不会误杀）；不在册且仍处于 queued/running 的只可能是进程中断
-        留下的孤儿。
+        is_active: 判活回调（生产方传 backtest_tasks.is_run_active，即进程
+        内注册表）。回测线程是 daemon 线程、只随进程退出，因此"在册 =
+        存活"是精确判活：在册的一律跳过（跑几小时都不会误杀）；不在册
+        且仍处于 queued/running 的只可能是进程中断留下的孤儿。
+        必填且在表锁内对每个候选逐个复查——调用方先快照再扫描的话，
+        快照之后才提交并在册的 run 会被误清（TOCTOU）。
         """
-        active = {int(run_id) for run_id in (active_run_ids or ())}
         reaped: List[Dict[str, Any]] = []
         with self.store.locked(self.TABLE_RUNS):
             df = self.store.read_frame(self.TABLE_RUNS)
@@ -848,7 +848,7 @@ class BacktestRepository:
             changed = False
             for idx, row in df.iterrows():
                 run_id = int(_to_python_scalar(row["id"]))
-                if run_id in active:
+                if is_active(run_id):
                     continue
                 summary = _normalize_json(row.get("summary_json")) or {}
                 status = summary.get("status")

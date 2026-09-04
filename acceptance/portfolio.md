@@ -20,6 +20,7 @@
 | 支持方法 UI 合约 | tests/ui/test_portfolio_supported_methods_contract.py | module_portfolio |
 | 组合模板 UI 合约 | tests/ui/test_portfolio_template_contract.py | module_portfolio |
 | 组合库合约 | tests/services/test_portfolio_repository_contract.py | module_portfolio |
+| QP 求解器回退合约 | tests/services/test_quality_fix_contracts.py | module_portfolio |
 
 ## 数值软目标（M4 里程碑 review 时人工确认）
 - 权重之和 = 1.0（误差 < 1e-6）
