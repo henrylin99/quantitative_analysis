@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 from pathlib import Path
 
@@ -12,7 +11,11 @@ try:
 except ImportError:  # Windows 无 fcntl，锁退化为无操作（单机单进程场景仍安全）
     fcntl = None
 
-from app.utils.parquet_writer import atomic_write_parquet
+from app.utils.parquet_writer import (
+    atomic_write_parquet,
+    parquet_file_lock,
+    quarantine_corrupt_parquet,
+)
 
 
 class MinuteParquetStore:
@@ -84,27 +87,13 @@ class MinuteParquetStore:
         try:
             return pd.read_parquet(parquet_path)
         except Exception as exc:
-            # 坏文件不能静默当空表：合并写入会把该分区既有数据覆盖掉。
-            # 改名隔离保留现场，从空分区重新累积
-            quarantine = parquet_path.with_name(f"{parquet_path.name}.corrupt.{os.getpid()}")
-            try:
-                parquet_path.rename(quarantine)
-                logger.error(
-                    f"分钟 parquet 损坏，已隔离待人工检查: {parquet_path} -> {quarantine}: {exc}"
-                )
-            except OSError:
-                logger.error(f"读取分钟 parquet 失败且无法隔离 {parquet_path}: {exc}")
+            # 坏文件不能静默当空表：合并写入会把该分区既有数据覆盖掉
+            quarantine_corrupt_parquet(
+                parquet_path,
+                lambda msg, err=exc: logger.error(f"分钟 {msg}: {err}"),
+            )
             return pd.DataFrame()
 
-    @contextlib.contextmanager
     def _partition_lock(self, parquet_path: Path):
         lock_path = parquet_path.with_name(f"{parquet_path.name}.lock")
-        fh = open(lock_path, "a+")
-        try:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            fh.close()
+        return parquet_file_lock(lock_path)

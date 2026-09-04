@@ -1745,12 +1745,13 @@ def run_backtest():
         mode = str(data.get('mode') or 'sync').lower()
 
         if mode == 'async':
-            # 提交前先清理进程中断留下的僵尸 run（线程随进程退出被杀，
-            # run 会永远停在 running）
+            # 进程启动后首次异步提交时，全量清理上个进程中断留下的孤儿
+            # run（本进程的活跃 run 由注册表保护，不会被误清理）
+            from app.tasks.backtest_tasks import reap_orphans_once
             try:
-                _backtest_repo.reap_stale_runs()
+                reap_orphans_once()
             except Exception as exc:
-                logger.warning(f"清理僵尸回测 run 失败: {exc}")
+                logger.warning(f"清理孤儿回测 run 失败: {exc}")
             run = _backtest_repo.create_run(
                 strategy_config=strategy_config,
                 start_date=start_date,
@@ -1802,12 +1803,19 @@ def run_backtest():
 def get_backtest_run(run_id):
     """获取回测运行记录"""
     try:
-        # 轮询时顺带自愈：超时仍在 running 的僵尸 run 标记为 failed
-        try:
-            _backtest_repo.reap_stale_runs()
-        except Exception as exc:
-            logger.warning(f"清理僵尸回测 run 失败: {exc}")
+        from app.tasks.backtest_tasks import is_run_active
         run = _backtest_repo.get_run(run_id)
+        # 轮询顺带自愈：状态仍是 queued/running 但本进程注册表里没有对应
+        # 线程，说明是进程中断留下的孤儿，定点标记 failed。
+        # 只查注册表（O(1)），不持全表锁、不做全表扫描
+        if run and run.get('summary', {}).get('status') in ('queued', 'running')                 and not is_run_active(run_id):
+            summary = dict(run.get('summary') or {})
+            summary.update({
+                'status': 'failed',
+                'error': '回测线程已不存在（进程可能中断或重启），标记为失败',
+            })
+            _backtest_repo.update_summary(run_id, summary)
+            run = _backtest_repo.get_run(run_id)
         if run is None:
             return jsonify({'error': '回测记录不存在'}), 404
         return jsonify({

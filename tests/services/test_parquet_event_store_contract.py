@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 
 from app.services.parquet_event_store import ParquetEventStore
 

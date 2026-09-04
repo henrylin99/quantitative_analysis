@@ -261,6 +261,12 @@ class FactorEngine:
         'winner_rate_change': ['cyq'],
     }
 
+    # 交易日窗口 → 日历日预热窗的换算系数：252 交易日/365 日历日 ≈ 1.45，
+    # 取 1.6 留出节假日与数据缺口的余量（portfolio_optimizer 的风险模型
+    # 回看换算同口径）；PREHEAT_BUFFER_DAYS 是窗口末端对齐余量
+    CALENDAR_DAYS_PER_TRADING_DAY = 1.6
+    PREHEAT_BUFFER_DAYS = 30
+
     # 数据源 → (reader 方法名, 是否需要一年预热窗, 是否按 ts_codes 全量读取)
     DATA_SOURCE_LOADERS = {
         'return_prices': ('get_return_prices', True, False),
@@ -875,7 +881,10 @@ class FactorEngine:
             lookback_days = 252
             max_window = self.expression_engine.extract_max_rolling_window(formula)
             if max_window:
-                needed_days = int(max_window * 1.6) + 30
+                needed_days = (
+                    int(max_window * self.CALENDAR_DAYS_PER_TRADING_DAY)
+                    + self.PREHEAT_BUFFER_DAYS
+                )
                 if needed_days > lookback_days:
                     logger.info(
                         f"自定义因子 {factor_id} rolling 窗口 {max_window}，"
@@ -919,7 +928,13 @@ class FactorEngine:
             if not result_list:
                 return pd.DataFrame()
 
-            return pd.concat(result_list, ignore_index=True).dropna(subset=["factor_value"])
+            combined = pd.concat(result_list, ignore_index=True)
+            # 表达式里的除零（如 1/close、a/(b-c)）会产生 inf，与内置因子
+            # _finalize_factor_result 同一处理：清洗掉，避免污染截面 z_score
+            combined["factor_value"] = pd.to_numeric(
+                combined["factor_value"], errors="coerce"
+            ).replace([np.inf, -np.inf], np.nan)
+            return combined.dropna(subset=["factor_value"])
 
         except Exception as e:
             logger.error(f"计算自定义因子失败: {factor_id}, 错误: {e}")

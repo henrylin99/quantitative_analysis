@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-import contextlib
 import os
 from datetime import datetime
 from app.utils.time_utils import now_local
-from app.utils.parquet_writer import atomic_write_parquet
+from app.utils.parquet_writer import (
+    atomic_write_parquet,
+    parquet_file_lock,
+    quarantine_corrupt_parquet,
+)
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
 import pandas as pd
 from loguru import logger
-
-try:
-    import fcntl
-except ImportError:  # Windows 无 fcntl，锁退化为无操作（单机单进程场景仍安全）
-    fcntl = None
 
 
 class ParquetEventStore:
@@ -29,7 +27,6 @@ class ParquetEventStore:
         self.base_dir = Path(base_dir) / "realtime_events"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    @contextlib.contextmanager
     def locked(self, event_type: str):
         """以独占文件锁包裹一段 read-modify-write。
 
@@ -40,15 +37,7 @@ class ParquetEventStore:
         内部路径一律调用 *_unlocked 变体。
         """
         lock_path = self._event_dir(event_type) / f"{event_type}.lock"
-        fh = open(lock_path, "a+")
-        try:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            fh.close()
+        return parquet_file_lock(lock_path)
 
     def _event_dir(self, event_type: str) -> Path:
         path = self.base_dir / event_type
@@ -90,17 +79,11 @@ class ParquetEventStore:
             return pd.read_parquet(path)
         except Exception as exc:
             # 关键：坏文件不能既吞掉异常又返回空表——上层的读改写会把
-            # 空表当真，concat 后把这个分区的既有数据整个覆盖掉。
-            # 把坏文件改名保留现场并大声报错，让写入路径从"空分区"起步
-            # 而不是静默清库
-            quarantine = path.with_name(f"{path.name}.corrupt.{os.getpid()}")
-            try:
-                path.rename(quarantine)
-                logger.error(
-                    f"实时事件 parquet 损坏，已隔离待人工检查: {path} -> {quarantine}: {exc}"
-                )
-            except OSError:
-                logger.error(f"读取实时事件 parquet 失败且无法隔离 {path}: {exc}")
+            # 空表当真，concat 后把这个分区的既有数据整个覆盖掉
+            quarantine_corrupt_parquet(
+                path,
+                lambda msg, err=exc: logger.error(f"实时事件 {msg}: {err}"),
+            )
             return pd.DataFrame()
 
     def _read_event_frame(self, event_type: str) -> pd.DataFrame:
@@ -526,10 +509,6 @@ class ParquetEventStore:
                 frame.loc[mask, "updated_at"] = now_local()
                 self._rewrite_event_frame_unlocked("signals", frame)
         return expired_count
-
-    def _rewrite_event_frame(self, event_type: str, frame: pd.DataFrame) -> None:
-        with self.locked(event_type):
-            self._rewrite_event_frame_unlocked(event_type, frame)
 
     def _rewrite_event_frame_unlocked(self, event_type: str, frame: pd.DataFrame) -> None:
         """整表重写：先按日期整分区替换，再删除多余分区。

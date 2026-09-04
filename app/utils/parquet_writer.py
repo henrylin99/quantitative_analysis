@@ -5,11 +5,18 @@ Parquet 分区写入工具。
     {data_dir}/{table}/year=YYYY/month=MM/day=DD/data.parquet
 """
 
+import contextlib
 import os
-from typing import Optional
+from pathlib import Path
+from typing import Callable, Optional
 
 import pandas as pd
 from loguru import logger
+
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl，锁退化为无操作（单机单进程场景仍安全）
+    fcntl = None
 
 
 def _data_root(data_dir: Optional[str]) -> str:
@@ -19,6 +26,43 @@ def _data_root(data_dir: Optional[str]) -> str:
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
         )
     return data_dir
+
+
+@contextlib.contextmanager
+def parquet_file_lock(lock_path):
+    """以独占文件锁包裹一段 read-modify-write，跨进程互斥。
+
+    所有 Parquet 状态库/事件库的读改写共用此原语。flock 按打开的文件
+    描述互斥，进程内多线程同样生效；Windows 无 fcntl 时退化为无操作。
+    注意：不要在同一线程内对同一 lock_path 重入（会死锁）。
+    """
+    Path(lock_path).parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "a+")
+    try:
+        if fcntl is not None:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if fcntl is not None:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        fh.close()
+
+
+def quarantine_corrupt_parquet(path, log: Callable[[str], None]) -> None:
+    """坏分区文件改名隔离并大声报错。
+
+    读取失败若只 warning + 返回空表，上层的读改写会把空表当真，
+    concat 后把这个分区的既有数据整个覆盖掉。改名保留现场后，
+    写入路径从"空分区"重新累积而不是静默清库。
+    """
+    path = Path(path)
+    quarantine = path.with_name(f"{path.name}.corrupt.{os.getpid()}")
+    try:
+        path.rename(quarantine)
+        log(f"parquet 文件损坏，已隔离待人工检查: {path} -> {quarantine}")
+    except OSError as exc:
+        log(f"parquet 文件损坏且无法隔离 {path}: {exc}")
+
 
 
 def atomic_write_parquet(df: pd.DataFrame, path: str) -> None:

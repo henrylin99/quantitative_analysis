@@ -426,7 +426,11 @@ class BacktestEngine:
                 )
                 
                 if 'error' in result:
-                    # 如果优化失败，使用等权重
+                    # 优化失败退回等权必须留痕：用户选了 mean_variance 实际
+                    # 跑的是等权，静默降级会让归因分析建立在错误前提上
+                    logger.warning(
+                        f"组合优化失败，调仓日 {as_of_date} 退回等权: {result.get('error')}"
+                    )
                     weight = 1.0 / len(selected_stocks)
                     return {stock['ts_code']: weight for stock in selected_stocks}
                 

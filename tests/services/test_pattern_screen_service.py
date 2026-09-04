@@ -1,6 +1,6 @@
 """PatternScreenService unit tests."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pandas as pd
 import numpy as np
 

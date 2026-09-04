@@ -1,7 +1,5 @@
 """风险预警推送合约：推送字段必须与 RiskAlert 模型对齐（历史 bug：字段名
 错位导致第一条预警就 AttributeError，推送链路整体失效）。"""
-import pandas as pd
-import pytest
 
 from app.services import websocket_push_service as wps
 from app.services.websocket_push_service import WebSocketPushService

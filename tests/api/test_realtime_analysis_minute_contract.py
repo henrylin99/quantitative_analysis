@@ -1,5 +1,4 @@
 from datetime import datetime
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
