@@ -80,9 +80,20 @@ export default function RtSignalsPage() {
 
   const refreshMonitor = async () => {
     setMonBusy(true)
-    setSignals(await fetchActiveSignals(50, monCode || undefined, monStrategy || undefined))
-    setStats(await fetchSignalStats())
-    setMonBusy(false)
+    try {
+      const [nextSignals, nextStats] = await Promise.all([
+        fetchActiveSignals(50, monCode || undefined, monStrategy || undefined),
+        fetchSignalStats(),
+      ])
+      setSignals(nextSignals)
+      setStats(nextStats)
+    } catch (err) {
+      console.error('刷新信号监控失败', err)
+      setSignals([])
+      setStats(null)
+    } finally {
+      setMonBusy(false)
+    }
   }
 
   const runGenerate = async () => {

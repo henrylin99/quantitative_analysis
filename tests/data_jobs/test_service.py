@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import patch
+import threading
 
 import pytest
 
@@ -25,15 +26,20 @@ class DummyStore:
         return run
 
 
-def test_submit_creates_run_and_runs_task_inline_by_default():
-    """去 Celery 后默认本地执行：submit 同步调任务而非 .delay 入队。"""
+def test_submit_creates_run_and_dispatches_task_in_background_thread():
+    """去 Celery 后默认本地执行：submit 开后台线程跑任务，立即返回 queued。"""
     store = DummyStore()
     service = DataJobService(state_store=store)
+    started = threading.Event()
 
-    with patch("app.services.data_jobs.service.run_data_job") as task:
+    def _fake_task(run_id):
+        started.set()
+        return {"run_id": run_id, "status": "success"}
+
+    with patch("app.services.data_jobs.service.run_data_job", side_effect=_fake_task):
         run = service.submit("stock_basic", {})
 
-    task.assert_called_once_with(run.id)
+    assert started.wait(timeout=5), "后台线程未在时限内执行任务"
     assert run.status == "queued"
     assert store.updated is True
 

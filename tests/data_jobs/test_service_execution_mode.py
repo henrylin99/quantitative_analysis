@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+import threading
 
 import pytest
 
@@ -31,10 +32,16 @@ class _InlineStore:
 def test_submit_runs_inline_when_execution_mode_is_inline():
     store = _InlineStore()
     task = MagicMock()
+    started = threading.Event()
+    main_return_checked = threading.Event()
 
     def _run_inline(run_id):
         assert run_id == store.run.id
+        # 等 main 断言完 "submit 立即返回 queued" 再改状态，
+        # 否则共享的 run 对象可能在断言前就被线程改成 success
+        main_return_checked.wait(timeout=5)
         store.run.status = "success"
+        started.set()
         return {"run_id": run_id, "status": "success"}
 
     task.side_effect = _run_inline
@@ -45,6 +52,9 @@ def test_submit_runs_inline_when_execution_mode_is_inline():
     with patch("app.services.data_jobs.service.run_data_job", task):
         run = service.submit("stock_basic", {})
 
-    task.assert_called_once_with(run.id)
+    # inline 任务在后台线程执行：submit 立即返回 queued，不阻塞请求
+    assert run.status == "queued"
+    main_return_checked.set()
+    assert started.wait(timeout=5), "后台线程未在时限内执行任务"
     task.delay.assert_not_called()
-    assert run.status == "success"
+    assert store.run.status == "success"

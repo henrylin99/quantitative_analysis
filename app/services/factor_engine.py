@@ -265,7 +265,9 @@ class FactorEngine:
     # 数据源 → (reader 方法名, 是否需要一年预热窗, 是否按 ts_codes 全量读取)
     DATA_SOURCE_LOADERS = {
         'return_prices': ('get_return_prices', True, False),
-        'daily_basic': ('get_daily_basic', False, False),
+        # daily_basic 供 pe/pb/ps_percentile 做 252 日滚动分位，必须带预热窗，
+        # 否则单日截面下每股只有 1 个观测，因子恒为空
+        'daily_basic': ('get_daily_basic', True, False),
         'moneyflow': ('get_moneyflow', True, False),
         'cyq': ('get_cyq_perf', True, False),
         'income': ('get_income_statement', False, True),
@@ -318,6 +320,12 @@ class FactorEngine:
         """统一因子输出 schema：ts_code, trade_date, factor_id, factor_value"""
         result = df.rename(columns={value_col: "factor_value"})
         result["factor_id"] = factor_id
+        # 资金流/筹码类因子的分母可能为 0，除零产生 inf；inf 入库会把
+        # 当日截面 z_score 的 mean 拉成 inf，全截面统计作废，统一按缺失处理
+        if pd.api.types.is_numeric_dtype(result["factor_value"]):
+            result["factor_value"] = result["factor_value"].replace(
+                [np.inf, -np.inf], np.nan
+            )
         return result[["ts_code", "trade_date", "factor_id", "factor_value"]].dropna(
             subset=["factor_value"]
         )

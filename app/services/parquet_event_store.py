@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import contextlib
 import os
 from datetime import datetime
 from app.utils.time_utils import now_local, now_local_iso
+from app.utils.parquet_writer import atomic_write_parquet
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 from loguru import logger
+
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl，锁退化为无操作（单机单进程场景仍安全）
+    fcntl = None
 
 
 class ParquetEventStore:
@@ -21,6 +28,27 @@ class ParquetEventStore:
             )
         self.base_dir = Path(base_dir) / "realtime_events"
         self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    @contextlib.contextmanager
+    def locked(self, event_type: str):
+        """以独占文件锁包裹一段 read-modify-write。
+
+        信号/指标引擎、推送服务、API 路由各自持有独立的 store 实例，
+        可能并发读改写同一事件分区；flock 保证同一时刻只有一个
+        持有者在写（flock 按打开的文件描述互斥，进程内多线程同样生效）。
+        注意：不要在 locked 内再进入同一 event_type 的 locked（同进程会重入死锁），
+        内部路径一律调用 *_unlocked 变体。
+        """
+        lock_path = self._event_dir(event_type) / f"{event_type}.lock"
+        fh = open(lock_path, "a+")
+        try:
+            if fcntl is not None:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            fh.close()
 
     def _event_dir(self, event_type: str) -> Path:
         path = self.base_dir / event_type
@@ -61,7 +89,18 @@ class ParquetEventStore:
         try:
             return pd.read_parquet(path)
         except Exception as exc:
-            logger.warning(f"读取实时事件 parquet 失败 {path}: {exc}")
+            # 关键：坏文件不能既吞掉异常又返回空表——上层的读改写会把
+            # 空表当真，concat 后把这个分区的既有数据整个覆盖掉。
+            # 把坏文件改名保留现场并大声报错，让写入路径从"空分区"起步
+            # 而不是静默清库
+            quarantine = path.with_name(f"{path.name}.corrupt.{os.getpid()}")
+            try:
+                path.rename(quarantine)
+                logger.error(
+                    f"实时事件 parquet 损坏，已隔离待人工检查: {path} -> {quarantine}: {exc}"
+                )
+            except OSError:
+                logger.error(f"读取实时事件 parquet 失败且无法隔离 {path}: {exc}")
             return pd.DataFrame()
 
     def _read_event_frame(self, event_type: str) -> pd.DataFrame:
@@ -84,6 +123,12 @@ class ParquetEventStore:
         return frame
 
     def _write_event_frame(self, event_type: str, frame: pd.DataFrame) -> int:
+        with self.locked(event_type):
+            return self._write_event_frame_unlocked(event_type, frame, merge_existing=True)
+
+    def _write_event_frame_unlocked(
+        self, event_type: str, frame: pd.DataFrame, merge_existing: bool = True
+    ) -> int:
         if frame is None or frame.empty:
             return 0
 
@@ -97,7 +142,7 @@ class ParquetEventStore:
         for date_value, day_frame in frame.groupby(frame["datetime"].dt.date):
             path = self._partition_path(event_type, datetime.combine(date_value, datetime.min.time()))
             path.parent.mkdir(parents=True, exist_ok=True)
-            if path.is_file():
+            if merge_existing and path.is_file():
                 existing = self._read_partition(path)
                 combined = pd.concat([existing, day_frame], ignore_index=True)
             else:
@@ -149,7 +194,9 @@ class ParquetEventStore:
             if sort_cols:
                 combined = combined.sort_values(sort_cols).reset_index(drop=True)
 
-            combined.to_parquet(path, index=False)
+            # 原子替换：写一半崩溃时读者要么看到旧文件要么看到完整新文件，
+            # 不会留下半个 parquet 再被 _read_partition 当损坏文件隔离
+            atomic_write_parquet(combined, str(path))
             total_rows += len(day_frame)
         return total_rows
 
@@ -288,12 +335,13 @@ class ParquetEventStore:
 
     def cleanup_old_indicators(self, days_to_keep: int = 30) -> int:
         cutoff = now_local() - pd.Timedelta(days=days_to_keep)
-        frame = self._read_event_frame("indicators")
-        if frame.empty or "datetime" not in frame.columns:
-            return 0
-        keep = frame[pd.to_datetime(frame["datetime"], errors="coerce") >= cutoff]
-        removed = len(frame) - len(keep)
-        self._rewrite_event_frame("indicators", keep)
+        with self.locked("indicators"):
+            frame = self._read_event_frame("indicators")
+            if frame.empty or "datetime" not in frame.columns:
+                return 0
+            keep = frame[pd.to_datetime(frame["datetime"], errors="coerce") >= cutoff]
+            removed = len(frame) - len(keep)
+            self._rewrite_event_frame_unlocked("indicators", keep)
         return removed
 
     def get_active_signals(
@@ -442,53 +490,76 @@ class ParquetEventStore:
         executed_price: Optional[float] = None,
         profit_loss: Optional[float] = None,
     ) -> bool:
-        frame = self._read_event_frame("signals")
-        if frame.empty or "id" not in frame.columns:
-            return False
-        mask = frame["id"] == signal_id
-        if not mask.any():
-            return False
-        now = now_local()
-        frame.loc[mask, "status"] = status
-        frame.loc[mask, "updated_at"] = now
-        if executed_price is not None:
-            frame.loc[mask, "executed_price"] = executed_price
-            frame.loc[mask, "executed_time"] = now
-        if profit_loss is not None:
-            frame.loc[mask, "profit_loss"] = profit_loss
-            if "trigger_price" in frame.columns:
-                trigger = pd.to_numeric(frame.loc[mask, "trigger_price"], errors="coerce")
-                frame.loc[mask, "profit_loss_pct"] = (profit_loss / trigger) * 100
-        self._rewrite_event_frame("signals", frame)
+        with self.locked("signals"):
+            frame = self._read_event_frame("signals")
+            if frame.empty or "id" not in frame.columns:
+                return False
+            mask = frame["id"] == signal_id
+            if not mask.any():
+                return False
+            now = now_local()
+            frame.loc[mask, "status"] = status
+            frame.loc[mask, "updated_at"] = now
+            if executed_price is not None:
+                frame.loc[mask, "executed_price"] = executed_price
+                frame.loc[mask, "executed_time"] = now
+            if profit_loss is not None:
+                frame.loc[mask, "profit_loss"] = profit_loss
+                if "trigger_price" in frame.columns:
+                    trigger = pd.to_numeric(frame.loc[mask, "trigger_price"], errors="coerce")
+                    frame.loc[mask, "profit_loss_pct"] = (profit_loss / trigger) * 100
+            self._rewrite_event_frame_unlocked("signals", frame)
         return True
 
     def expire_old_signals(self, hours: int = 24) -> int:
-        frame = self._read_event_frame("signals")
-        if frame.empty or "datetime" not in frame.columns:
-            return 0
-        cutoff = now_local() - pd.Timedelta(hours=hours)
-        mask = pd.to_datetime(frame["datetime"], errors="coerce") < cutoff
-        if "status" in frame.columns:
-            mask = mask & (frame["status"].fillna("") == "ACTIVE")
-        expired_count = int(mask.sum())
-        if expired_count:
-            frame.loc[mask, "status"] = "EXPIRED"
-            frame.loc[mask, "updated_at"] = now_local()
-            self._rewrite_event_frame("signals", frame)
+        with self.locked("signals"):
+            frame = self._read_event_frame("signals")
+            if frame.empty or "datetime" not in frame.columns:
+                return 0
+            cutoff = now_local() - pd.Timedelta(hours=hours)
+            mask = pd.to_datetime(frame["datetime"], errors="coerce") < cutoff
+            if "status" in frame.columns:
+                mask = mask & (frame["status"].fillna("") == "ACTIVE")
+            expired_count = int(mask.sum())
+            if expired_count:
+                frame.loc[mask, "status"] = "EXPIRED"
+                frame.loc[mask, "updated_at"] = now_local()
+                self._rewrite_event_frame_unlocked("signals", frame)
         return expired_count
 
     def _rewrite_event_frame(self, event_type: str, frame: pd.DataFrame) -> None:
+        with self.locked(event_type):
+            self._rewrite_event_frame_unlocked(event_type, frame)
+
+    def _rewrite_event_frame_unlocked(self, event_type: str, frame: pd.DataFrame) -> None:
+        """整表重写：先按日期整分区替换，再删除多余分区。
+
+        旧实现先 unlink 全部分区再重写，中途崩溃会把该事件类型的全部
+        历史清空。改为"先写新、后删旧"后，任意时刻崩溃最多留下
+        新旧混合的完整分区，不会丢数据。
+        """
         root = self._event_dir(event_type)
+
+        keep_days = set()
+        if frame is not None and not frame.empty:
+            normalized = frame.copy()
+            normalized["datetime"] = pd.to_datetime(normalized["datetime"], errors="coerce")
+            normalized = normalized.dropna(subset=["datetime"])
+            if not normalized.empty:
+                keep_days = set(normalized["datetime"].dt.date)
+                self._write_event_frame_unlocked(event_type, normalized, merge_existing=False)
+
+        # 只清理本次重写范围内不再存在的旧分区；重写为空（全部过期）时才全删
         for path in root.glob("year=*/month=*/day=*/data.parquet"):
+            parts = {p.split("=")[0]: p.split("=")[1] for p in path.parts if "=" in p}
             try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-        if frame.empty:
-            return
-        frame = frame.copy()
-        frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
-        frame = frame.dropna(subset=["datetime"])
-        if frame.empty:
-            return
-        self._write_event_frame(event_type, frame)
+                day = datetime(
+                    int(parts["year"]), int(parts["month"]), int(parts["day"])
+                ).date()
+            except (KeyError, ValueError):
+                continue
+            if day not in keep_days:
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass

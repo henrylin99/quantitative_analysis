@@ -152,6 +152,12 @@ class StockScoringEngine:
         """因子权重评分"""
         # 确保权重归一化
         total_weight = sum(weights.values())
+        if total_weight == 0:
+            # 正负权重恰好抵消时除零会被外层 except 吞掉、选股静默为空，
+            # 这里显式报错让调用方看到原因
+            raise ValueError(
+                f"因子权重之和为 0，无法归一化: {weights}；请调整权重配置（如 1/-1 等额对冲）"
+            )
         normalized_weights = {k: v / total_weight for k, v in weights.items()}
         
         # 计算加权分数

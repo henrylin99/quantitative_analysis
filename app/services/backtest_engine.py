@@ -79,6 +79,17 @@ class BacktestEngine:
             # 完整交易日历，用于把信号日的调仓推迟到下一个交易日执行
             calendar_dates = self.data_reader.get_trade_dates(start_date, end_date)
 
+            # 前置校验：交易日历为空时主循环零次执行，净值会兜底成
+            # "初始资金 + 0% 收益"的假结果，必须在入口挡住
+            if not trade_dates or not calendar_dates:
+                error = (
+                    f"区间 {start_date}~{end_date} 无法生成交易日历"
+                    f"（rebalance_frequency={rebalance_frequency}），"
+                    "请检查本地行情数据的日期覆盖"
+                )
+                logger.error(f"回测前置校验失败: {error}")
+                return {'error': error}
+
             # 前置校验：因子值缺失会让选股为空、日期被静默跳过，
             # 回测照常出指标——这种"看起来正常的假结果"必须在入口挡住
             coverage_error = self._check_factor_coverage(strategy_config, trade_dates)
@@ -1016,8 +1027,16 @@ class BacktestEngine:
                     ts_codes=[code], start_date=start_date, end_date=end_date
                 )
                 if not df.empty:
+                    if code != benchmark_code:
+                        # 基准被静默替换后 alpha/beta/IR 全部相对错误基准计算，
+                        # 必须让用户在日志里看到口径变了
+                        logger.warning(
+                            f"基准 {benchmark_code} 在 {start_date}~{end_date} 无行情数据，"
+                            f"降级使用 {code} 计算相对指标，口径与所选基准不一致"
+                        )
                     break
             else:
+                logger.warning(f"所有候选基准均无数据，相对基准指标将缺失: {benchmark_codes}")
                 return []
 
             if df.empty:
