@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
-import json
 from loguru import logger
 
 from app.services.factor_engine import FactorEngine
@@ -502,7 +500,12 @@ class BacktestEngine:
                 hfq_pivot = hfq_pivot.reindex(adj_close.index)
                 coverage = hfq_pivot.notna().mean()
                 for ts_code in coverage[coverage >= 0.5].index:
-                    adj_close[ts_code] = hfq_pivot[ts_code].ffill()
+                    series = hfq_pivot[ts_code].ffill()
+                    # 头部缺失（hfq 数据晚于行情起始日）用真实价兜底，等价于
+                    # 该窗口按不复权口径（k=1）估值；直接留 NaN 会让这些日期
+                    # 的持仓在 _build_daily_nav 里取不到价、被按 0 估值
+                    series = series.fillna(real_close[ts_code])
+                    adj_close[ts_code] = series
 
         # 换算比例 k = 真实价 / 复权价（即复权因子的倒数）；
         # 无价格的日期按不调整（k=1）处理

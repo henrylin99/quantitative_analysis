@@ -1,10 +1,8 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from typing import List, Dict, Any, Optional
 from loguru import logger
 
-from app.extensions import db
 from app.services.data_reader import ParquetDataReader
 from app.services.parquet_state_store import FactorRepository, ParquetStateStore
 from app.services.parquet_state_store import ModelRepository

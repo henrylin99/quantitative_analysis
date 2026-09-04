@@ -6,7 +6,7 @@
 import json
 import requests
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from flask import current_app
 
 logger = logging.getLogger(__name__)

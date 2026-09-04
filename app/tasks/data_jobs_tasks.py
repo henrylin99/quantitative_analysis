@@ -1,3 +1,5 @@
+from loguru import logger
+
 from app import create_app
 from app.celery_app import celery
 from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
@@ -42,7 +44,7 @@ def run_data_job(run_id: int):
             registry = _build_registry()
             try:
                 definition = registry.get_job(run.job_type)
-            except KeyError as exc:
+            except KeyError:
                 run.error_message = f"未注册的任务类型: {run.job_type}"
                 store.update_run_status(run, "failed", progress=100.0,
                                         error_message=run.error_message,
@@ -102,6 +104,7 @@ def run_data_job(run_id: int):
                                             error_message=run.error_message,
                                             progress_message="任务异常终止")
                     store.save_run(run)
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                # 状态落盘本身失败时 run 会卡在 running 且无现场，至少留日志
+                logger.error(f"任务 {run_id} 异常后的 failed 落盘也失败: {cleanup_exc}（原始异常: {exc}）")
             return {"run_id": run_id, "status": "failed", "error": str(exc)}

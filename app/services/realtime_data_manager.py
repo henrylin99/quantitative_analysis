@@ -5,10 +5,9 @@
 """
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import logging
 import pandas as pd
-from app.extensions import db
 from app.services.minute_data_sync_service import MinuteDataSyncService
 from app.services.tongdaxin_minute_sync_service import TongdaxinMinuteSyncService
 from app.services.data_reader import ParquetDataReader
@@ -235,44 +234,8 @@ class RealtimeDataManager:
         if data_source:
             return str(data_source).strip().lower()
         return 'baostock' if use_baostock else 'tongdaxin'
-    
-    def _convert_to_model_format(self, df: pd.DataFrame, ts_code: str, period_type: str) -> List[Dict]:
-        """
-        将数据源格式转换为模型格式
-        """
-        data_list = []
-        
-        for _, row in df.iterrows():
-            # 构造完整的datetime
-            trade_date = str(row['trade_date'])
-            trade_time = str(row['trade_time']).zfill(4)  # 确保4位数
-            
-            dt_str = f"{trade_date} {trade_time[:2]}:{trade_time[2:]}:00"
-            dt = datetime.strptime(dt_str, '%Y%m%d %H:%M:%S')
-            
-            # 计算涨跌幅等指标
-            pre_close = row.get('pre_close', row['open'])
-            change = row['close'] - pre_close
-            pct_chg = (change / pre_close * 100) if pre_close > 0 else 0
-            
-            data_list.append({
-                'ts_code': ts_code,
-                'datetime': dt,
-                'period_type': period_type,
-                'open': row['open'],
-                'high': row['high'],
-                'low': row['low'],
-                'close': row['close'],
-                'volume': row['vol'],
-                'amount': row['amount'],
-                'pre_close': pre_close,
-                'change': change,
-                'pct_chg': pct_chg
-            })
-        
-        return data_list
-    
-    def aggregate_data(self, ts_code: str, source_period: str = '1min', target_period: str = '5min', 
+
+    def aggregate_data(self, ts_code: str, source_period: str = '1min', target_period: str = '5min',
                       start_date: str = None, end_date: str = None) -> Dict:
         """
         数据聚合：将小周期数据聚合为大周期数据

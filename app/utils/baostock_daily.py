@@ -4,7 +4,6 @@
 # 如需恢复，先接入 resolve_trade_dates 并确认下游消费方。
 import baostock as bs
 import pandas as pd
-from datetime import datetime
 
 from parquet_job_helpers import get_stock_codes
 from parquet_writer import save_partitioned_parquet
@@ -35,7 +34,7 @@ def main():
         print("[baostock_daily] stock_basic.parquet is empty, skip.")
         return
 
-    lg = bs.login()
+    bs.login()
     try:
         frames = []
         for ts_code in stock_list:

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from loguru import logger
 import cvxpy as cp
@@ -111,7 +111,19 @@ class PortfolioOptimizer:
             logger.error(f"组合优化失败: {method}, 错误: {e}")
             return {'error': str(e)}
     
-    def _mean_variance_optimization(self, expected_returns: pd.Series, 
+    # 均值方差二次规划的求解器偏好：ECOS 已从 cvxpy 1.5+ 移除捆绑，
+    # 指定 cp.ECOS 会直接 SolverError；改为按安装情况依次回退
+    MVP_SOLVER_PREFERENCE = ("CLARABEL", "SCS", "OSQP")
+
+    @classmethod
+    def _resolve_qp_solver(cls):
+        installed = set(cp.installed_solvers())
+        for name in cls.MVP_SOLVER_PREFERENCE:
+            if name in installed:
+                return getattr(cp, name)
+        return None  # 未匹配时交给 cvxpy 默认选择
+
+    def _mean_variance_optimization(self, expected_returns: pd.Series,
                                    risk_model: pd.DataFrame,
                                    constraints: Dict[str, Any] = None) -> pd.Series:
         """均值-方差优化"""
@@ -154,7 +166,11 @@ class PortfolioOptimizer:
             
             # 求解优化问题
             problem = cp.Problem(objective, constraints_list)
-            problem.solve(solver=cp.ECOS)
+            solver = self._resolve_qp_solver()
+            if solver is not None:
+                problem.solve(solver=solver)
+            else:
+                problem.solve()
             
             if problem.status not in ["infeasible", "unbounded"]:
                 weights = pd.Series(w.value, index=expected_returns.index)

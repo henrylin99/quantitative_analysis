@@ -6,13 +6,8 @@ WebSocket事件处理器
 import logging
 from datetime import datetime
 from flask import request
-from flask_socketio import emit, join_room, leave_room, disconnect
+from flask_socketio import emit, join_room, leave_room
 from app.extensions import socketio
-from app.services.realtime_data_manager import RealtimeDataManager
-from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
-from app.services.realtime_trading_signal_engine import RealtimeTradingSignalEngine
-from app.services.realtime_monitor_service import RealtimeMonitorService
-from app.services.realtime_risk_manager import RealtimeRiskManager
 
 logger = logging.getLogger(__name__)
 

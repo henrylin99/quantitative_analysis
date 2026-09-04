@@ -6,11 +6,8 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple, Any
-from app.extensions import db
+from typing import List, Dict, Any
 from loguru import logger
-import json
-import math
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.realtime_indicator import RealtimeIndicator

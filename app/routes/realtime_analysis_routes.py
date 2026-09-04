@@ -3,8 +3,7 @@
 提供实时分析系统的页面访问路由
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from loguru import logger
+from flask import Blueprint, render_template, redirect, url_for
 
 # 创建蓝图
 realtime_analysis_routes = Blueprint('realtime_analysis_routes', __name__, url_prefix='/realtime-analysis')

@@ -4,7 +4,7 @@ ensure_click_parameter_source()
 
 from flask import Flask
 from flask_cors import CORS
-from config import config
+from config import config  # noqa: F401
 from app.extensions import db, socketio
 from app.utils.logger import setup_logger
 
@@ -76,6 +76,6 @@ def create_app(config_name='default'):
     app.register_blueprint(main_bp)
     
     # 注册WebSocket事件处理器
-    from app.websocket import websocket_events
+    from app.websocket import websocket_events  # noqa: F401
     
     return app 

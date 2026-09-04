@@ -4,8 +4,7 @@
 """
 
 from app.extensions import db
-from app.utils.time_utils import now_local, now_local_iso
-from datetime import datetime
+from app.utils.time_utils import now_local
 from sqlalchemy import Index, Text
 import json
 from app.services.persistence import persist_changes, persist_new, remove_instance
@@ -524,13 +523,6 @@ class ReportSubscription(db.Model):
     @classmethod
     def get_by_id(cls, subscription_id):
         return cls.query.get(subscription_id)
-
-    @classmethod
-    def list_subscriptions(cls, active_only=False):
-        query = cls.query
-        if active_only:
-            query = query.filter_by(is_active=True)
-        return query.order_by(cls.created_at.desc()).all()
 
     @classmethod
     def count_subscriptions(cls, active_only=None):

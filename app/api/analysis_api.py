@@ -2,8 +2,6 @@ from flask import request, jsonify
 from app.api import api_bp
 from app.services.stock_service import StockService
 from loguru import logger
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
 @api_bp.route('/analysis/screen', methods=['POST'])

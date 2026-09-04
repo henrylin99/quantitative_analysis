@@ -10,10 +10,8 @@
 4. 提供系统管理功能
 """
 
-import os
 import sys
 import subprocess
-import time
 import webbrowser
 from pathlib import Path
 
@@ -235,7 +233,7 @@ class SystemManager:
     
     def start_web_server(self, host='127.0.0.1', port=5000, debug=True):
         """启动Web服务器"""
-        print(f"\n启动Web服务器...")
+        print("\n启动Web服务器...")
         print(f"地址: http://{host}:{port}")
         print(f"前端界面: http://{host}:{port}/ml-factor")
         print("按 Ctrl+C 停止服务器")

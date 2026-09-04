@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 import pandas as pd
 import numpy as np
 
-from app.models.realtime_report import ReportTemplate, RealtimeReport, ReportSubscription
+from app.models.realtime_report import ReportTemplate, RealtimeReport
 from app.models.trading_signal import TradingSignal
 from app.models.portfolio_position import PortfolioPosition
 from app.models.risk_alert import RiskAlert

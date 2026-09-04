@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import EChart from '../charts/EChart'
+import { useLatestEffect } from '../hooks/useLatestEffect'
 import { useTheme } from '../theme/ThemeContext'
 import {
   fetchStockCompany,
@@ -154,69 +155,97 @@ export default function StockDetailPage() {
   const [comLoading, setComLoading] = useState(false)
   const [comError, setComError] = useState<string | null>(null)
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     setInfo(null)
-    fetchStockInfo(tsCode).then(setInfo).catch(() => setInfo(null))
+    fetchStockInfo(tsCode).then((d) => {
+      if (!isCancelled()) setInfo(d)
+    }).catch(() => {
+      if (!isCancelled()) setInfo(null)
+    })
   }, [tsCode])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'history') return
     setHistoryLoading(true)
     setHistoryError(null)
     fetchStockHistory(tsCode, historyLimit)
-      .then(setHistory)
-      .catch((e) => setHistoryError(e instanceof Error ? e.message : '历史数据加载失败'))
-      .finally(() => setHistoryLoading(false))
+      .then((d) => { if (!isCancelled()) setHistory(d) })
+      .catch((e) => {
+        if (!isCancelled()) setHistoryError(e instanceof Error ? e.message : '历史数据加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setHistoryLoading(false)
+      })
   }, [activeTab, tsCode, historyLimit])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'factors') return
     setFactorsLoading(true)
     setFactorsError(null)
     fetchStockFactors(tsCode, 20)
-      .then(setFactors)
-      .catch((e) => setFactorsError(e instanceof Error ? e.message : '技术因子加载失败'))
-      .finally(() => setFactorsLoading(false))
+      .then((d) => { if (!isCancelled()) setFactors(d) })
+      .catch((e) => {
+        if (!isCancelled()) setFactorsError(e instanceof Error ? e.message : '技术因子加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setFactorsLoading(false)
+      })
   }, [activeTab, tsCode])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'moneyflow') return
     setMfLoading(true)
     setMfError(null)
     fetchStockMoneyflow(tsCode, 20)
-      .then(setMoneyflow)
-      .catch((e) => setMfError(e instanceof Error ? e.message : '资金流向加载失败'))
-      .finally(() => setMfLoading(false))
+      .then((d) => { if (!isCancelled()) setMoneyflow(d) })
+      .catch((e) => {
+        if (!isCancelled()) setMfError(e instanceof Error ? e.message : '资金流向加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setMfLoading(false)
+      })
   }, [activeTab, tsCode])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'cyq') return
     setCyqLoading(true)
     setCyqError(null)
     fetchStockCyq(tsCode, 20)
-      .then(setCyq)
-      .catch((e) => setCyqError(e instanceof Error ? e.message : '筹码数据加载失败'))
-      .finally(() => setCyqLoading(false))
+      .then((d) => { if (!isCancelled()) setCyq(d) })
+      .catch((e) => {
+        if (!isCancelled()) setCyqError(e instanceof Error ? e.message : '筹码数据加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setCyqLoading(false)
+      })
   }, [activeTab, tsCode])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'financials') return
     setFinLoading(true)
     setFinError(null)
     fetchStockFinancials(tsCode)
-      .then(setFinancials)
-      .catch((e) => setFinError(e instanceof Error ? e.message : '财务数据加载失败'))
-      .finally(() => setFinLoading(false))
+      .then((d) => { if (!isCancelled()) setFinancials(d) })
+      .catch((e) => {
+        if (!isCancelled()) setFinError(e instanceof Error ? e.message : '财务数据加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setFinLoading(false)
+      })
   }, [activeTab, tsCode])
 
-  useEffect(() => {
+  useLatestEffect((isCancelled) => {
     if (activeTab !== 'company') return
     setComLoading(true)
     setComError(null)
     fetchStockCompany(tsCode)
-      .then(setCompany)
-      .catch((e) => setComError(e instanceof Error ? e.message : '公司信息加载失败'))
-      .finally(() => setComLoading(false))
+      .then((d) => { if (!isCancelled()) setCompany(d) })
+      .catch((e) => {
+        if (!isCancelled()) setComError(e instanceof Error ? e.message : '公司信息加载失败')
+      })
+      .finally(() => {
+        if (!isCancelled()) setComLoading(false)
+      })
   }, [activeTab, tsCode])
 
   const latestClose = history && history.length > 0 ? history[0].close : null

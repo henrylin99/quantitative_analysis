@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-import re
 from scipy import stats
 from loguru import logger
 
@@ -870,8 +869,21 @@ class FactorEngine:
                 logger.warning(f"自定义因子未配置公式: {factor_id}")
                 return pd.DataFrame()
 
+            # 预热窗默认 252 个自然日（约 170 个交易日）；公式里的 rolling
+            # 窗口更大时按需扩容，否则如 close.rolling(250).mean() 在请求
+            # 区间内前段全是 NaN、因子静默为空
+            lookback_days = 252
+            max_window = self.expression_engine.extract_max_rolling_window(formula)
+            if max_window:
+                needed_days = int(max_window * 1.6) + 30
+                if needed_days > lookback_days:
+                    logger.info(
+                        f"自定义因子 {factor_id} rolling 窗口 {max_window}，"
+                        f"预热窗扩容至 {needed_days} 个自然日"
+                    )
+                    lookback_days = needed_days
             extended_start = (
-                datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=252)
+                datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=lookback_days)
             ).strftime("%Y-%m-%d")
 
             # 与内置动量类因子同一复权口径：close.pct_change(20) 这类

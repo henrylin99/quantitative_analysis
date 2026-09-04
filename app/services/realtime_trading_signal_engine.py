@@ -7,11 +7,10 @@ import json
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict
 import logging
 
 from app.models.trading_signal import TradingSignal
-from app.models.realtime_indicator import RealtimeIndicator
 from app.services.realtime_indicator_engine import RealtimeIndicatorEngine
 from app.services.data_reader import ParquetDataReader
 from app.services.parquet_event_store import ParquetEventStore
@@ -312,7 +311,6 @@ class RealtimeTradingSignalEngine:
         
         prev_macd = macd_data.iloc[-2]['value1']
         prev_signal = macd_data.iloc[-2]['value2']
-        prev_hist = macd_data.iloc[-2]['value3']
         
         current_price = df.iloc[-1]['close']
         current_time = df.iloc[-1]['datetime']
@@ -444,7 +442,6 @@ class RealtimeTradingSignalEngine:
         current_price = df.iloc[-1]['close']
         current_volume = df.iloc[-1]['volume']
         prev_price = df.iloc[-2]['close']
-        prev_volume = df.iloc[-2]['volume']
         
         avg_volume = df.tail(20)['volume'].mean() if len(df) >= 20 else df['volume'].mean()
         
