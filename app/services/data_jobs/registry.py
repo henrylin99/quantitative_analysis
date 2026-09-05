@@ -11,9 +11,11 @@ class JobRegistry:
         # 仅向页面暴露的任务（按用户确认保留）
         self._visible_job_types: Set[str] = {
             "stock_basic",            # 1
+            "stock_basic_fuyao",      # 1b（扶摇源股票清单刷新）
             "trade_calendar",         # 2
             "stock_company",          # 3
             "daily_history_by_date",  # 5
+            "daily_history_fuyao",    # 5b（扶摇源日线）
             "daily_basic",            # 6
             "moneyflow",              # 15
             "stk_factor",             # 17
@@ -36,6 +38,17 @@ class JobRegistry:
                 recommended_order=2,
                 source_name="tushare",
                 source_mode="full",
+            ),
+            "stock_basic_fuyao": JobDefinition(
+                "stock_basic_fuyao",
+                "基础资料",
+                "app/utils/stock_basic_fuyao.py",
+                display_name="股票清单（扶摇源）",
+                description="从扶摇快照刷新股票名称并追加新上市代码；行业/退市股等元数据仍由 tushare 版维护。",
+                recommended_order=2,
+                source_name="fuyao",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
             "trade_calendar": JobDefinition(
                 "trade_calendar",
@@ -93,6 +106,18 @@ class JobRegistry:
                 source_mode="incremental",
                 supports_incremental=True,
             ),
+            "daily_history_fuyao": JobDefinition(
+                "daily_history_fuyao",
+                "日频行情与基本面",
+                "app/utils/daily_history_fuyao.py",
+                display_name="日线行情（扶摇源）",
+                description="从扶摇数据源下载全市场日线行情（dump 一次覆盖全市场），与 tushare 版写入同一张表。",
+                dependencies=["trade_calendar"],
+                recommended_order=5,
+                source_name="fuyao",
+                source_mode="incremental",
+                supports_incremental=True,
+            ),
             "income_statement": JobDefinition(
                 "income_statement", "财务三表", "app/utils/income_statement.py", display_name="利润表", description="下载上市公司利润表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
             ),
@@ -101,6 +126,11 @@ class JobRegistry:
             ),
             "cash_flow": JobDefinition(
                 "cash_flow", "财务三表", "app/utils/cash_flow.py", display_name="现金流量表", description="下载上市公司现金流量表。", dependencies=["stock_basic"], source_name="tushare", source_mode="incremental", supports_incremental=True
+            ),
+            "financial_fuyao": JobDefinition(
+                "financial_fuyao", "财务三表", "app/utils/financial_fuyao.py", display_name="财务三表（扶摇源）",
+                description="从扶摇数据源下载利润表/资产负债表/现金流量表（单标的接口逐只拉取，免费 key 可用），与 tushare VIP 版写入同一组表。",
+                dependencies=["stock_basic"], source_name="fuyao", source_mode="incremental", supports_incremental=True
             ),
             "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py", display_name="资金流向", description="下载主力、大单、中单和小单资金流数据。", recommended_order=7, source_name="tushare", source_mode="incremental", supports_incremental=True),
             "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。", source_name="ths", source_mode="incremental", supports_incremental=True),
