@@ -58,6 +58,37 @@ def _tushare_token_configured() -> bool:
     return token not in ('', 'your_tushare_token')
 
 
+# 数据源 source_name → (环境变量, 未配置时的提示)
+# derived 等本地计算 source 不在映射内，无需凭证。
+_SOURCE_TOKEN_REQUIREMENTS = {
+    'tushare': (
+        'TUSHARE_TOKEN',
+        '该任务需要 Tushare 数据源，但尚未配置 TUSHARE_TOKEN。'
+        '请在项目根目录 .env 中设置 TUSHARE_TOKEN 后重启服务再试',
+    ),
+    'fuyao': (
+        'FUYAO_API_KEY',
+        '该任务需要扶摇数据源，但尚未配置 FUYAO_API_KEY。'
+        '请在项目根目录 .env 中设置 FUYAO_API_KEY 后重启服务再试',
+    ),
+    'tickflow': (
+        'TICKFLOW_API_KEY',
+        '该任务需要 TickFlow 数据源，但尚未配置 TICKFLOW_API_KEY。'
+        '请在项目根目录 .env 中设置 TICKFLOW_API_KEY 后重启服务再试',
+    ),
+}
+
+_TOKEN_PLACEHOLDERS = ('', 'your_tushare_token')
+
+
+def _source_token_configured(source_name: str) -> bool:
+    requirement = _SOURCE_TOKEN_REQUIREMENTS.get(source_name)
+    if requirement is None:
+        return True
+    value = (os.getenv(requirement[0]) or '').strip()
+    return value not in _TOKEN_PLACEHOLDERS
+
+
 # ----------------------------------------------------------------------
 # 惰性单例（避免模块导入期触发重资源初始化）
 # ----------------------------------------------------------------------
@@ -284,6 +315,7 @@ def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
                 'description': definition.description,
                 'dependencies': list(definition.dependencies or []),
                 'needs_tushare_token': definition.source_name == 'tushare',
+                'source_name': definition.source_name,
                 'dangerous': bool(definition.dangerous),
                 'visible': definition.job_type in JobRegistry()._visible_job_types,
             }
@@ -362,11 +394,10 @@ def _run_single_job(job_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
     if definition.dangerous:
         raise ToolError(f'任务 {job_type} 被标记为危险任务，请在数据管理页面手动执行')
 
-    if definition.source_name == 'tushare' and not _tushare_token_configured():
-        raise ToolError(
-            '该任务需要 Tushare 数据源，但尚未配置 TUSHARE_TOKEN。'
-            '请在项目根目录 .env 中设置 TUSHARE_TOKEN 后重启服务再试'
-        )
+    if definition.source_name in _SOURCE_TOKEN_REQUIREMENTS and not _source_token_configured(
+        definition.source_name
+    ):
+        raise ToolError(_SOURCE_TOKEN_REQUIREMENTS[definition.source_name][1])
 
     if job_type == 'wide_table_builder':
         raise ToolError('大宽表构建请使用 build_wide_table 工具（含 18:00 校验）')
