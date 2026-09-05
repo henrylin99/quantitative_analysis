@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ListPlus, Trash2 } from 'lucide-react'
 import { fetchQuotes, type QuoteRow } from '../api/market'
+import { StockLink } from '../components/stock/StockLink'
 import { Card, Delta, EmptyState, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
 
 const STORAGE_KEY = 'qa-watchlist'
@@ -135,8 +136,12 @@ export default function WatchlistPage() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.ts_code} className="border-t border-line/60 hover:bg-elevated/50">
-                    <td className="num px-3 py-1.5">{row.ts_code}</td>
-                    <td className="px-3 py-1.5 text-fg-secondary">{row.name ?? '--'}</td>
+                    <td className="px-3 py-1.5">
+                      <StockLink code={row.ts_code} name={row.name} />
+                    </td>
+                    <td className="px-3 py-1.5 text-fg-secondary">
+                      <StockLink code={row.ts_code} name={row.name} showCode={false} />
+                    </td>
                     <td className="num px-3 py-1.5 text-right">{row.last_price ?? '--'}</td>
                     <td className="px-3 py-1.5 text-right">
                       <Delta value={row.pct_chg} />
