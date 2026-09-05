@@ -51,12 +51,41 @@ class _FakeService:
         return self.status
 
 
+class _FakeBoardService:
+    def __init__(self):
+        self.pool = {"date": "20260904", "total": 1, "items": []}
+        self.ladder = {"days": []}
+        self.boards = {"tag": "industry", "items": []}
+        self.constituents = {"code": "881101.TI", "items": []}
+        self.kwargs = {}
+
+    def get_limit_up_pool(self, date=None, page=1, size=100):
+        self.kwargs["pool"] = (date, page, size)
+        return self.pool
+
+    def get_limit_up_ladder(self):
+        return self.ladder
+
+    def get_boards(self, tag):
+        self.kwargs["tag"] = tag
+        return self.boards
+
+    def get_board_constituents(self, code):
+        self.kwargs["board_code"] = code
+        return self.constituents
+
+
 @pytest.fixture()
 def fake_service(monkeypatch):
     service = _FakeService()
+    board = _FakeBoardService()
     monkeypatch.setattr(
         "app.api.market_api.get_market_snapshot_service", lambda: service
     )
+    monkeypatch.setattr(
+        "app.api.market_api.get_board_market_service", lambda: board
+    )
+    service.board = board
     return service
 
 
@@ -104,6 +133,40 @@ def test_datasource_status_endpoint(app, fake_service):
     resp = app.test_client().get("/api/datasources/status?force=1")
     assert resp.get_json()["data"]["tushare"]["configured"] is True
     assert fake_service.kwargs["force"] is True
+
+
+def test_limit_up_pool_endpoint(app, fake_service):
+    resp = app.test_client().get("/api/market/limit-up/pool?date=20260904&page=2&size=50")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["pool"] == ("20260904", 2, 50)
+
+
+def test_limit_up_pool_validates_params(app, fake_service):
+    assert (
+        app.test_client().get("/api/market/limit-up/pool?date=2026-09-04").status_code == 400
+    )
+    assert app.test_client().get("/api/market/limit-up/pool?page=x").status_code == 400
+
+
+def test_limit_up_ladder_endpoint(app, fake_service):
+    resp = app.test_client().get("/api/market/limit-up/ladder")
+    assert resp.get_json()["data"] == {"days": []}
+
+
+def test_boards_endpoint_validates_tag(app, fake_service):
+    assert app.test_client().get("/api/market/boards?tag=sector").status_code == 400
+    resp = app.test_client().get("/api/market/boards?tag=cn_concept")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["tag"] == "cn_concept"
+
+
+def test_board_constituents_endpoint(app, fake_service):
+    assert (
+        app.test_client().get("/api/market/boards/constituents").status_code == 400
+    )
+    resp = app.test_client().get("/api/market/boards/constituents?code=881101.TI")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["board_code"] == "881101.TI"
 
 
 def test_api_error_envelope_on_service_exception(app, monkeypatch):

@@ -126,3 +126,85 @@ export function fetchAuctionBenchmark(date?: string) {
 export function fetchSourceStatus(force = false) {
   return apiGet<SourceStatus>('/datasources/status', force ? { force: 1 } : undefined)
 }
+
+// ================= 涨停池 / 连板天梯 / 同花顺板块 =================
+
+/** 涨停池个股（实测字段 2026-09；seal_money 单位为元） */
+export interface LimitUpStock {
+  ts_code: string
+  ticker?: string
+  name?: string
+  is_st?: boolean
+  is_new?: boolean
+  last_price?: number
+  pct_chg?: number
+  limit_up_time?: string
+  reason?: string
+  continue_day_text?: string
+  continue_day_cnt?: number
+  seal_money?: number
+  max_seal_money?: number
+  [key: string]: unknown
+}
+
+export interface LimitUpPoolPayload {
+  date: string
+  total: number
+  page: number
+  size: number
+  items: LimitUpStock[]
+  cached?: boolean
+  stale?: boolean
+}
+
+/** 连板天梯单日（counts 键为连板数字符串，"7" 即 7 板及以上） */
+export interface LadderDay {
+  date: string | null
+  counts: Record<string, number>
+  highest: number
+  total: number
+}
+
+/** 同花顺板块（行业/概念）排行行 */
+export interface ThsBoardRow {
+  thscode: string
+  name?: string
+  last_price?: number
+  pct_chg?: number
+  turnover_yuan?: number
+  volume?: number
+}
+
+export interface BoardConstituent {
+  ts_code: string
+  name?: string | null
+  last_price?: number | null
+  pct_chg?: number | null
+  amount_yuan?: number | null
+}
+
+export function fetchLimitUpPool(date?: string, page = 1, size = 100) {
+  return apiGet<LimitUpPoolPayload>('/market/limit-up/pool', {
+    date: date || undefined,
+    page,
+    size,
+  })
+}
+
+export function fetchLimitUpLadder() {
+  return apiGet<{ days: LadderDay[] }>('/market/limit-up/ladder')
+}
+
+export function fetchBoards(tag: 'industry' | 'cn_concept') {
+  return apiGet<{ tag: string; items: ThsBoardRow[]; unavailable: string[] }>(
+    '/market/boards',
+    { tag },
+  )
+}
+
+export function fetchBoardConstituents(code: string) {
+  return apiGet<{ code: string; total: number; items: BoardConstituent[] }>(
+    '/market/boards/constituents',
+    { code },
+  )
+}

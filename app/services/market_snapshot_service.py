@@ -55,6 +55,7 @@ class MarketSnapshotService:
         self._dragon_cache: Dict[Tuple[str, Optional[str]], Tuple[float, Dict[str, Any]]] = {}
         self._auction_cache: Dict[Optional[str], Tuple[float, Dict[str, Any]]] = {}
         self._status_cache: Optional[Tuple[float, Dict[str, Any]]] = None
+        self._frame_cache: Optional[Tuple[float, "pd.DataFrame"]] = None
 
     # ---- 基础 ----
 
@@ -70,19 +71,11 @@ class MarketSnapshotService:
 
     @staticmethod
     def _merge_stock_names(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """快照无名称字段，用本地 stock_basic 关联补齐（失败静默跳过）。"""
+        """快照无名称字段，用名称注册表补齐（stock_basic + TickFlow 兜底）。"""
         try:
-            from app.utils.parquet_job_helpers import get_stock_codes  # noqa: F401
-            from app.services.data_reader import ParquetDataReader
+            from app.services.stock_name_registry import get_stock_name_registry
 
-            basic = ParquetDataReader().get_stock_basic()
-            if basic.empty or "ts_code" not in basic.columns:
-                return rows
-            name_map = dict(zip(basic["ts_code"].astype(str), basic.get("name")))
-            for row in rows:
-                if row.get("name") is None:
-                    row["name"] = name_map.get(str(row.get("ts_code")))
-            return rows
+            return get_stock_name_registry().merge_names(rows)
         except Exception as exc:  # noqa: BLE001 - 名称补齐失败不影响行情主数据
             logger.debug(f"[market] 名称补齐跳过: {exc}")
             return rows
@@ -156,6 +149,8 @@ class MarketSnapshotService:
             frame = snapshot_rows_to_quote_frame(rows)
             frame = self._merge_stock_names(frame.to_dict("records"))
             frame = pd.DataFrame(frame)
+            with self._lock:
+                self._frame_cache = (time.monotonic(), frame)
             payload = self._build_dashboard(frame, source="fuyao", as_of=None)
             payload["server_ts"] = server_ts
         except FuyaoError as exc:
@@ -166,6 +161,20 @@ class MarketSnapshotService:
         with self._lock:
             self._dashboard_cache = (time.monotonic(), payload)
         return payload
+
+    def get_quote_frame(self) -> Optional["pd.DataFrame"]:
+        """全市场实时快照 DataFrame（复用看板 30s 缓存；无数据返回 None）。
+
+        列为扶摇快照 schema（last_price/pct_chg/turnover 元）或降级时的
+        本地日线 schema（close/pre_close/amount 千元），调用方两种都要兼容。
+        """
+        try:
+            self.get_dashboard()
+        except Exception:  # noqa: BLE001 - 看板失败不阻断帧读取
+            pass
+        with self._lock:
+            cached = self._frame_cache
+        return cached[1] if cached else None
 
     def _dashboard_from_local(self) -> Dict[str, Any]:
         """降级：用本地日线最近分区构建看板（标记 degraded + as_of）。"""
@@ -183,6 +192,8 @@ class MarketSnapshotService:
         from app.services.data_reader import ParquetDataReader
 
         df = ParquetDataReader().get_daily(start_date=latest, end_date=latest)
+        with self._lock:
+            self._frame_cache = (time.monotonic(), df)
         payload = self._build_dashboard(df, source="local_parquet", as_of=latest)
         payload["degraded"] = True
         return payload

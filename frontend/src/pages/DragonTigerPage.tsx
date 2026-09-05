@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Flame, Ticket } from 'lucide-react'
 import { fetchAuctionBenchmark, fetchDragonTiger, type DragonTigerStock } from '../api/market'
+import { StockLink } from '../components/stock/StockLink'
 import { Badge, Card, Delta, EmptyState, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
 import { cn } from '../lib/cn'
 
@@ -138,8 +139,16 @@ export default function DragonTigerPage() {
               <tbody>
                 {stocks.map((row, index) => (
                   <tr key={`${row.thscode}-${index}`} className="border-t border-line/60 hover:bg-elevated/50">
-                    <td className="num px-3 py-1.5">{row.thscode || '--'}</td>
-                    <td className="px-3 py-1.5 text-fg-secondary">{row.name ?? '--'}</td>
+                    <td className="px-3 py-1.5">
+                      {row.thscode ? <StockLink code={row.thscode} name={row.name} /> : '--'}
+                    </td>
+                    <td className="px-3 py-1.5 text-fg-secondary">
+                      {row.thscode ? (
+                        <StockLink code={row.thscode} name={row.name} showCode={false} />
+                      ) : (
+                        row.name ?? '--'
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 text-right">
                       <Delta value={typeof row.change === 'number' ? row.change * 100 : null} />
                     </td>
@@ -186,8 +195,14 @@ export default function DragonTigerPage() {
                   className="flex items-center justify-between rounded-card border border-line bg-elevated/40 px-3 py-2"
                 >
                   <div>
-                    <div className="num text-xs">{item.thscode}</div>
-                    <div className="text-sm font-medium">{item.name ?? item.ticker ?? '--'}</div>
+                    <div className="num text-xs text-fg-muted">{item.thscode}</div>
+                    <div className="text-sm font-medium">
+                      {item.thscode ? (
+                        <StockLink code={item.thscode} name={item.name ?? item.ticker} showCode={false} />
+                      ) : (
+                        item.name ?? '--'
+                      )}
+                    </div>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {(item.tags ?? []).map((tag) => (
                         <Badge key={tag} tone="accent">

@@ -195,15 +195,32 @@ class FuyaoClient:
     def index_snapshot(self, thscodes: Sequence[str]) -> Tuple[List[Dict[str, Any]], Optional[int]]:
         """指数实时快照（沪深交易所指数 + 同花顺板块指数，无北交所）。
 
-        未知代码会导致整批 1002 连坐，调用方需先过滤 .BJ 等不支持代码。
+        未知代码会导致整批 1002 连坐，调用方需先过滤 .BJ 等不支持代码；
+        批量上限 100 只，超量由调用方分批。
         """
         data = self._get(
             "/api/a-share-index/prices/snapshot",
-            {"thscodes": ",".join(thscodes)},
+            {"thscodes": ",".join(thscodes[:BATCH_LIMIT])},
         )
         items = data.get("item") or []
         ts = data.get("timestamp")
         return items, int(ts) if isinstance(ts, (int, float)) else None
+
+    def ths_index_catalog(self, tag: Optional[str] = None) -> List[Dict[str, Any]]:
+        """同花顺指数目录（tag: industry=行业 / cn_concept=概念，可空=全部）。
+
+        实测 industry 320 条、cn_concept 390 条；item: {thscode, name}。
+        """
+        data = self._get("/api/a-share-index/catalog/ths-index-list", {"tag": tag})
+        return data.get("item") or []
+
+    def ths_index_constituents(self, thscode: str) -> List[Dict[str, Any]]:
+        """同花顺指数成分股（item: {thscode, ticker, name}）。"""
+        data = self._get(
+            "/api/a-share-index/constituents/ths-stock-list",
+            {"thscode": thscode},
+        )
+        return data.get("item") or []
 
     # ---- 历史日K ----
 
@@ -280,6 +297,41 @@ class FuyaoClient:
             "/api/a-share/auction/short-term-benchmark",
             {"date": date},
         ) or {}
+
+    def limit_up_pool(
+        self,
+        date_ms: Optional[int] = None,
+        page: int = 1,
+        size: int = 100,
+        sort_field: str = "continue_day_cnt",
+        sort_dir: str = "desc",
+    ) -> Dict[str, Any]:
+        """A 股涨停股票池（date_ms 为北京时间零点 epoch ms，可空=最近交易日）。
+
+        实测字段：thscode/ticker/name/is_st/is_new/last_price/
+        price_change_ratio_pct/limit_up_time/limit_up_reason/
+        continue_day_text("5连板")/continue_day_cnt/seal_money/max_seal_money。
+        非交易日不传 date_ms 会返回空列表（total=0），由调用方回退最近交易日。
+        """
+        return self._get(
+            "/api/a-share/special-data/limit-up-pool",
+            {
+                "date_ms": date_ms,
+                "page": page,
+                "size": size,
+                "sort_field": sort_field,
+                "sort_dir": sort_dir,
+            },
+        ) or {}
+
+    def limit_up_ladder(self) -> Dict[str, Any]:
+        """连板天梯矩阵（近 30 个交易日）。
+
+        data.item[].boards 键：two_board/three_board/four_board/five_board/
+        six_board/seven_over（2 板至 7 板及以上），每档为个股列表
+        （thscode/ticker/name/board_num/seal_nextday/sign_level）。
+        """
+        return self._get("/api/a-share/special-data/limit-up-ladder") or {}
 
     # ---- dump 下载 ----
 

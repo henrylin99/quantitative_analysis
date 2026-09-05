@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, TrendingUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { fetchDashboard, fetchIndices, type BoardRow } from '../api/market'
+import { StockLink } from '../components/stock/StockLink'
 import { Card, Delta, KpiCell, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
 import { cn } from '../lib/cn'
 
@@ -25,8 +26,7 @@ function BoardTable({ rows, metric }: { rows: BoardRow[]; metric: 'pct' | 'amoun
         {rows.map((row) => (
           <tr key={row.ts_code} className="border-t border-line/60 first:border-t-0 hover:bg-elevated/60">
             <td className="px-3 py-1.5">
-              <span className="num">{row.ts_code}</span>
-              {row.name ? <span className="ml-1.5 text-fg-secondary">{row.name}</span> : null}
+              <StockLink code={row.ts_code} name={row.name} />
             </td>
             <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.price ?? '--'}</td>
             <td className="px-3 py-1.5 text-right">
