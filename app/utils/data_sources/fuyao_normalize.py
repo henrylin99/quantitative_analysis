@@ -226,8 +226,10 @@ def snapshot_rows_to_stock_basic(rows: List[Dict[str, Any]], existing: Optional[
         fresh["list_status"] = "L"
         return fresh.reset_index(drop=True)
 
-    keep_cols = [c for c in existing.columns if c not in ("name", "list_status")]
     base = existing.copy()
+    # existing 可能缺 name 列（旧版 stock_basic），补空列保证 merge 后赋值不炸
+    if "name" not in base.columns:
+        base["name"] = None
     base = base.merge(fresh[["ts_code", "name"]], on="ts_code", how="left", suffixes=("", "_fuyao"))
     base["name"] = base["name_fuyao"].fillna(base["name"])
     base = base.drop(columns=["name_fuyao"])

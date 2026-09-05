@@ -72,8 +72,13 @@ def quarter_periods(start_ymd: str, end_ymd: str) -> List[str]:
 
 
 def expected_latest_period(today: Optional[date] = None) -> Optional[str]:
-    """最近一个已过披露截止日的报告期；一个都没有时返回 None。"""
-    today = today or date.today()
+    """最近一个已过披露截止日的报告期；一个都没有时返回 None。
+
+    默认取北京时间今天：非东八区部署时，本地日期会让披露截止判断偏一天。
+    """
+    from app.utils.data_sources.fuyao_client import BEIJING_TZ
+
+    today = today or datetime.now(BEIJING_TZ).date()
     candidates: List[Tuple[date, str]] = []
     for year in (today.year - 1, today.year):
         for month_day, (month, day) in DISCLOSURE_DEADLINES.items():
@@ -94,7 +99,18 @@ def resolve_fetch_periods(latest_local: Optional[str], expected: str) -> List[st
 
 def _read_existing_partition(table: str, end_date: str, data_dir: Optional[str]) -> Optional[pd.DataFrame]:
     clean = str(end_date).replace("-", "")
-    partition = Path(data_dir or ".") / table / f"year={clean[:4]}" / f"month={clean[4:6]}" / f"day={clean[6:]}" / "data.parquet"
+    # 回退口径必须与 save_to_parquet/latest_partition_date 一致（DATA_DIR 或项目 data/），
+    # 否则 DATA_DIR 未设置时读不到已有分区，分块 flush 会互相覆盖丢数据
+    from app.utils.parquet_job_helpers import _default_data_root
+
+    partition = (
+        Path(data_dir or _default_data_root())
+        / table
+        / f"year={clean[:4]}"
+        / f"month={clean[4:6]}"
+        / f"day={clean[6:]}"
+        / "data.parquet"
+    )
     if not partition.exists():
         return None
     try:
