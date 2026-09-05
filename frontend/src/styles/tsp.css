@@ -1,0 +1,71 @@
+/*
+ * 新版设计 token（tsp = tick-style panel）。
+ *
+ * 只服务于新页面（src/pages/market/* 等 tailwind 语义类页面），
+ * 与既有 Bootstrap 体系（theme.css）共存：
+ * - preflight 已关闭，不会重置旧页面样式
+ * - 变量挂在 :root（暗色默认）与 [data-theme="light"]，随 ThemeContext 自动切换
+ * - 品牌色沿用本项目靛蓝 #6366f1（hsl 239 84% 67%），而非参考项目的电光蓝
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ts-canvas: 240 5% 5%;
+  --ts-surface: 240 7% 10%;
+  --ts-elevated: 240 9% 14%;
+  --ts-border: 240 5% 22%;
+  --ts-fg-primary: 0 0% 98%;
+  --ts-fg-secondary: 240 5% 78%;
+  --ts-fg-muted: 240 5% 58%;
+  --ts-accent: 239 84% 67%;
+  --ts-bull: 4 87% 60%; /* A 股口径：红涨 */
+  --ts-bear: 152 67% 45%; /* 绿跌 */
+  --ts-warning: 32 95% 50%;
+  --ts-danger: 0 72% 51%;
+}
+
+[data-theme='light'] {
+  --ts-canvas: 240 10% 97%;
+  --ts-surface: 0 0% 100%;
+  --ts-elevated: 240 5% 94%;
+  --ts-border: 240 6% 86%;
+  --ts-fg-primary: 240 6% 10%;
+  --ts-fg-secondary: 240 4% 35%;
+  --ts-fg-muted: 240 5% 45%;
+  --ts-accent: 239 84% 60%;
+  --ts-bull: 4 74% 52%;
+  --ts-bear: 152 69% 38%;
+  --ts-warning: 32 95% 44%;
+  --ts-danger: 0 72% 48%;
+}
+
+@layer base {
+  /* 新页面挂 .tsp-root，内部细滚动条 + 边框分层；不污染旧页面 */
+  .tsp-root {
+    @apply bg-canvas text-fg-primary font-sans text-base;
+  }
+
+  .tsp-root * {
+    border-color: hsl(var(--ts-border));
+  }
+
+  .tsp-root ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .tsp-root ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line;
+  }
+  .tsp-root ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  /* 数字列：等宽 + 表格数字对齐 */
+  .num {
+    @apply font-mono tabular-nums;
+  }
+}
