@@ -65,13 +65,28 @@ interface ThemeCtx {
 
 const Ctx = createContext<ThemeCtx>({ mode: 'dark', toggle: () => {}, palette: DARK })
 
+const THEME_STORAGE_KEY = 'qa-theme'
+
+function initialTheme(): ThemeMode {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
+  } catch {
+    return 'dark'
+  }
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>('dark')
+  const [mode, setMode] = useState<ThemeMode>(initialTheme)
 
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-theme', mode)
     root.setAttribute('data-bs-theme', mode)
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, mode)
+    } catch {
+      // 隐私模式等场景 localStorage 不可用时静默降级
+    }
   }, [mode])
 
   const value = useMemo<ThemeCtx>(

@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import StocksPage from './pages/StocksPage'
 import AnalysisPage from './pages/AnalysisPage'
@@ -29,6 +30,16 @@ import RtReportsPage from './pages/RtReportsPage'
 import RtWebsocketPage from './pages/RtWebsocketPage'
 import AiWorkbenchPage from './pages/AiWorkbenchPage'
 import Text2SqlPage from './pages/Text2SqlPage'
+
+// 新版设计体系页面（tailwind token 体系），lazy 分割不增加旧页面首屏
+const MarketDashboardPage = lazy(() => import('./pages/MarketDashboardPage'))
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
+const DragonTigerPage = lazy(() => import('./pages/DragonTigerPage'))
+const LimitUpLadderPage = lazy(() => import('./pages/LimitUpLadderPage'))
+const HotStocksPage = lazy(() => import('./pages/HotStocksPage'))
+const ConceptAnalysisPage = lazy(() => import('./pages/ConceptAnalysisPage'))
+const IndustryAnalysisPage = lazy(() => import('./pages/IndustryAnalysisPage'))
+const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -82,8 +93,23 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: '市场',
+    items: [
+      { to: '/market/dashboard', label: '市场看板', icon: '📊' },
+      { to: '/market/watchlist', label: '自选行情', icon: '⭐' },
+      { to: '/market/limit-up', label: '连板天梯', icon: '🔥' },
+      { to: '/market/hot', label: '热股榜单', icon: '📈' },
+      { to: '/market/concepts', label: '概念分析', icon: '💡' },
+      { to: '/market/industries', label: '行业分析', icon: '🏭' },
+      { to: '/market/dragon-tiger', label: '龙虎榜', icon: '🐉' },
+    ],
+  },
+  {
     label: '数据',
-    items: [{ to: '/data-management', label: '数据管理', icon: '🗄️' }],
+    items: [
+      { to: '/data-management', label: '数据管理', icon: '🗄️' },
+      { to: '/datasources', label: '数据源中心', icon: '🧭' },
+    ],
   },
   {
     label: '试用工具',
@@ -160,6 +186,70 @@ function Shell() {
             <Route path="/stock-panorama" element={<StockPanoramaPage />} />
             <Route path="/feature-intro" element={<FeatureIntroPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
+            <Route
+              path="/market/dashboard"
+              element={
+                <Suspense fallback={null}>
+                  <MarketDashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/watchlist"
+              element={
+                <Suspense fallback={null}>
+                  <WatchlistPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/dragon-tiger"
+              element={
+                <Suspense fallback={null}>
+                  <DragonTigerPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/limit-up"
+              element={
+                <Suspense fallback={null}>
+                  <LimitUpLadderPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/hot"
+              element={
+                <Suspense fallback={null}>
+                  <HotStocksPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/concepts"
+              element={
+                <Suspense fallback={null}>
+                  <ConceptAnalysisPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/industries"
+              element={
+                <Suspense fallback={null}>
+                  <IndustryAnalysisPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/datasources"
+              element={
+                <Suspense fallback={null}>
+                  <DataSourceCenterPage />
+                </Suspense>
+              }
+            />
             <Route path="/ml-factor" element={<MlFactorIndexPage />} />
             <Route path="/ml-factor/models" element={<MlModelsPage />} />
             <Route path="/ml-factor/scoring" element={<MlScoringPage />} />
