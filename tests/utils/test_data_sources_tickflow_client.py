@@ -104,3 +104,21 @@ def test_detect_tier_paid_when_ex_factors_ok():
 def test_detect_tier_none_without_key(monkeypatch):
     monkeypatch.delenv("TICKFLOW_API_KEY", raising=False)
     assert TickflowClient(api_key="").detect_tier() == "none"
+
+
+def test_instruments_returns_list():
+    client = TickflowClient(api_key="tk-test")
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "exchange": "SH", "count": 2,
+            "data": [
+                {"symbol": "600000.SH", "name": "浦发银行", "ext": {"listing_date": "1999-11-10"}},
+                {"symbol": "600519.SH", "name": "贵州茅台"},
+            ],
+        }}),
+    ])
+    rows = client.instruments(exchange="SH")
+    call = client._session.calls[0]
+    assert "/v1/exchanges/SH/instruments" in call["url"]
+    assert call["headers"]["x-api-key"] == "tk-test"
+    assert [r["symbol"] for r in rows] == ["600000.SH", "600519.SH"]

@@ -181,3 +181,45 @@ def test_download_dump_missing_url_raises(client, tmp_path):
     ])
     with pytest.raises(FuyaoError):
         client.download_dump("daily-k", tmp_path / "x.parquet")
+
+
+# ---- 涨跌停特色数据 / 同花顺指数 ----
+
+def test_limit_up_pool_passes_date_ms_and_paging(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "pagination": {"total": 1, "page": 2, "size": 50},
+            "item": [{"thscode": "605577.SH", "continue_day_cnt": 5}],
+        }}),
+    ])
+    data = client.limit_up_pool(date_ms=1788451200000, page=2, size=50)
+    call = client._session.calls[0]
+    assert call["url"].endswith("/api/a-share/special-data/limit-up-pool")
+    assert call["params"]["date_ms"] == 1788451200000
+    assert call["params"]["sort_field"] == "continue_day_cnt"
+    assert data["item"][0]["continue_day_cnt"] == 5
+
+
+def test_limit_up_ladder_returns_matrix(client):
+    boards = {"two_board": [{"thscode": "600108.SH"}], "seven_over": []}
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok",
+                              "data": {"item": [{"date": "2026-09-04", "boards": boards}]}}),
+    ])
+    data = client.limit_up_ladder()
+    assert data["item"][0]["boards"]["two_board"][0]["thscode"] == "600108.SH"
+
+
+def test_ths_index_catalog_and_constituents(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok",
+                              "data": {"item": [{"thscode": "881101.TI", "name": "种植业与林业"}]}}),
+        FakeResponse(payload={"code": 0, "message": "ok",
+                              "data": {"item": [{"thscode": "000998.SZ", "name": "隆平高科"}]}}),
+    ])
+    catalog = client.ths_index_catalog(tag="industry")
+    constituents = client.ths_index_constituents("881101.TI")
+    assert client._session.calls[0]["params"] == {"tag": "industry"}
+    assert client._session.calls[1]["params"] == {"thscode": "881101.TI"}
+    assert catalog[0]["name"] == "种植业与林业"
+    assert constituents[0]["thscode"] == "000998.SZ"

@@ -133,6 +133,26 @@ class TickflowClient:
         )
         return data or {}
 
+    def instruments(
+        self,
+        exchange: str = "SH",
+        instrument_type: str = "stock",
+        limit: int = 5000,
+    ) -> List[Dict[str, Any]]:
+        """交易所标的维表（free 档可用）。
+
+        exchange ∈ SH/SZ/BJ（美股港交所代码见服务端文档）；单次 limit 覆盖
+        全量即可，实测 SH 3660 只一次返回。item 含 symbol/name/ext，
+        ext 里有 listing_date/total_shares/float_shares/limit_up/limit_down。
+        """
+        data = self._get(
+            f"/v1/exchanges/{exchange}/instruments",
+            {"instrument_type": instrument_type, "limit": limit},
+        )
+        if isinstance(data, list):
+            return data
+        return (data or {}).get("data") or []
+
     def detect_tier(self) -> str:
         """探测 key 档位：none（无效/未配置）/ free / starter+。
 
