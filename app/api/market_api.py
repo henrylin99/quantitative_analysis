@@ -87,10 +87,17 @@ def get_auction_benchmark():
         return _error(f"竞价风向标获取失败: {exc}")
 
 
-@market_bp.route("/limit-up/pool", methods=["GET"])
-def get_limit_up_pool():
-    """涨停池（date YYYYMMDD 可空=最近交易日；page/size 分页，连板数降序）。"""
-    service = get_board_market_service()
+@market_bp.route("/limit-up/ladder", methods=["GET"])
+def get_limit_up_ladder():
+    """连板天梯矩阵（近 30 个交易日，2 板~7 板+ 各档家数）。"""
+    try:
+        return _ok(get_board_market_service().get_limit_up_ladder())
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"连板天梯API错误: {exc}")
+        return _error(f"连板天梯获取失败: {exc}")
+
+
+def _pool_endpoint(fetch):
     date = (request.args.get("date") or "").strip() or None
     if date and not _DATE_RE.fullmatch(date):
         return _error("date 格式应为 YYYYMMDD", 400)
@@ -100,22 +107,63 @@ def get_limit_up_pool():
     except ValueError:
         return _error("page/size 须为整数", 400)
     try:
-        return _ok(service.get_limit_up_pool(date=date, page=page, size=size))
+        return _ok(fetch(date, page, size))
     except ValueError as exc:
         return _error(str(exc), 400)
     except Exception as exc:  # noqa: BLE001
-        logger.error(f"涨停池API错误: {exc}")
-        return _error(f"涨停池获取失败: {exc}")
+        logger.error(f"股票池API错误: {exc}")
+        return _error(f"股票池获取失败: {exc}")
 
 
-@market_bp.route("/limit-up/ladder", methods=["GET"])
-def get_limit_up_ladder():
-    """连板天梯矩阵（近 30 个交易日，2 板~7 板+ 各档家数）。"""
+@market_bp.route("/limit-up/pool", methods=["GET"])
+def get_limit_up_pool():
+    """涨停池（date YYYYMMDD 可空=最近交易日；page/size 分页，连板数降序）。"""
+    service = get_board_market_service()
+    return _pool_endpoint(service.get_limit_up_pool)
+
+
+@market_bp.route("/limit-down/pool", methods=["GET"])
+def get_limit_down_pool():
+    """跌停池（date 口径同涨停池）。"""
+    service = get_board_market_service()
+    return _pool_endpoint(service.get_limit_down_pool)
+
+
+@market_bp.route("/limit-break/pool", methods=["GET"])
+def get_limit_break_pool():
+    """炸板池（曾涨停后开板；date 口径同涨停池）。"""
+    service = get_board_market_service()
+    return _pool_endpoint(service.get_limit_break_pool)
+
+
+@market_bp.route("/hot-stocks", methods=["GET"])
+def get_hot_stocks():
+    """同花顺热股榜 + 飙升榜（period: day/hour，缓存 5 分钟）。"""
+    period = (request.args.get("period") or "day").strip()
+    if period not in ("day", "hour"):
+        return _error("period 取值须为 day/hour", 400)
     try:
-        return _ok(get_board_market_service().get_limit_up_ladder())
+        return _ok(get_board_market_service().get_hot_stocks(period))
     except Exception as exc:  # noqa: BLE001
-        logger.error(f"连板天梯API错误: {exc}")
-        return _error(f"连板天梯获取失败: {exc}")
+        logger.error(f"热股榜API错误: {exc}")
+        return _error(f"热股榜获取失败: {exc}")
+
+
+@market_bp.route("/ticker-search", methods=["GET"])
+def get_ticker_search():
+    """标的名称/代码模糊检索（自选添加联想，A 股）。"""
+    query = (request.args.get("q") or "").strip()
+    if len(query) < 2:
+        return _error("q 参数至少 2 个字符", 400)
+    try:
+        limit = min(20, max(1, int(request.args.get("limit", 10))))
+    except ValueError:
+        return _error("limit 须为整数", 400)
+    try:
+        return _ok(get_board_market_service().search_tickers(query, limit))
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"标的检索API错误: {exc}")
+        return _error(f"标的检索获取失败: {exc}")
 
 
 @market_bp.route("/boards", methods=["GET"])

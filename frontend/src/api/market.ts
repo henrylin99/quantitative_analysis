@@ -208,3 +208,84 @@ export function fetchBoardConstituents(code: string) {
     { code },
   )
 }
+
+// ================= 跌停池 / 炸板池 / 热股榜 / 标的检索 =================
+
+/** 跌停池个股（实测字段 2026-09） */
+export interface LimitDownStock {
+  ts_code: string
+  ticker?: string
+  name?: string
+  last_price?: number
+  pct_chg?: number
+  first_limit_time?: string
+  last_limit_time?: string
+  turnover_ratio_pct?: number
+  [key: string]: unknown
+}
+
+/** 炸板池个股（曾涨停后开板） */
+export interface LimitBreakStock {
+  ts_code: string
+  ticker?: string
+  name?: string
+  last_price?: number
+  pct_chg?: number
+  open_times?: number
+  turnover_ratio_pct?: number
+  turnover?: number
+  [key: string]: unknown
+}
+
+export type HotPeriod = 'day' | 'hour'
+
+/** 热股榜/飙升榜个股 */
+export interface HotStock {
+  ts_code: string
+  ticker?: string
+  name?: string
+  rank?: number
+  heat?: number | null
+  rank_change?: number
+  rank_trend?: 'up' | 'down' | 'flat' | string
+  [key: string]: unknown
+}
+
+export interface TickerSearchItem {
+  ts_code: string
+  ticker?: string
+  name?: string
+  exchange?: string
+}
+
+function poolParams(date?: string, page = 1, size = 100) {
+  return { date: date || undefined, page, size }
+}
+
+export function fetchLimitDownPool(date?: string, page = 1, size = 100) {
+  return apiGet<LimitUpPoolPayload & { items: LimitDownStock[] }>(
+    '/market/limit-down/pool',
+    poolParams(date, page, size),
+  )
+}
+
+export function fetchLimitBreakPool(date?: string, page = 1, size = 100) {
+  return apiGet<LimitUpPoolPayload & { items: LimitBreakStock[] }>(
+    '/market/limit-break/pool',
+    poolParams(date, page, size),
+  )
+}
+
+export function fetchHotStocks(period: HotPeriod = 'day') {
+  return apiGet<{ period: HotPeriod; hot: HotStock[]; skyrocket: HotStock[] }>(
+    '/market/hot-stocks',
+    { period },
+  )
+}
+
+export function fetchTickerSearch(q: string, limit = 8) {
+  return apiGet<{ query: string; items: TickerSearchItem[] }>('/market/ticker-search', {
+    q,
+    limit,
+  })
+}

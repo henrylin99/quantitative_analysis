@@ -35,6 +35,47 @@ class _FakeClient:
             "pagination": {"total": 1, "pages": 1, "size": 100, "page": 1},
             "item": [_pool_row()],
         }
+        self.down_pool_data = {
+            "pagination": {"total": 1},
+            "item": [
+                {
+                    "thscode": "002909.SZ",
+                    "name": "集泰股份",
+                    "last_price": 7.21,
+                    "price_change_ratio_pct": -9.9875,
+                    "first_limit_time": "14:33",
+                    "last_limit_time": "14:54",
+                    "turnover_ratio_pct": 37.8386,
+                }
+            ],
+        }
+        self.break_pool_data = {
+            "pagination": {"total": 1},
+            "item": [
+                {
+                    "thscode": "688170.SH",
+                    "name": "德龙激光",
+                    "last_price": 61.9,
+                    "price_change_ratio_pct": 17.5019,
+                    "open_times": 4,
+                    "turnover_ratio_pct": 16.9039,
+                    "turnover": 1068862770.0,
+                }
+            ],
+        }
+        self.hot_data = [
+            {
+                "thscode": "601086.SH",
+                "name": "国芳集团",
+                "rank": 1,
+                "heat": "4741356",
+                "rank_change": 0,
+                "rank_trend": "flat",
+            }
+        ]
+        self.search_data = [
+            {"thscode": "600519.SH", "ticker": "600519", "name": "贵州茅台", "exchange": "SH"}
+        ]
         self.ladder_data = {
             "item": [
                 {
@@ -71,6 +112,26 @@ class _FakeClient:
     def limit_up_pool(self, date_ms=None, page=1, size=100, **_):
         self.calls.append(("pool", date_ms, page, size))
         return self.pool_data
+
+    def limit_down_pool(self, date_ms=None, page=1, size=100, **_):
+        self.calls.append(("down", date_ms, page, size))
+        return self.down_pool_data
+
+    def limit_break_pool(self, date_ms=None, page=1, size=100, **_):
+        self.calls.append(("break", date_ms, page, size))
+        return self.break_pool_data
+
+    def hot_stock_list(self, period="day"):
+        self.calls.append(("hot", period))
+        return self.hot_data
+
+    def skyrocket_list(self, period="day"):
+        self.calls.append(("skyrocket", period))
+        return self.hot_data
+
+    def ticker_search(self, query, asset_type="a-share", limit=10):
+        self.calls.append(("search", query, limit))
+        return self.search_data
 
     def limit_up_ladder(self):
         self.calls.append("ladder")
@@ -174,3 +235,40 @@ def test_constituents_enriched_from_quote_frame(service, monkeypatch):
 def test_fallback_trade_date_skips_weekend():
     # 纯函数：周末向前回退到周五
     assert len(bms.BoardMarketService._fallback_trade_date()) == 8
+
+
+def test_down_and_break_pool_normalization(service):
+    down = service.get_limit_down_pool(date="20260904")
+    assert down["items"][0]["pct_chg"] == pytest.approx(-9.9875)
+    assert down["items"][0]["first_limit_time"] == "14:33"
+
+    broke = service.get_limit_break_pool(date="20260904")
+    assert broke["items"][0]["open_times"] == 4
+    assert broke["items"][0]["turnover"] == 1068862770.0
+    # 同一日期不同池的缓存互不串
+    assert down["items"][0]["ts_code"] == "002909.SZ"
+    assert broke["items"][0]["ts_code"] == "688170.SH"
+
+
+def test_hot_stocks_merges_lists_and_types_heat(service):
+    payload = service.get_hot_stocks("day")
+    assert payload["period"] == "day"
+    assert len(payload["hot"]) == 1
+    assert payload["skyrocket"][0]["heat"] == 4741356.0
+    assert isinstance(payload["hot"][0]["heat"], float)
+    # period 是独立缓存键
+    service.get_hot_stocks("hour")
+    assert ("hot", "hour") in service.client.calls
+
+
+def test_hot_stocks_rejects_bad_period(service):
+    with pytest.raises(ValueError):
+        service.get_hot_stocks("week")
+
+
+def test_ticker_search_passthrough_and_validation(service):
+    payload = service.search_tickers("茅台", limit=5)
+    assert payload["items"][0]["ts_code"] == "600519.SH"
+    assert service.client.calls[-1] == ("search", "茅台", 5)
+    with pytest.raises(ValueError):
+        service.search_tickers("m")

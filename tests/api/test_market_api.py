@@ -57,10 +57,20 @@ class _FakeBoardService:
         self.ladder = {"days": []}
         self.boards = {"tag": "industry", "items": []}
         self.constituents = {"code": "881101.TI", "items": []}
+        self.hot = {"period": "day", "hot": [], "skyrocket": []}
+        self.search = {"query": "茅台", "items": []}
         self.kwargs = {}
 
     def get_limit_up_pool(self, date=None, page=1, size=100):
         self.kwargs["pool"] = (date, page, size)
+        return self.pool
+
+    def get_limit_down_pool(self, date=None, page=1, size=100):
+        self.kwargs["down_pool"] = (date, page, size)
+        return self.pool
+
+    def get_limit_break_pool(self, date=None, page=1, size=100):
+        self.kwargs["break_pool"] = (date, page, size)
         return self.pool
 
     def get_limit_up_ladder(self):
@@ -73,6 +83,14 @@ class _FakeBoardService:
     def get_board_constituents(self, code):
         self.kwargs["board_code"] = code
         return self.constituents
+
+    def get_hot_stocks(self, period="day"):
+        self.kwargs["period"] = period
+        return self.hot
+
+    def search_tickers(self, query, limit=10):
+        self.kwargs["search"] = (query, limit)
+        return self.search
 
 
 @pytest.fixture()
@@ -146,6 +164,29 @@ def test_limit_up_pool_validates_params(app, fake_service):
         app.test_client().get("/api/market/limit-up/pool?date=2026-09-04").status_code == 400
     )
     assert app.test_client().get("/api/market/limit-up/pool?page=x").status_code == 400
+
+
+def test_limit_down_and_break_pools(app, fake_service):
+    resp = app.test_client().get("/api/market/limit-down/pool?date=20260904")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["down_pool"] == ("20260904", 1, 100)
+    resp = app.test_client().get("/api/market/limit-break/pool?size=50")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["break_pool"] == (None, 1, 50)
+
+
+def test_hot_stocks_endpoint(app, fake_service):
+    assert app.test_client().get("/api/market/hot-stocks?period=week").status_code == 400
+    resp = app.test_client().get("/api/market/hot-stocks?period=hour")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["period"] == "hour"
+
+
+def test_ticker_search_endpoint(app, fake_service):
+    assert app.test_client().get("/api/market/ticker-search?q=m").status_code == 400
+    resp = app.test_client().get("/api/market/ticker-search?q=茅台")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["search"] == ("茅台", 10)
 
 
 def test_limit_up_ladder_endpoint(app, fake_service):

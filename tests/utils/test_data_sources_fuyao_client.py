@@ -223,3 +223,42 @@ def test_ths_index_catalog_and_constituents(client):
     assert client._session.calls[1]["params"] == {"thscode": "881101.TI"}
     assert catalog[0]["name"] == "种植业与林业"
     assert constituents[0]["thscode"] == "000998.SZ"
+
+
+def test_limit_down_and_break_pools(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {"pagination": {"total": 9}, "item": [{"thscode": "002909.SZ"}]}}),
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {"pagination": {"total": 48}, "item": [{"thscode": "688170.SH", "open_times": 4}]}}),
+    ])
+    down = client.limit_down_pool(date_ms=1788451200000)
+    broke = client.limit_break_pool(date_ms=1788451200000)
+    assert "/limit-down-pool" in client._session.calls[0]["url"]
+    assert "/limit-break-pool" in client._session.calls[1]["url"]
+    assert down["item"][0]["thscode"] == "002909.SZ"
+    assert broke["item"][0]["open_times"] == 4
+
+
+def test_hot_and_skyrocket_lists(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {"item": [{"thscode": "601086.SH", "heat": "4741356"}]}}),
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {"item": []}}),
+    ])
+    hot = client.hot_stock_list(period="hour")
+    sky = client.skyrocket_list(period="hour")
+    assert client._session.calls[0]["params"] == {"period": "hour"}
+    assert hot[0]["heat"] == "4741356"
+    assert sky == []
+
+
+def test_ticker_search(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "item": [{"thscode": "600519.SH", "name": "贵州茅台", "asset_type": "a-share"}]
+        }}),
+    ])
+    rows = client.ticker_search("茅台", limit=5)
+    call = client._session.calls[0]
+    assert "/api/meta/tickers/search" in call["url"]
+    assert call["params"]["q"] == "茅台"
+    assert call["params"]["limit"] == 5
+    assert rows[0]["name"] == "贵州茅台"

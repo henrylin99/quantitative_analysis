@@ -324,6 +324,38 @@ class FuyaoClient:
             },
         ) or {}
 
+    def limit_down_pool(
+        self,
+        date_ms: Optional[int] = None,
+        page: int = 1,
+        size: int = 100,
+    ) -> Dict[str, Any]:
+        """A 股跌停股票池（date_ms 口径同涨停池）。
+
+        实测字段：thscode/ticker/name/last_price/price_change_ratio_pct/
+        first_limit_time/last_limit_time/turnover_ratio_pct。
+        """
+        return self._get(
+            "/api/a-share/special-data/limit-down-pool",
+            {"date_ms": date_ms, "page": page, "size": size},
+        ) or {}
+
+    def limit_break_pool(
+        self,
+        date_ms: Optional[int] = None,
+        page: int = 1,
+        size: int = 100,
+    ) -> Dict[str, Any]:
+        """A 股炸板股票池（曾涨停后开板；date_ms 口径同涨停池）。
+
+        实测字段：thscode/ticker/name/last_price/price_change_ratio_pct/
+        open_times(炸板次数)/turnover_ratio_pct/turnover。
+        """
+        return self._get(
+            "/api/a-share/special-data/limit-break-pool",
+            {"date_ms": date_ms, "page": page, "size": size},
+        ) or {}
+
     def limit_up_ladder(self) -> Dict[str, Any]:
         """连板天梯矩阵（近 30 个交易日）。
 
@@ -332,6 +364,39 @@ class FuyaoClient:
         （thscode/ticker/name/board_num/seal_nextday/sign_level）。
         """
         return self._get("/api/a-share/special-data/limit-up-ladder") or {}
+
+    def hot_stock_list(self, period: str = "day") -> List[Dict[str, Any]]:
+        """同花顺热股榜（period: day/hour；Top30）。
+
+        实测字段：thscode/ticker/name/rank/heat(字符串数值)/
+        rank_change/rank_trend(up/down/flat)。
+        """
+        data = self._get(
+            "/api/a-share/special-data/hot-stock-list",
+            {"period": period},
+        )
+        return data.get("item") or []
+
+    def skyrocket_list(self, period: str = "day") -> List[Dict[str, Any]]:
+        """同花顺热股飙升榜（热度飙升最快；period: day/hour；Top30）。"""
+        data = self._get(
+            "/api/a-share/special-data/skyrocket-list",
+            {"period": period},
+        )
+        return data.get("item") or []
+
+    def ticker_search(
+        self, query: str, asset_type: str = "a-share", limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """标的检索（名称/代码模糊匹配，用于搜索联想）。
+
+        实测字段：thscode/ticker/name/exchange/asset_type/currency。
+        """
+        data = self._get(
+            "/api/meta/tickers/search",
+            {"q": query, "asset_type": asset_type, "limit": limit},
+        )
+        return data.get("item") or []
 
     # ---- dump 下载 ----
 
