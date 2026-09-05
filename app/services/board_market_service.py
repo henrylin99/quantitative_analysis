@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import copy
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
+from app.services.market_snapshot_service import evict_oldest
 from app.utils.data_sources.fuyao_client import BEIJING_TZ, FuyaoClient, FuyaoError
 
 POOL_FRESH_SECONDS = 60.0
@@ -32,6 +34,10 @@ TRADING_DAYS_FRESH_SECONDS = 6 * 3600.0
 HOT_FRESH_SECONDS = 300.0
 SEARCH_FRESH_SECONDS = 60.0
 STALE_SERVE_SECONDS = 3600.0
+#: 进程内缓存容量上限（按日期/检索词等键会随使用增长，防无界）
+POOL_CACHE_MAX_ENTRIES = 64
+SEARCH_CACHE_MAX_ENTRIES = 128
+CONSTITUENTS_CACHE_MAX_ENTRIES = 128
 
 #: 天梯矩阵的档位键 → 连板数
 LADDER_BOARD_KEYS = (
@@ -83,10 +89,14 @@ class BoardMarketService:
     def _serve_stale(
         cached: Optional[Tuple[float, Dict[str, Any]]], fresh_seconds: float, exc: Exception
     ) -> Optional[Dict[str, Any]]:
-        """新鲜期过期后 1 小时内回供旧值（标 stale），超出窗口返回 None。"""
+        """新鲜期过期后 1 小时内回供旧值（标 stale），超出窗口返回 None。
+
+        回供的是深拷贝：调用方可能就地改 payload（如覆盖 cached/stale 标记），
+        不能与缓存共享嵌套结构。
+        """
         if cached and time.monotonic() - cached[0] < fresh_seconds + STALE_SERVE_SECONDS:
             logger.warning(f"[board] 扶摇拉取失败，回供过期缓存: {exc}")
-            payload = dict(cached[1])
+            payload = copy.deepcopy(cached[1])
             payload.update({"cached": True, "stale": True})
             return payload
         return None
@@ -148,7 +158,7 @@ class BoardMarketService:
             cached = cache.get(key)
         fresh = self._pool_fresh_seconds(resolved)
         if cached and time.monotonic() - cached[0] < fresh:
-            payload = dict(cached[1])
+            payload = copy.deepcopy(cached[1])
             payload["cached"] = True
             return payload
 
@@ -163,7 +173,9 @@ class BoardMarketService:
                 "items": normalize(data.get("item") or []),
             }
             with self._lock:
-                cache[key] = (time.monotonic(), payload)
+                evict_oldest(cache, POOL_CACHE_MAX_ENTRIES)
+                # 写入侧深拷贝：缓存对象与首次返回给调用方的对象隔离
+                cache[key] = (time.monotonic(), copy.deepcopy(payload))
             return payload
         except FuyaoError as exc:
             stale = self._serve_stale(cached, fresh, exc)
@@ -269,7 +281,7 @@ class BoardMarketService:
         with self._lock:
             cached = self._ladder_cache
         if cached and time.monotonic() - cached[0] < LADDER_FRESH_SECONDS:
-            return cached[1]
+            return copy.deepcopy(cached[1])
         try:
             data = self.client.limit_up_ladder()
         except FuyaoError as exc:
@@ -297,7 +309,7 @@ class BoardMarketService:
             )
         payload = {"days": days}
         with self._lock:
-            self._ladder_cache = (time.monotonic(), payload)
+            self._ladder_cache = (time.monotonic(), copy.deepcopy(payload))
         return payload
 
     # ---- 同花顺热股榜 / 飙升榜 ----
@@ -312,7 +324,7 @@ class BoardMarketService:
         with self._lock:
             cached = self._hot_cache.get(period)
         if cached and time.monotonic() - cached[0] < HOT_FRESH_SECONDS:
-            payload = dict(cached[1])
+            payload = copy.deepcopy(cached[1])
             payload["cached"] = True
             return payload
 
@@ -327,7 +339,7 @@ class BoardMarketService:
             raise
 
         with self._lock:
-            self._hot_cache[period] = (time.monotonic(), payload)
+            self._hot_cache[period] = (time.monotonic(), copy.deepcopy(payload))
         return payload
 
     @staticmethod
@@ -362,7 +374,7 @@ class BoardMarketService:
         with self._lock:
             cached = self._search_cache.get(key)
         if cached and time.monotonic() - cached[0] < SEARCH_FRESH_SECONDS:
-            return cached[1]
+            return copy.deepcopy(cached[1])
         rows = self.client.ticker_search(text, asset_type="a-share", limit=key[1])
         payload = {
             "query": text,
@@ -377,7 +389,8 @@ class BoardMarketService:
             ],
         }
         with self._lock:
-            self._search_cache[key] = (time.monotonic(), payload)
+            evict_oldest(self._search_cache, SEARCH_CACHE_MAX_ENTRIES)
+            self._search_cache[key] = (time.monotonic(), copy.deepcopy(payload))
         return payload
 
     # ---- 同花顺行业 / 概念板块 ----
@@ -394,7 +407,7 @@ class BoardMarketService:
         with self._lock:
             cached = self._boards_cache.get(tag)
         if cached and time.monotonic() - cached[0] < BOARD_SNAPSHOT_FRESH_SECONDS:
-            payload = dict(cached[1])
+            payload = copy.deepcopy(cached[1])
             payload["cached"] = True
             return payload
 
@@ -444,7 +457,7 @@ class BoardMarketService:
             "server_ts": _now_ms(),
         }
         with self._lock:
-            self._boards_cache[tag] = (time.monotonic(), payload)
+            self._boards_cache[tag] = (time.monotonic(), copy.deepcopy(payload))
         return payload
 
     def _get_catalog(self, tag: str) -> List[Dict[str, Any]]:
@@ -472,7 +485,7 @@ class BoardMarketService:
         with self._lock:
             cached = self._constituents_cache.get(code)
         if cached and time.monotonic() - cached[0] < CONSTITUENTS_FRESH_SECONDS:
-            payload = dict(cached[1])
+            payload = copy.deepcopy(cached[1])
             payload["cached"] = True
             return payload
 
@@ -500,7 +513,8 @@ class BoardMarketService:
             )
         payload = {"code": code, "total": len(items), "items": items}
         with self._lock:
-            self._constituents_cache[code] = (time.monotonic(), payload)
+            evict_oldest(self._constituents_cache, CONSTITUENTS_CACHE_MAX_ENTRIES)
+            self._constituents_cache[code] = (time.monotonic(), copy.deepcopy(payload))
         return payload
 
     @staticmethod

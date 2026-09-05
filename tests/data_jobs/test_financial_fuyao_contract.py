@@ -166,3 +166,26 @@ def test_registry_metadata_financial_fuyao():
     registry = JobRegistry()
     assert registry.get_job("financial_fuyao").source_name == "fuyao"
     assert registry.get_job("stock_basic_fuyao").source_name == "fuyao"
+
+
+def test_read_existing_partition_falls_back_to_default_data_root(monkeypatch, tmp_path):
+    """回归：data_dir=None 时必须与 save_to_parquet 同源回退（DATA_DIR→项目 data/），
+    否则分块 flush 各自整分区覆盖，静默丢掉之前块的数据（PR #16 review #1）。"""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    end_date = "20260331"
+    table = "income_statement"
+
+    from app.utils.parquet_writer import save_to_parquet
+
+    existing = pd.DataFrame(
+        {"ts_code": ["600000.SH"], "end_date": [end_date], "ann_date": ["20260420"]}
+    )
+    save_to_parquet(existing, trade_date=end_date, table=table)
+
+    # save_to_parquet 写入的分区，_read_existing_partition 必须能读到
+    found = financial_fuyao._read_existing_partition(table, end_date, data_dir=None)
+    assert found is not None
+    assert list(found["ts_code"]) == ["600000.SH"]
+
+    # 显式 data_dir 仍然生效（指向别处时读不到该分区）
+    assert financial_fuyao._read_existing_partition(table, end_date, data_dir=str(tmp_path / "elsewhere")) is None

@@ -68,6 +68,9 @@ class DumpStore:
     def __init__(self, client: FuyaoClient, cache_dir: Optional[Path] = None):
         self.client = client
         self.cache_dir = Path(cache_dir) if cache_dir else default_cache_dir()
+        # memo 仅限单进程生命周期：当前数据作业均经 subprocess 执行，每次新进程
+        # 冷启动自然拿到新 release。若将来把 DumpStore 引入长驻服务，这里必须
+        # 改为按 release 失效（或加 TTL），否则会钉死在进程首次加载的版本。
         self._path_memo: Dict[str, Path] = {}
         self._frame_memo: Dict[str, pd.DataFrame] = {}
 

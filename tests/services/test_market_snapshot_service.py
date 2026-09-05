@@ -186,3 +186,74 @@ def test_source_status_cached(monkeypatch):
     service.get_source_status(force=True)
     service.get_source_status()
     assert client.snapshot_calls == 1
+
+
+# ---- 龙虎榜/竞价缓存（PR #16 review #2/#3 修复的行为锁定）----
+
+import time as _time
+
+from app.utils.data_sources.fuyao_client import FuyaoError
+
+
+class _FakeDayClient:
+    """按调用计数的最小 client：dragon/boom 可切换。"""
+
+    def __init__(self, payload=None, boom=False):
+        self.calls = 0
+        self.payload = payload if payload is not None else {"trade_date": "20260904"}
+        self.boom = boom
+
+    def dragon_tiger_list(self, board_type="all", date=None):
+        self.calls += 1
+        if self.boom:
+            raise FuyaoError("network", "down")
+        return dict(self.payload)
+
+
+def test_dragon_tiger_none_date_cache_expires_and_refetches(monkeypatch):
+    client = _FakeDayClient()
+    service = MarketSnapshotService(client=client)
+    service.get_dragon_tiger()
+    service.get_dragon_tiger()
+    assert client.calls == 1  # 命中短缓存
+
+    real = _time.monotonic()
+    monkeypatch.setattr(svc_mod.time, "monotonic", lambda: real + 301)
+    service.get_dragon_tiger()
+    assert client.calls == 2  # date=None 的"最近发布日"缓存 300s 后过期重取
+
+
+def test_dragon_tiger_serves_stale_on_error(monkeypatch):
+    client = _FakeDayClient()
+    service = MarketSnapshotService(client=client)
+    service.get_dragon_tiger()
+
+    client.boom = True
+    real = _time.monotonic()
+    # 过了新鲜期(300s)但仍在 10 分钟回供窗口内
+    monkeypatch.setattr(svc_mod.time, "monotonic", lambda: real + 600)
+    payload = service.get_dragon_tiger()
+    assert payload["stale"] is True
+    assert payload["trade_date"] == "20260904"  # 回供的是旧值
+    assert client.calls == 2  # 1 次成功 + 恰好 1 次失败尝试，无重试风暴
+
+
+def test_day_cache_capacity_eviction(monkeypatch):
+    client = _FakeDayClient()
+    service = MarketSnapshotService(client=client)
+    monkeypatch.setattr(svc_mod, "DAY_CACHE_MAX_ENTRIES", 2)
+    for d in ("20260901", "20260902", "20260903"):
+        service.get_dragon_tiger(date=d)
+    with service._lock:
+        remaining = set(service._dragon_cache.keys())
+    assert ("all", "20260901") not in remaining  # 最旧被淘汰
+    assert len(remaining) == 2
+
+
+def test_dragon_tiger_cached_payload_is_deep_copied():
+    payload = {"trade_date": "20260904", "stock_items": [{"ts_code": "600000.SH"}]}
+    service = MarketSnapshotService(client=_FakeDayClient(payload=payload))
+    first = service.get_dragon_tiger()
+    first["stock_items"][0]["ts_code"] = "MUTATED"
+    second = service.get_dragon_tiger()
+    assert second["stock_items"][0]["ts_code"] == "600000.SH"
