@@ -36,6 +36,7 @@ const MarketDashboardPage = lazy(() => import('./pages/MarketDashboardPage'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 const DragonTigerPage = lazy(() => import('./pages/DragonTigerPage'))
 const LimitUpLadderPage = lazy(() => import('./pages/LimitUpLadderPage'))
+const HotStocksPage = lazy(() => import('./pages/HotStocksPage'))
 const ConceptAnalysisPage = lazy(() => import('./pages/ConceptAnalysisPage'))
 const IndustryAnalysisPage = lazy(() => import('./pages/IndustryAnalysisPage'))
 const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
@@ -97,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/dashboard', label: '市场看板', icon: '📊' },
       { to: '/market/watchlist', label: '自选行情', icon: '⭐' },
       { to: '/market/limit-up', label: '连板天梯', icon: '🔥' },
+      { to: '/market/hot', label: '热股榜单', icon: '📈' },
       { to: '/market/concepts', label: '概念分析', icon: '💡' },
       { to: '/market/industries', label: '行业分析', icon: '🏭' },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: '🐉' },
@@ -213,6 +215,14 @@ function Shell() {
               element={
                 <Suspense fallback={null}>
                   <LimitUpLadderPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/market/hot"
+              element={
+                <Suspense fallback={null}>
+                  <HotStocksPage />
                 </Suspense>
               }
             />
