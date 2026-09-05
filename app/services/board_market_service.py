@@ -29,6 +29,8 @@ BOARD_SNAPSHOT_FRESH_SECONDS = 60.0
 CATALOG_FRESH_SECONDS = 6 * 3600.0
 CONSTITUENTS_FRESH_SECONDS = 3600.0
 TRADING_DAYS_FRESH_SECONDS = 6 * 3600.0
+HOT_FRESH_SECONDS = 300.0
+SEARCH_FRESH_SECONDS = 60.0
 STALE_SERVE_SECONDS = 3600.0
 
 #: 天梯矩阵的档位键 → 连板数
@@ -61,6 +63,10 @@ class BoardMarketService:
         self._client = client
         self._lock = threading.Lock()
         self._pool_cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]] = {}
+        self._down_pool_cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]] = {}
+        self._break_pool_cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]] = {}
+        self._hot_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._search_cache: Dict[Tuple[str, int], Tuple[float, Dict[str, Any]]] = {}
         self._ladder_cache: Optional[Tuple[float, Dict[str, Any]]] = None
         self._catalog_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._boards_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
@@ -120,41 +126,46 @@ class BoardMarketService:
             day -= timedelta(days=1)
         return day.strftime("%Y%m%d")
 
-    # ---- 涨停池 / 连板天梯 ----
+    # ---- 涨停 / 跌停 / 炸板池 ----
 
-    def get_limit_up_pool(self, date: Optional[str] = None, page: int = 1, size: int = 100) -> Dict[str, Any]:
-        """涨停池（date YYYYMMDD 可空=最近交易日；连板数降序）。
+    def _get_special_pool(
+        self,
+        cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]],
+        fetch,
+        normalize,
+        date: Optional[str],
+        page: int,
+        size: int,
+    ) -> Dict[str, Any]:
+        """特色数据池通用获取：日期解析 + TTL 缓存 + 过期回供。
 
-        返回 {date,total,page,size,items:[...],stale?}；扶摇异常时回供
-        1 小时内的过期缓存。
+        fetch(date_ms, page, size) 返回 {pagination, item}；normalize 把
+        服务端字段映射为前端蛇形字段。历史日数据不再变化，缓存视为永久。
         """
         resolved = self._validate_date(date) or self.latest_trade_date()
         key = (resolved, page, min(int(size), 200))
         with self._lock:
-            cached = self._pool_cache.get(key)
-        if cached and time.monotonic() - cached[0] < self._pool_fresh_seconds(resolved):
+            cached = cache.get(key)
+        fresh = self._pool_fresh_seconds(resolved)
+        if cached and time.monotonic() - cached[0] < fresh:
             payload = dict(cached[1])
             payload["cached"] = True
             return payload
 
         try:
-            data = self.client.limit_up_pool(
-                date_ms=_ymd_to_beijing_ms(resolved), page=key[1], size=key[2]
-            )
+            data = fetch(_ymd_to_beijing_ms(resolved), key[1], key[2])
             pagination = data.get("pagination") or {}
-            items = self._normalize_pool_items(data.get("item") or [])
             payload = {
                 "date": resolved,
-                "total": int(pagination.get("total") or len(items)),
+                "total": int(pagination.get("total") or len(data.get("item") or [])),
                 "page": key[1],
                 "size": key[2],
-                "items": items,
+                "items": normalize(data.get("item") or []),
             }
             with self._lock:
-                self._pool_cache[key] = (time.monotonic(), payload)
+                cache[key] = (time.monotonic(), payload)
             return payload
         except FuyaoError as exc:
-            fresh = self._pool_fresh_seconds(resolved)
             stale = self._serve_stale(cached, fresh, exc)
             if stale is not None:
                 return stale
@@ -168,27 +179,90 @@ class BoardMarketService:
 
     @staticmethod
     def _normalize_pool_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """字段重命名为前端友好蛇形（保留原始含义，见 client docstring）。"""
-        normalized = []
-        for row in items:
-            normalized.append(
-                {
-                    "ts_code": row.get("thscode"),
-                    "ticker": row.get("ticker"),
-                    "name": row.get("name"),
-                    "is_st": bool(row.get("is_st")),
-                    "is_new": bool(row.get("is_new")),
-                    "last_price": row.get("last_price"),
-                    "pct_chg": row.get("price_change_ratio_pct"),
-                    "limit_up_time": row.get("limit_up_time"),
-                    "reason": row.get("limit_up_reason"),
-                    "continue_day_text": row.get("continue_day_text"),
-                    "continue_day_cnt": row.get("continue_day_cnt"),
-                    "seal_money": row.get("seal_money"),
-                    "max_seal_money": row.get("max_seal_money"),
-                }
-            )
-        return normalized
+        """涨停池字段重命名为前端友好蛇形（原始含义见 client docstring）。"""
+        return [
+            {
+                "ts_code": row.get("thscode"),
+                "ticker": row.get("ticker"),
+                "name": row.get("name"),
+                "is_st": bool(row.get("is_st")),
+                "is_new": bool(row.get("is_new")),
+                "last_price": row.get("last_price"),
+                "pct_chg": row.get("price_change_ratio_pct"),
+                "limit_up_time": row.get("limit_up_time"),
+                "reason": row.get("limit_up_reason"),
+                "continue_day_text": row.get("continue_day_text"),
+                "continue_day_cnt": row.get("continue_day_cnt"),
+                "seal_money": row.get("seal_money"),
+                "max_seal_money": row.get("max_seal_money"),
+            }
+            for row in items
+        ]
+
+    @staticmethod
+    def _normalize_down_pool_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "ts_code": row.get("thscode"),
+                "ticker": row.get("ticker"),
+                "name": row.get("name"),
+                "last_price": row.get("last_price"),
+                "pct_chg": row.get("price_change_ratio_pct"),
+                "first_limit_time": row.get("first_limit_time"),
+                "last_limit_time": row.get("last_limit_time"),
+                "turnover_ratio_pct": row.get("turnover_ratio_pct"),
+            }
+            for row in items
+        ]
+
+    @staticmethod
+    def _normalize_break_pool_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "ts_code": row.get("thscode"),
+                "ticker": row.get("ticker"),
+                "name": row.get("name"),
+                "last_price": row.get("last_price"),
+                "pct_chg": row.get("price_change_ratio_pct"),
+                "open_times": row.get("open_times"),
+                "turnover_ratio_pct": row.get("turnover_ratio_pct"),
+                "turnover": row.get("turnover"),
+            }
+            for row in items
+        ]
+
+    def get_limit_up_pool(self, date: Optional[str] = None, page: int = 1, size: int = 100) -> Dict[str, Any]:
+        """涨停池（date YYYYMMDD 可空=最近交易日；连板数降序）。"""
+        return self._get_special_pool(
+            self._pool_cache,
+            lambda ms, p, s: self.client.limit_up_pool(date_ms=ms, page=p, size=s),
+            self._normalize_pool_items,
+            date,
+            page,
+            size,
+        )
+
+    def get_limit_down_pool(self, date: Optional[str] = None, page: int = 1, size: int = 100) -> Dict[str, Any]:
+        """跌停池（date 口径同涨停池）。"""
+        return self._get_special_pool(
+            self._down_pool_cache,
+            lambda ms, p, s: self.client.limit_down_pool(date_ms=ms, page=p, size=s),
+            self._normalize_down_pool_items,
+            date,
+            page,
+            size,
+        )
+
+    def get_limit_break_pool(self, date: Optional[str] = None, page: int = 1, size: int = 100) -> Dict[str, Any]:
+        """炸板池（曾涨停后开板；date 口径同涨停池）。"""
+        return self._get_special_pool(
+            self._break_pool_cache,
+            lambda ms, p, s: self.client.limit_break_pool(date_ms=ms, page=p, size=s),
+            self._normalize_break_pool_items,
+            date,
+            page,
+            size,
+        )
 
     def get_limit_up_ladder(self) -> Dict[str, Any]:
         """连板天梯：30 个交易日的 {date, counts:{连板数:家数}, highest}。"""
@@ -224,6 +298,86 @@ class BoardMarketService:
         payload = {"days": days}
         with self._lock:
             self._ladder_cache = (time.monotonic(), payload)
+        return payload
+
+    # ---- 同花顺热股榜 / 飙升榜 ----
+
+    def get_hot_stocks(self, period: str = "day") -> Dict[str, Any]:
+        """热股榜 + 飙升榜（period: day/hour；缓存 5 分钟）。
+
+        heat 为字符串数值，统一转 float 便于前端排序展示。
+        """
+        if period not in ("day", "hour"):
+            raise ValueError("period 取值须为 day/hour")
+        with self._lock:
+            cached = self._hot_cache.get(period)
+        if cached and time.monotonic() - cached[0] < HOT_FRESH_SECONDS:
+            payload = dict(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            hot = self._normalize_hot_items(self.client.hot_stock_list(period=period))
+            skyrocket = self._normalize_hot_items(self.client.skyrocket_list(period=period))
+            payload = {"period": period, "hot": hot, "skyrocket": skyrocket}
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, HOT_FRESH_SECONDS, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        with self._lock:
+            self._hot_cache[period] = (time.monotonic(), payload)
+        return payload
+
+    @staticmethod
+    def _normalize_hot_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized = []
+        for row in items:
+            try:
+                heat = float(row.get("heat"))
+            except (TypeError, ValueError):
+                heat = None
+            normalized.append(
+                {
+                    "ts_code": row.get("thscode"),
+                    "ticker": row.get("ticker"),
+                    "name": row.get("name"),
+                    "rank": row.get("rank"),
+                    "heat": heat,
+                    "rank_change": row.get("rank_change"),
+                    "rank_trend": row.get("rank_trend"),
+                }
+            )
+        return normalized
+
+    # ---- 标的检索 ----
+
+    def search_tickers(self, query: str, limit: int = 10) -> Dict[str, Any]:
+        """名称/代码模糊检索（自选添加联想；透传扶摇，短缓存 60s）。"""
+        text = (query or "").strip()
+        if len(text) < 2:
+            raise ValueError("检索关键字至少 2 个字符")
+        key = (text.lower(), min(int(limit), 20))
+        with self._lock:
+            cached = self._search_cache.get(key)
+        if cached and time.monotonic() - cached[0] < SEARCH_FRESH_SECONDS:
+            return cached[1]
+        rows = self.client.ticker_search(text, asset_type="a-share", limit=key[1])
+        payload = {
+            "query": text,
+            "items": [
+                {
+                    "ts_code": row.get("thscode"),
+                    "ticker": row.get("ticker"),
+                    "name": row.get("name"),
+                    "exchange": row.get("exchange"),
+                }
+                for row in rows
+            ],
+        }
+        with self._lock:
+            self._search_cache[key] = (time.monotonic(), payload)
         return payload
 
     # ---- 同花顺行业 / 概念板块 ----
