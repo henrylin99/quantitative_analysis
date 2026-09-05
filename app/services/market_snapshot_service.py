@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import copy
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -29,6 +30,20 @@ DASHBOARD_CACHE_SECONDS = 30.0
 QUOTES_CACHE_SECONDS = 5.0
 STALE_SERVE_SECONDS = 600.0  # 扶摇异常时，最近一次成功数据在 10 分钟内继续供应
 SOURCE_STATUS_CACHE_SECONDS = 300.0
+INDICES_FRESH_SECONDS = 10.0
+#: 龙虎榜/竞价 date=None（"最近发布日"）的短缓存——发布时点未知，不能按日缓存
+LATEST_DAY_FRESH_SECONDS = 300.0
+#: 指定历史日的榜单是定稿数据，长缓存即可
+DAY_FINAL_TTL_SECONDS = 24 * 3600.0
+#: 按日缓存容量上限（防多日期轮询导致无界增长）
+DAY_CACHE_MAX_ENTRIES = 64
+
+
+def evict_oldest(cache: Dict[Any, Tuple[float, Any]], max_entries: int) -> None:
+    """按写入时间淘汰最旧条目，调用方须已持有锁。"""
+    while len(cache) >= max_entries:
+        oldest = min(cache.items(), key=lambda kv: kv[1][0])[0]
+        cache.pop(oldest)
 
 #: 看板默认指数（上证指数/深证成指/创业板指/沪深300）
 DEFAULT_INDEX_CODES = ("000001.SH", "399001.SZ", "399006.SZ", "000300.SH")
@@ -56,6 +71,7 @@ class MarketSnapshotService:
         self._auction_cache: Dict[Optional[str], Tuple[float, Dict[str, Any]]] = {}
         self._status_cache: Optional[Tuple[float, Dict[str, Any]]] = None
         self._frame_cache: Optional[Tuple[float, "pd.DataFrame"]] = None
+        self._indices_cache: Dict[Tuple[str, ...], Tuple[float, List[Dict[str, Any]]]] = {}
 
     # ---- 基础 ----
 
@@ -224,14 +240,25 @@ class MarketSnapshotService:
     # ---- 指数 ----
 
     def get_indices(self, symbols: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """指数实时快照（默认看板四指数；北交所指数不支持，自动跳过）。"""
+        """指数实时快照（默认看板四指数；北交所指数不支持，自动跳过）。
+
+        缓存 10 秒；扶摇异常时回供 10 分钟内的旧值，再退返回 []。
+        """
         wanted = [s for s in (symbols or list(DEFAULT_INDEX_CODES)) if not s.upper().endswith(".BJ")]
+        key = tuple(wanted)
+        with self._lock:
+            cached = self._indices_cache.get(key)
+        if cached and time.monotonic() - cached[0] < INDICES_FRESH_SECONDS:
+            return copy.deepcopy(cached[1])
         try:
             rows, _ = self.client.index_snapshot(wanted)
         except FuyaoError as exc:
+            if cached and time.monotonic() - cached[0] < STALE_SERVE_SECONDS:
+                logger.warning(f"[market] 指数快照失败，回供过期缓存: {exc}")
+                return copy.deepcopy(cached[1])
             logger.warning(f"[market] 指数快照失败: {exc}")
             return []
-        return [
+        result = [
             {
                 "ts_code": row.get("thscode"),
                 "last_price": row.get("last_price"),
@@ -239,33 +266,64 @@ class MarketSnapshotService:
             }
             for row in rows
         ]
+        with self._lock:
+            evict_oldest(self._indices_cache, DAY_CACHE_MAX_ENTRIES)
+            self._indices_cache[key] = (time.monotonic(), result)
+        return result
 
-    # ---- 龙虎榜 / 竞价风向标（按日缓存，当日数据不变）----
+    # ---- 龙虎榜 / 竞价风向标 ----
+    # date=None 表示"最近发布日"，发布时点未知（龙虎榜收盘后才出），只做短缓存；
+    # 指定历史日的榜单是定稿数据，可长缓存；两种键都设容量上限防无界增长。
+
+    @staticmethod
+    def _day_data_fresh(date: Optional[str]) -> float:
+        return LATEST_DAY_FRESH_SECONDS if date is None else DAY_FINAL_TTL_SECONDS
+
+    def _fetch_day_payload(
+        self,
+        cache: Dict[Any, Tuple[float, Dict[str, Any]]],
+        key: Any,
+        date: Optional[str],
+        fetch,
+    ) -> Dict[str, Any]:
+        """按日数据通用获取：TTL 缓存 + 过期回供 + 容量上限。"""
+        fresh = self._day_data_fresh(date)
+        with self._lock:
+            cached = cache.get(key)
+        if cached and time.monotonic() - cached[0] < fresh:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+        try:
+            payload = fetch()
+        except FuyaoError as exc:
+            if cached and time.monotonic() - cached[0] < fresh + STALE_SERVE_SECONDS:
+                logger.warning(f"[market] 按日数据拉取失败，回供过期缓存: {exc}")
+                payload = copy.deepcopy(cached[1])
+                payload.update({"cached": True, "stale": True})
+                return payload
+            raise
+        with self._lock:
+            evict_oldest(cache, DAY_CACHE_MAX_ENTRIES)
+            # 写入侧也深拷贝：缓存中的对象与首次返回给调用方的对象必须隔离
+            cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
 
     def get_dragon_tiger(self, board_type: str = "all", date: Optional[str] = None) -> Dict[str, Any]:
-        key = (board_type, date)
-        with self._lock:
-            cached = self._dragon_cache.get(key)
-        if cached:
-            payload = dict(cached[1])
-            payload["cached"] = True
-            return payload
-        payload = self.client.dragon_tiger_list(board_type=board_type, date=date)
-        with self._lock:
-            self._dragon_cache[key] = (time.monotonic(), payload)
-        return payload
+        return self._fetch_day_payload(
+            self._dragon_cache,
+            (board_type, date),
+            date,
+            lambda: self.client.dragon_tiger_list(board_type=board_type, date=date),
+        )
 
     def get_auction_benchmark(self, date: Optional[str] = None) -> Dict[str, Any]:
-        with self._lock:
-            cached = self._auction_cache.get(date)
-        if cached:
-            payload = dict(cached[1])
-            payload["cached"] = True
-            return payload
-        payload = self.client.short_term_benchmark(date=date)
-        with self._lock:
-            self._auction_cache[date] = (time.monotonic(), payload)
-        return payload
+        return self._fetch_day_payload(
+            self._auction_cache,
+            date,
+            date,
+            lambda: self.client.short_term_benchmark(date=date),
+        )
 
     # ---- 数据源状态 ----
 
