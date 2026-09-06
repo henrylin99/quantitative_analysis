@@ -1,3 +1,10 @@
+import {
+  AlertTriangle, Bot, Brain, CircleCheck, ClipboardList, Coins, Compass, Crosshair,
+  Database, Dna, Factory, FileText, Flame, Inbox, MessageSquare, Newspaper, PieChart,
+  Puzzle, Radio, Receipt, Satellite, Search, Shield, Signal, Thermometer,
+  TrendingDown, Zap, type LucideIcon,
+} from 'lucide-react'
+
 interface LoadingProps {
   text?: string
 }
@@ -31,7 +38,10 @@ interface ErrorStateProps {
 export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (
     <div className="alert-error" role="alert">
-      <span>⚠️ {message}</span>
+      <span className="alert-error-msg">
+        <AlertTriangle size={15} strokeWidth={1.8} aria-hidden />
+        {message}
+      </span>
       {onRetry && (
         <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onRetry}>
           重试
@@ -39,6 +49,41 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
       )}
     </div>
   )
+}
+
+/** 旧页面仍以 emoji 字面量传 icon（如 icon="🔥"）；统一解析为 SVG 线性图标 */
+const EMOJI_ICONS: Record<string, LucideIcon> = {
+  '🗃️': Database,
+  '🧩': Puzzle,
+  '🔍': Search,
+  '🎯': Crosshair,
+  '📡': Radio,
+  '🏭': Factory,
+  '🌡️': Thermometer,
+  '📊': PieChart,
+  '🔥': Flame,
+  '📉': TrendingDown,
+  '📋': ClipboardList,
+  '⚡': Zap,
+  '🛰️': Satellite,
+  '💰': Coins,
+  '🤖': Bot,
+  '🚦': Signal,
+  '🧬': Dna,
+  '🧾': Receipt,
+  '💬': MessageSquare,
+  '🧠': Brain,
+  '🛡️': Shield,
+  '✅': CircleCheck,
+  '📰': Newspaper,
+  '🧭': Compass,
+  '📄': FileText,
+  '📭': Inbox,
+}
+
+function EmptyIcon({ icon }: { icon: string }) {
+  const Named = EMOJI_ICONS[icon] ?? (EMOJI_ICONS['📭'] as LucideIcon)
+  return <Named size={34} strokeWidth={1.4} aria-hidden />
 }
 
 interface EmptyStateProps {
@@ -49,7 +94,9 @@ interface EmptyStateProps {
 export function EmptyState({ text = '暂无数据', icon = '📭' }: EmptyStateProps) {
   return (
     <div className="empty-state">
-      <span className="icon">{icon}</span>
+      <span className="icon">
+        <EmptyIcon icon={icon} />
+      </span>
       <div className="hint">{text}</div>
     </div>
   )

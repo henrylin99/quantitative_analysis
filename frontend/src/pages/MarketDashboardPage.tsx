@@ -25,8 +25,8 @@ function BoardTable({ rows, metric }: { rows: BoardRow[]; metric: 'pct' | 'amoun
       <tbody>
         {rows.map((row) => (
           <tr key={row.ts_code} className="border-t border-line/60 first:border-t-0 hover:bg-elevated/60">
-            <td className="px-3 py-1.5">
-              <StockLink code={row.ts_code} name={row.name} />
+            <td className="max-w-[10rem] truncate px-3 py-1.5">
+              <StockLink code={row.ts_code} name={row.name} className="max-w-full" />
             </td>
             <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.price ?? '--'}</td>
             <td className="px-3 py-1.5 text-right">
@@ -137,7 +137,7 @@ export default function MarketDashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-1.5 xl:grid-cols-[1fr_20rem]">
+        <div className="grid grid-cols-1 gap-1.5 xl:grid-cols-[1fr_16rem]">
           {/* 左列：分布 + 榜单 */}
           <div className="space-y-1.5">
             <Card>
