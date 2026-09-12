@@ -1,5 +1,5 @@
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, Component, type ReactNode } from 'react'
 import {
   Activity, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
   ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, HeartPulse, Home,
@@ -142,6 +142,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+/** 暂时从侧边栏隐藏的分组：路由仍可直达，恢复入口时把分组标签从这里移除即可 */
+const HIDDEN_NAV_GROUPS = new Set(['试用工具'])
+
 /** 路由切换后回到页首，避免长列表页跳转后停留在旧滚动位置 */
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -149,6 +152,39 @@ function ScrollToTop() {
     window.scrollTo(0, 0)
   }, [pathname])
   return null
+}
+
+/** 路由级渲染崩溃兜底：单页异常显示错误卡片，而不是整个应用白屏 */
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div className="page-head">
+        <div className="panel">
+          <div className="panel-body">
+            <h5>页面渲染出错</h5>
+            <p className="text-muted" style={{ wordBreak: 'break-all' }}>
+              {this.state.error.message || '未知错误'}
+            </p>
+            <div className="d-flex gap-2">
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => this.setState({ error: null })}>
+                重试
+              </button>
+              <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => window.location.reload()}>
+                刷新页面
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 }
 
 /** lazy 路由 chunk 加载期间的占位，避免整片空白 */
@@ -179,7 +215,7 @@ function Shell() {
           </span>
         </NavLink>
         <nav className="side-nav">
-          {NAV_GROUPS.map((group) => (
+          {NAV_GROUPS.filter((group) => !HIDDEN_NAV_GROUPS.has(group.label)).map((group) => (
             <div className="side-group" key={group.label}>
               <div className="side-group-label">{group.label}</div>
               {group.items.map((item) => (
@@ -208,7 +244,8 @@ function Shell() {
       </aside>
       <div className="app-body">
         <main className="app-main">
-          <Routes>
+          <RouteErrorBoundary>
+            <Routes>
             <Route path="/" element={<LazyRoute><HomePage /></LazyRoute>} />
             <Route path="/stocks" element={<LazyRoute><StocksPage /></LazyRoute>} />
             <Route path="/stock/:tsCode" element={<LazyRoute><StockDetailPage /></LazyRoute>} />
@@ -303,7 +340,8 @@ function Shell() {
             <Route path="/ai-workbench" element={<LazyRoute><AiWorkbenchPage /></LazyRoute>} />
             <Route path="/text2sql" element={<LazyRoute><Text2SqlPage /></LazyRoute>} />
             <Route path="*" element={<LazyRoute><HomePage /></LazyRoute>} />
-          </Routes>
+            </Routes>
+          </RouteErrorBoundary>
         </main>
       </div>
     </>

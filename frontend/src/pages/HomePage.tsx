@@ -37,6 +37,9 @@ const aiFeatures: FeatureTile[] = [
   { to: '/data-management', icon: Database, title: '数据管理', desc: '日频任务调度、大宽表构建、分钟数据同步' },
 ]
 
+/** 暂时隐藏的首页宫格分组：对应路由仍可直达，恢复入口时把标题从这里移除即可 */
+const HIDDEN_TILE_GROUPS = new Set(['试用工具'])
+
 export default function HomePage() {
   const [totalStocks, setTotalStocks] = useState<number | null>(null)
   const [industries, setIndustries] = useState<number | null>(null)
@@ -119,7 +122,7 @@ export default function HomePage() {
       </div>
 
       {tileGroup('核心功能', coreFeatures)}
-      {tileGroup('试用工具', toolFeatures)}
+      {HIDDEN_TILE_GROUPS.has('试用工具') ? null : tileGroup('试用工具', toolFeatures)}
       {tileGroup('进阶能力', aiFeatures)}
     </div>
   )

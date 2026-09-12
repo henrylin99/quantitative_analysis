@@ -63,7 +63,7 @@ export default function MarketDashboardPage() {
   return (
     <div className="tsp-root min-h-full">
       <PageHeader
-        title="市场看板"
+        title="市场看板（数据来源--同花顺）"
         subtitle={
           data?.source === 'local_parquet'
             ? `实时源不可用 · 展示本地数据 ${data.as_of ?? ''}`

@@ -12,17 +12,31 @@ export const fetchSupportedIndicators = async (): Promise<SupportedIndicator[]> 
   return r.data ?? []
 }
 
+/**
+ * 实时分析域部分接口以 HTTP 200 + success=false 表达业务失败
+ * （如“没有找到 xxx 的数据”），统一转成异常走调用方错误态，
+ * 避免把失败信封当成功数据渲染导致页面崩溃。
+ */
+function ensureSuccess<T extends { success?: boolean; message?: string }>(payload: T): T {
+  if (payload?.success === false) {
+    throw new Error(payload?.message || '请求失败')
+  }
+  return payload
+}
+
 export const calculateIndicators = async (body: { ts_code: string; period_type: string; indicators: string[]; lookback_days: number }) => {
   try {
-    return await rawPost<{
-      success: boolean
-      total_indicators: number
-      data_points: number
-      stored_records: number
-      latest_values: Record<string, number | number[]>
-      indicator_summary: Record<string, { stored_records: number }>
-      timeline?: string[]
-    }>('/realtime-analysis/indicators/calculate', body, 300_000)
+    return ensureSuccess(
+      await rawPost<{
+        success: boolean
+        total_indicators: number
+        data_points: number
+        stored_records: number
+        latest_values: Record<string, number | number[]>
+        indicator_summary: Record<string, { stored_records: number }>
+        timeline?: string[]
+      }>('/realtime-analysis/indicators/calculate', body, 300_000),
+    )
   } catch (e) {
     throw new Error(extractApiError(e, '指标计算失败'))
   }
@@ -30,11 +44,13 @@ export const calculateIndicators = async (body: { ts_code: string; period_type: 
 
 export const calculateMultiPeriod = async (body: { ts_code: string; periods: string[]; indicators: string[] }) => {
   try {
-    return await rawPost<{
-      success: boolean
-      summary: { period_count: number; available_periods: string[] }
-      data: Record<string, { success: boolean; total_indicators: number; latest_values?: Record<string, unknown>; message?: string }>
-    }>('/realtime-analysis/indicators/multi-period', body, 300_000)
+    return ensureSuccess(
+      await rawPost<{
+        success: boolean
+        summary: { period_count: number; available_periods: string[] }
+        data: Record<string, { success: boolean; total_indicators: number; latest_values?: Record<string, unknown>; message?: string }>
+      }>('/realtime-analysis/indicators/multi-period', body, 300_000),
+    )
   } catch (e) {
     throw new Error(extractApiError(e, '多周期分析失败'))
   }
@@ -42,16 +58,18 @@ export const calculateMultiPeriod = async (body: { ts_code: string; periods: str
 
 export const compareIndicators = async (body: { stock_codes: string[]; period_type: string; indicator_name: string; limit: number }) => {
   try {
-    return await rawPost<{
-      success: boolean
-      data: Record<string, { datetime: string; value1?: number; value2?: number; value3?: number; value4?: number }[]>
-      indicator_name: string
-      period_type: string
-      stock_codes: string[]
-      empty_state?: { has_data: boolean; message: string }
-    }>('/realtime-analysis/indicators/compare', body, 300_000)
+    return ensureSuccess(
+      await rawPost<{
+        success: boolean
+        data: Record<string, { datetime: string; value1?: number; value2?: number; value3?: number; value4?: number }[]>
+        indicator_name: string
+        period_type: string
+        stock_codes: string[]
+        empty_state?: { has_data: boolean; message: string }
+      }>('/realtime-analysis/indicators/compare', body, 300_000),
+    )
   } catch (e) {
-    throw new Error(extractApiError(e, '指标对比失败'))
+    throw new Error(extractApiError(e, '对比失败'))
   }
 }
 
