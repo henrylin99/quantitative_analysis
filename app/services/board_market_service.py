@@ -5,10 +5,13 @@
 - 连板天梯 ``limit-up-ladder``：近 30 个交易日的 2 板~7 板+ 矩阵
 - 同花顺指数目录+快照：行业（320 个）/概念（390 个）板块的实时涨跌排行
 - 指数成分股：板块成分清单，用全市场快照帧富化个股行情
+- 历史热股 ``hot-stock-list-history`` / 排名走势 ``hot-stock-rank-trend``
+- 个股异动原因 ``anomaly-analysis-list`` / ``anomaly-analysis-stock``（当日）
 
 缓存策略：
 - 涨停池按（日期,页）缓存，盘中 60s、历史日永久（当日数据不再变化）
 - 天梯/板块快照分别 5 分钟 / 60 秒；目录与成分股按小时~天缓存
+- 历史热股/排名走势同池口径（历史日永久、当日 5 分钟）；异动原因 60s
 - 扶摇异常时优先回供过期缓存（stale 标记），无缓存才抛错
 """
 
@@ -23,7 +26,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 from app.services.market_snapshot_service import evict_oldest
-from app.utils.data_sources.fuyao_client import BEIJING_TZ, FuyaoClient, FuyaoError
+from app.utils.data_sources.fuyao_client import (
+    ANOMALY_BATCH_LIMIT,
+    BEIJING_TZ,
+    FuyaoClient,
+    FuyaoError,
+)
 
 POOL_FRESH_SECONDS = 60.0
 LADDER_FRESH_SECONDS = 300.0
@@ -34,6 +42,7 @@ TRADING_DAYS_FRESH_SECONDS = 6 * 3600.0
 HOT_FRESH_SECONDS = 300.0
 SEARCH_FRESH_SECONDS = 60.0
 STALE_SERVE_SECONDS = 3600.0
+ANOMALY_FRESH_SECONDS = 60.0
 #: 进程内缓存容量上限（按日期/检索词等键会随使用增长，防无界）
 POOL_CACHE_MAX_ENTRIES = 64
 SEARCH_CACHE_MAX_ENTRIES = 128
@@ -51,6 +60,16 @@ LADDER_BOARD_KEYS = (
 
 VALID_TAGS = ("industry", "cn_concept")
 
+#: 个股异动原因合法标签（扶摇 anomaly-analysis tag_codes）
+ANOMALY_VALID_TAGS = (
+    "LIMIT_UP",
+    "LIMIT_DOWN",
+    "SHARP_RISE",
+    "SHARP_FALL",
+    "RAPID_RALLY",
+    "RAPID_DECLINE",
+)
+
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
@@ -60,6 +79,11 @@ def _ymd_to_beijing_ms(ymd: str) -> int:
     """YYYYMMDD → 北京时间当日零点 epoch ms（扶摇 date_ms 口径）。"""
     dt = datetime.strptime(str(ymd), "%Y%m%d").replace(tzinfo=BEIJING_TZ)
     return int(dt.timestamp() * 1000)
+
+
+def _ymd_to_iso(ymd: str) -> str:
+    """YYYYMMDD → yyyy-MM-dd（历史热股/排名走势接口的日期口径）。"""
+    return f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}"
 
 
 class BoardMarketService:
@@ -73,6 +97,9 @@ class BoardMarketService:
         self._break_pool_cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]] = {}
         self._hot_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._search_cache: Dict[Tuple[str, int], Tuple[float, Dict[str, Any]]] = {}
+        self._hot_history_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._rank_trend_cache: Dict[Tuple[str, str, str], Tuple[float, Dict[str, Any]]] = {}
+        self._anomaly_cache: Dict[Tuple[str, ...], Tuple[float, Dict[str, Any]]] = {}
         self._ladder_cache: Optional[Tuple[float, Dict[str, Any]]] = None
         self._catalog_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._boards_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
@@ -362,6 +389,174 @@ class BoardMarketService:
                 }
             )
         return normalized
+
+    # ---- 历史热股排行 / 个股排名走势 / 个股异动原因 ----
+
+    def get_hot_stock_history(self, date: Optional[str] = None) -> Dict[str, Any]:
+        """历史热股排行（date YYYYMMDD 可空=最近交易日；历史日缓存视为永久）。"""
+        resolved = self._validate_date(date) or self.latest_trade_date()
+        with self._lock:
+            cached = self._hot_history_cache.get(resolved)
+        fresh = self._pool_fresh_seconds(resolved)
+        if cached and time.monotonic() - cached[0] < fresh:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            data = self.client.hot_stock_list_history(_ymd_to_iso(resolved))
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, fresh, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        payload = {
+            "date": resolved,
+            "items": [
+                {
+                    "ts_code": row.get("thscode"),
+                    "ticker": row.get("ticker"),
+                    "name": row.get("name"),
+                    "rank": row.get("rank"),
+                }
+                for row in data.get("item") or []
+            ],
+        }
+        with self._lock:
+            evict_oldest(self._hot_history_cache, POOL_CACHE_MAX_ENTRIES)
+            self._hot_history_cache[resolved] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    def get_hot_stock_rank_trend(self, ts_code: str, start_date: str, end_date: str) -> Dict[str, Any]:
+        """个股热榜排名走势（YYYYMMDD 窗口 ≤1 年；start>end 前置校验）。"""
+        code = (ts_code or "").strip().upper()
+        if not code:
+            raise ValueError("缺少 ts_code 参数")
+        start = self._validate_date(start_date)
+        end = self._validate_date(end_date)
+        if not start or not end:
+            raise ValueError("start_date/end_date 均必填（YYYYMMDD）")
+        if start > end:
+            raise ValueError("start_date 不能晚于 end_date")
+        key = (code, start, end)
+        with self._lock:
+            cached = self._rank_trend_cache.get(key)
+        # 窗口终点已是历史日 → 数据不再变化，缓存视为永久
+        fresh = self._pool_fresh_seconds(end)
+        if cached and time.monotonic() - cached[0] < fresh:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            rows = self.client.hot_stock_rank_trend(code, _ymd_to_iso(start), _ymd_to_iso(end))
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, fresh, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        payload = {
+            "ts_code": code,
+            "start_date": start,
+            "end_date": end,
+            "points": [
+                {
+                    "date": row.get("date"),
+                    "date_ms": row.get("date_ms"),
+                    "rank": row.get("rank"),
+                }
+                for row in rows
+            ],
+        }
+        with self._lock:
+            evict_oldest(self._rank_trend_cache, POOL_CACHE_MAX_ENTRIES)
+            self._rank_trend_cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    def get_anomaly_analysis(self, tag_codes: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+        """当日个股异动原因（tags 可选多值 OR；大小写不敏感，缓存 60s）。"""
+        tags = tuple(
+            dict.fromkeys(
+                str(tag).strip().upper() for tag in (tag_codes or []) if str(tag).strip()
+            )
+        )
+        unknown = [tag for tag in tags if tag not in ANOMALY_VALID_TAGS]
+        if unknown:
+            raise ValueError(
+                f"tags 含非法值: {','.join(unknown)}（合法值: {'/'.join(ANOMALY_VALID_TAGS)}）"
+            )
+        with self._lock:
+            cached = self._anomaly_cache.get(tags)
+        if cached and time.monotonic() - cached[0] < ANOMALY_FRESH_SECONDS:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            rows = self.client.anomaly_analysis_list(list(tags) or None)
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, ANOMALY_FRESH_SECONDS, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        payload = {
+            "tags": list(tags),
+            "items": self._normalize_anomaly_items(rows),
+            "server_ts": _now_ms(),
+        }
+        with self._lock:
+            evict_oldest(self._anomaly_cache, POOL_CACHE_MAX_ENTRIES)
+            self._anomaly_cache[tags] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    def get_anomaly_analysis_by_stocks(self, codes: Sequence[str]) -> Dict[str, Any]:
+        """按代码批量查询当日个股异动原因（去重前 ≤50 只，缓存 60s）。"""
+        cleaned = [str(code).strip().upper() for code in codes if str(code).strip()]
+        if not cleaned:
+            raise ValueError("缺少 codes 参数")
+        if len(cleaned) > ANOMALY_BATCH_LIMIT:
+            raise ValueError(f"codes 单次最多 {ANOMALY_BATCH_LIMIT} 只")
+        key = tuple(dict.fromkeys(cleaned))
+        with self._lock:
+            cached = self._anomaly_cache.get(key)
+        if cached and time.monotonic() - cached[0] < ANOMALY_FRESH_SECONDS:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            rows = self.client.anomaly_analysis_stock(list(key))
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, ANOMALY_FRESH_SECONDS, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        payload = {
+            "codes": list(key),
+            "items": self._normalize_anomaly_items(rows),
+            "server_ts": _now_ms(),
+        }
+        with self._lock:
+            evict_oldest(self._anomaly_cache, POOL_CACHE_MAX_ENTRIES)
+            self._anomaly_cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    @staticmethod
+    def _normalize_anomaly_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "ts_code": row.get("thscode"),
+                "name": row.get("stock_name"),
+                "tag": row.get("tag_name"),
+                "content": row.get("analysis_content"),
+                "keywords": row.get("keyword_list") or [],
+            }
+            for row in items
+        ]
 
     # ---- 标的检索 ----
 

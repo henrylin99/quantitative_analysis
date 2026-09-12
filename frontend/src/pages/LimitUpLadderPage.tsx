@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Flame, RefreshCw } from 'lucide-react'
+import { Flame, RefreshCw, Zap } from 'lucide-react'
 import {
+  fetchAnomalyAnalysis,
   fetchLimitBreakPool,
   fetchLimitDownPool,
   fetchLimitUpLadder,
   fetchLimitUpPool,
+  type AnomalyItem,
+  type AnomalyTag,
   type LimitBreakStock,
   type LimitDownStock,
   type LimitUpStock,
@@ -39,9 +42,127 @@ const LADDER_TABS = [
   { key: 'up', label: '涨停池' },
   { key: 'down', label: '跌停池' },
   { key: 'break', label: '炸板池' },
+  { key: 'anomaly', label: '异动原因' },
 ] as const
 
 type LadderTabKey = (typeof LADDER_TABS)[number]['key']
+
+/** 异动标签（扶摇 tag_codes）→ 展示名 */
+const ANOMALY_TAGS: { key: AnomalyTag; label: string }[] = [
+  { key: 'LIMIT_UP', label: '涨停' },
+  { key: 'LIMIT_DOWN', label: '跌停' },
+  { key: 'SHARP_RISE', label: '大涨' },
+  { key: 'SHARP_FALL', label: '大跌' },
+  { key: 'RAPID_RALLY', label: '快速拉升' },
+  { key: 'RAPID_DECLINE', label: '快速下挫' },
+]
+
+function AnomalyTable({ items }: { items: AnomalyItem[] }) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="border-b border-line text-left text-2xs text-fg-muted">
+          <th className="px-3 py-1.5 font-medium">个股</th>
+          <th className="px-3 py-1.5 font-medium">标签</th>
+          <th className="px-3 py-1.5 font-medium">异动解读</th>
+          <th className="px-3 py-1.5 font-medium">关键词</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((row, index) => (
+          <tr key={`${row.ts_code}-${index}`} className="border-t border-line/60 hover:bg-elevated/50">
+            <td className="px-3 py-1.5">
+              <StockLink code={row.ts_code} name={row.name} />
+            </td>
+            <td className="px-3 py-1.5">
+              <Badge tone="accent">{row.tag ?? '--'}</Badge>
+            </td>
+            <td className="max-w-[26rem] px-3 py-1.5 text-fg-secondary">
+              <p className="truncate" title={row.content ?? ''}>
+                {row.content ?? '--'}
+              </p>
+            </td>
+            <td className="px-3 py-1.5">
+              <div className="flex flex-wrap gap-1">
+                {(row.keywords ?? []).map((keyword) => (
+                  <span key={keyword} className="rounded-sm bg-elevated px-1.5 py-0.5 text-2xs text-fg-muted">
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+/** 当日个股异动原因（扶摇 anomaly-analysis，标签多选 OR 过滤） */
+function AnomalyPanel() {
+  const [tags, setTags] = useState<AnomalyTag[]>([])
+
+  const anomalyQuery = useQuery({
+    queryKey: ['market', 'anomaly-analysis', [...tags].sort()],
+    queryFn: () => fetchAnomalyAnalysis(tags),
+    refetchInterval: 60_000,
+  })
+
+  const toggleTag = (key: AnomalyTag) =>
+    setTags((prev) => (prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]))
+
+  const items = anomalyQuery.data?.items ?? []
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-1 px-3 pt-2">
+        {ANOMALY_TAGS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => toggleTag(item.key)}
+            className={cn(
+              'rounded-full border px-2 py-0.5 text-2xs transition-colors',
+              tags.includes(item.key)
+                ? 'border-accent/40 bg-accent/15 text-accent'
+                : 'border-line text-fg-muted hover:bg-elevated hover:text-fg-secondary',
+            )}
+          >
+            {item.label}
+          </button>
+        ))}
+        {tags.length > 0 ? (
+          <button type="button" className="text-2xs text-fg-muted underline" onClick={() => setTags([])}>
+            清除
+          </button>
+        ) : null}
+      </div>
+      {anomalyQuery.isLoading ? (
+        <SkeletonRows rows={8} />
+      ) : anomalyQuery.isError ? (
+        <EmptyState
+          title="异动原因加载失败"
+          description={(anomalyQuery.error as Error)?.message}
+          action={
+            <button
+              type="button"
+              className="rounded-btn border border-line px-2.5 py-1 text-xs text-fg-secondary hover:bg-elevated"
+              onClick={() => anomalyQuery.refetch()}
+            >
+              重试
+            </button>
+          }
+        />
+      ) : items.length === 0 ? (
+        <EmptyState icon={<Zap size={22} />} title="暂无异动解读" description="当日暂无个股异动原因数据。" />
+      ) : (
+        <div className="max-h-[36rem] overflow-y-auto pb-2">
+          <AnomalyTable items={items} />
+        </div>
+      )}
+    </div>
+  )
+}
 
 function LadderMatrix({ days }: { days: { date: string | null; counts: Record<string, number>; highest: number; total: number }[] }) {
   const boardCols = ['2', '3', '4', '5', '6', '7']
@@ -239,7 +360,7 @@ export default function LimitUpLadderPage() {
   const breakRate = up?.total ? (breakTotal / (up.total + breakTotal)) * 100 : null
 
   const tabQueries = { up: upQuery, down: downQuery, break: breakQuery }
-  const activeQuery = tabQueries[tab]
+  const activeQuery = tab === 'anomaly' ? null : tabQueries[tab]
   const activeDate = up?.date ?? down?.date ?? broke?.date
 
   return (
@@ -344,7 +465,9 @@ export default function LimitUpLadderPage() {
               </div>
             }
           />
-          {activeQuery.isLoading ? (
+          {tab === 'anomaly' || !activeQuery ? (
+            <AnomalyPanel />
+          ) : activeQuery.isLoading ? (
             <SkeletonRows rows={8} />
           ) : activeQuery.isError ? (
             <EmptyState
