@@ -149,6 +149,73 @@ def get_hot_stocks():
         return _error(f"热股榜获取失败: {exc}")
 
 
+@market_bp.route("/hot-stocks/history", methods=["GET"])
+def get_hot_stocks_history():
+    """历史热股排行（date YYYYMMDD 可空=最近交易日；只支持一年内）。"""
+    date = (request.args.get("date") or "").strip() or None
+    if date and not _DATE_RE.fullmatch(date):
+        return _error("date 格式应为 YYYYMMDD", 400)
+    try:
+        return _ok(get_board_market_service().get_hot_stock_history(date))
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"历史热股API错误: {exc}")
+        return _error(f"历史热股获取失败: {exc}")
+
+
+@market_bp.route("/hot-stocks/rank-trend", methods=["GET"])
+def get_hot_stock_rank_trend():
+    """个股热榜排名走势（ts_code 单只；start_date/end_date YYYYMMDD，窗口 ≤1 年）。"""
+    ts_code = (request.args.get("ts_code") or "").strip()
+    if not ts_code:
+        return _error("缺少 ts_code 参数", 400)
+    start_date = (request.args.get("start_date") or "").strip()
+    end_date = (request.args.get("end_date") or "").strip()
+    if (start_date and not _DATE_RE.fullmatch(start_date)) or (
+        end_date and not _DATE_RE.fullmatch(end_date)
+    ):
+        return _error("start_date/end_date 格式应为 YYYYMMDD", 400)
+    try:
+        return _ok(
+            get_board_market_service().get_hot_stock_rank_trend(ts_code, start_date, end_date)
+        )
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"排名走势API错误: {exc}")
+        return _error(f"排名走势获取失败: {exc}")
+
+
+@market_bp.route("/anomaly-analysis", methods=["GET"])
+def get_anomaly_analysis():
+    """当日个股异动原因（tags 逗号分隔可选：LIMIT_UP/LIMIT_DOWN/SHARP_RISE/SHARP_FALL/RAPID_RALLY/RAPID_DECLINE）。"""
+    raw = (request.args.get("tags") or "").strip()
+    tags = [tag.strip() for tag in raw.split(",") if tag.strip()] if raw else None
+    try:
+        return _ok(get_board_market_service().get_anomaly_analysis(tags))
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"异动原因API错误: {exc}")
+        return _error(f"异动原因获取失败: {exc}")
+
+
+@market_bp.route("/anomaly-analysis/stocks", methods=["GET"])
+def get_anomaly_analysis_stocks():
+    """按代码批量查询当日个股异动原因（codes 逗号分隔，≤50 只）。"""
+    codes = _parse_codes(request.args.get("codes", ""), limit=50)
+    if not codes:
+        return _error("缺少 codes 参数（逗号分隔的 ts_code，≤50 只）", 400)
+    try:
+        return _ok(get_board_market_service().get_anomaly_analysis_by_stocks(codes))
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"异动原因查询API错误: {exc}")
+        return _error(f"异动原因查询失败: {exc}")
+
+
 @market_bp.route("/ticker-search", methods=["GET"])
 def get_ticker_search():
     """标的名称/代码模糊检索（自选添加联想，A 股）。"""

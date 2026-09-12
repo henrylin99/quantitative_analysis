@@ -250,6 +250,49 @@ def test_hot_and_skyrocket_lists(client):
     assert sky == []
 
 
+def test_hot_stock_history_and_rank_trend(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "date": "2026-06-21", "item": [{"thscode": "000725.SZ", "name": "京东方A", "rank": 1}],
+        }}),
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "item": [{"thscode": "300034.SZ", "date": "2026-06-21", "rank": 1740}],
+        }}),
+    ])
+    history = client.hot_stock_list_history("2026-06-21")
+    trend = client.hot_stock_rank_trend("300034.SZ", "2026-06-21", "2026-07-01")
+    assert "/hot-stock-list-history" in client._session.calls[0]["url"]
+    assert client._session.calls[0]["params"] == {"date": "2026-06-21"}
+    assert history["item"][0]["rank"] == 1
+    assert client._session.calls[1]["params"] == {
+        "thscode": "300034.SZ", "start_date": "2026-06-21", "end_date": "2026-07-01",
+    }
+    assert trend[0]["rank"] == 1740
+
+
+def test_anomaly_analysis_list_and_stock(client):
+    client._session = FakeSession([
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {
+            "item": [{"thscode": "600519.SH", "stock_name": "贵州茅台", "tag_name": "大涨",
+                       "analysis_content": "解读", "keyword_list": ["白酒"]}],
+        }}),
+        FakeResponse(payload={"code": 0, "message": "ok", "data": {"item": []}}),
+    ])
+    rows = client.anomaly_analysis_list(["LIMIT_UP", "SHARP_FALL"])
+    assert "/anomaly-analysis-list" in client._session.calls[0]["url"]
+    assert client._session.calls[0]["params"] == {"tag_codes": "LIMIT_UP,SHARP_FALL"}
+    assert rows[0]["tag_name"] == "大涨"
+
+    # 不传标签时不携带 tag_codes 参数
+    client.anomaly_analysis_list()
+    assert "tag_codes" not in client._session.calls[1]["params"]
+
+    # 按股票批量查询截断到 50 个
+    client.anomaly_analysis_stock([f"{i:06d}.SZ" for i in range(60)])
+    assert len(client._session.calls[2]["params"]["thscodes"].split(",")) == 50
+    assert "/anomaly-analysis-stock" in client._session.calls[2]["url"]
+
+
 def test_ticker_search(client):
     client._session = FakeSession([
         FakeResponse(payload={"code": 0, "message": "ok", "data": {
