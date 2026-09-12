@@ -10,10 +10,6 @@
 - 适用场景：量化入门学习、策略研究、二次开发
 - 不适用场景：直接用于实盘交易
 
-### 量化交流群
-
-<img src="./images/qrcode.jpg" alt="量化交流群" width="300" />
-
 ## 能力现状（已实现 / 部分实现 / 未实现/未开放）
 
 | 模块 | 状态 | 说明 |
@@ -89,8 +85,8 @@ https://www.python.org/downloads/windows/
 
 - 查看SQLite数据库，免费软件可以下载 https://sqlitebrowser.org/dl/ 然后把stock_cursor.sqlite3文件拖入软件中即可使用。
 
-![系统主界面](./images/1-2.png)
-
+![系统主界面--新版](./images/1-23.png)
+![系统主界面--旧版](./images/1-2.png)
 ## 🌟 系统特色
 
 ### 核心功能
