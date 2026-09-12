@@ -151,7 +151,7 @@ export default function RtIndicatorsPage() {
     <div>
       <div className="page-head">
         <div>
-          <h2>实时技术指标</h2>
+          <h2>实时技术指标（数据来源--通达信）</h2>
           <p className="desc">基于分钟数据的多周期指标计算、对比与统计</p>
         </div>
         <div className="seg" role="group" style={{ flexWrap: 'wrap' }}>
@@ -238,7 +238,7 @@ export default function RtIndicatorsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(calcResult.latest_values).map(([name, v]) => (
+                    {Object.entries(calcResult.latest_values ?? {}).map(([name, v]) => (
                       <tr key={name}>
                         <td>
                           <code>{name}</code>
@@ -287,7 +287,7 @@ export default function RtIndicatorsPage() {
           {mpError && <ErrorState message={mpError} onRetry={runMulti} />}
           {mpResult && !mpBusy && (
             <div className="row g-3">
-              {Object.entries(mpResult.data).map(([p, r]) => (
+              {Object.entries(mpResult.data ?? {}).map(([p, r]) => (
                 <div className="col-lg-6" key={p}>
                   <div className="panel h-100">
                     <div className="panel-head">
