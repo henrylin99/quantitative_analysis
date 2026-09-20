@@ -259,7 +259,8 @@ export interface TickerSearchItem {
 }
 
 function poolParams(date?: string, page = 1, size = 100) {
-  return { date: date || undefined, page, size }
+  // date input 产出 yyyy-MM-dd，后端池接口要求 YYYYMMDD，这里统一归一
+  return { date: date ? date.replace(/-/g, '') : undefined, page, size }
 }
 
 export function fetchLimitDownPool(date?: string, page = 1, size = 100) {
@@ -287,5 +288,70 @@ export function fetchTickerSearch(q: string, limit = 8) {
   return apiGet<{ query: string; items: TickerSearchItem[] }>('/market/ticker-search', {
     q,
     limit,
+  })
+}
+
+// ================= 历史热股排行 / 个股排名走势 / 个股异动原因 =================
+
+/** 历史热股排行个股（Top30） */
+export interface HotStockHistoryItem {
+  ts_code: string
+  ticker?: string
+  name?: string
+  rank?: number
+  [key: string]: unknown
+}
+
+/** 个股热榜排名走势点位（date 为 yyyy-MM-dd） */
+export interface RankTrendPoint {
+  date: string
+  date_ms?: number
+  rank: number
+}
+
+/** 异动原因标签（扶摇 tag_codes） */
+export type AnomalyTag =
+  | 'LIMIT_UP'
+  | 'LIMIT_DOWN'
+  | 'SHARP_RISE'
+  | 'SHARP_FALL'
+  | 'RAPID_RALLY'
+  | 'RAPID_DECLINE'
+
+/** 个股异动原因条目 */
+export interface AnomalyItem {
+  ts_code: string
+  name?: string
+  tag?: string
+  content?: string
+  keywords?: string[]
+  [key: string]: unknown
+}
+
+export function fetchHotStockHistory(date?: string) {
+  return apiGet<{ date: string; items: HotStockHistoryItem[] }>('/market/hot-stocks/history', {
+    date: date || undefined,
+  })
+}
+
+export function fetchHotStockRankTrend(tsCode: string, startDate: string, endDate: string) {
+  return apiGet<{
+    ts_code: string
+    start_date: string
+    end_date: string
+    points: RankTrendPoint[]
+  }>('/market/hot-stocks/rank-trend', { ts_code: tsCode, start_date: startDate, end_date: endDate })
+}
+
+export function fetchAnomalyAnalysis(tags?: AnomalyTag[]) {
+  return apiGet<{ tags: AnomalyTag[]; items: AnomalyItem[]; server_ts?: number }>(
+    '/market/anomaly-analysis',
+    tags?.length ? { tags: tags.join(',') } : undefined,
+  )
+}
+
+export function fetchAnomalyAnalysisByStocks(codes: string[]) {
+  return apiGet<{ codes: string[]; items: AnomalyItem[] }>('/market/anomaly-analysis/stocks', {
+    codes: codes.join(','),
   })
 }

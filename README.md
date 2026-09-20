@@ -85,8 +85,8 @@ https://www.python.org/downloads/windows/
 
 - 查看SQLite数据库，免费软件可以下载 https://sqlitebrowser.org/dl/ 然后把stock_cursor.sqlite3文件拖入软件中即可使用。
 
-![系统主界面](./images/1-2.png)
-
+![系统主界面--新版](./images/1-23.png)
+![系统主界面--旧版](./images/1-2.png)
 ## 🌟 系统特色
 
 ### 核心功能
@@ -261,7 +261,6 @@ Traceback (most recent call last):
 ![API接口文档](./images/1-20.png)
 
 ## 🏗️ 系统架构
-
 ![系统架构图](./images/1-21.png)
 
 ### 目录结构

@@ -73,6 +73,23 @@ class _FakeClient:
                 "rank_trend": "flat",
             }
         ]
+        self.hot_history_data = {
+            "date": "2026-06-21",
+            "item": [{"thscode": "000725.SZ", "ticker": "000725", "name": "京东方A", "rank": 1}],
+        }
+        self.rank_trend_data = [
+            {"thscode": "300034.SZ", "date": "2026-06-21", "date_ms": 1781971200000, "rank": 1740},
+            {"thscode": "300034.SZ", "date": "2026-06-22", "date_ms": 1782057600000, "rank": 52},
+        ]
+        self.anomaly_data = [
+            {
+                "stock_name": "贵州茅台",
+                "analysis_content": "公司股价出现异动。",
+                "keyword_list": ["白酒", "消费"],
+                "thscode": "600519.SH",
+                "tag_name": "大涨",
+            }
+        ]
         self.search_data = [
             {"thscode": "600519.SH", "ticker": "600519", "name": "贵州茅台", "exchange": "SH"}
         ]
@@ -128,6 +145,22 @@ class _FakeClient:
     def skyrocket_list(self, period="day"):
         self.calls.append(("skyrocket", period))
         return self.hot_data
+
+    def hot_stock_list_history(self, date):
+        self.calls.append(("hot_history", date))
+        return self.hot_history_data
+
+    def hot_stock_rank_trend(self, thscode, start_date, end_date):
+        self.calls.append(("rank_trend", thscode, start_date, end_date))
+        return self.rank_trend_data
+
+    def anomaly_analysis_list(self, tag_codes=None):
+        self.calls.append(("anomaly_list", list(tag_codes or [])))
+        return self.anomaly_data
+
+    def anomaly_analysis_stock(self, thscodes):
+        self.calls.append(("anomaly_stock", list(thscodes)))
+        return self.anomaly_data
 
     def ticker_search(self, query, asset_type="a-share", limit=10):
         self.calls.append(("search", query, limit))
@@ -259,6 +292,60 @@ def test_hot_stocks_merges_lists_and_types_heat(service):
     # period 是独立缓存键
     service.get_hot_stocks("hour")
     assert ("hot", "hour") in service.client.calls
+
+
+def test_hot_stock_history_normalizes_and_converts_date(service):
+    payload = service.get_hot_stock_history("20260621")
+    assert payload["date"] == "20260621"
+    assert payload["items"][0] == {
+        "ts_code": "000725.SZ",
+        "ticker": "000725",
+        "name": "京东方A",
+        "rank": 1,
+    }
+    # 客户端收到 yyyy-MM-dd 口径
+    assert ("hot_history", "2026-06-21") in service.client.calls
+
+
+def test_hot_stock_history_rejects_bad_date(service):
+    with pytest.raises(ValueError):
+        service.get_hot_stock_history("2026-06-21")
+
+
+def test_rank_trend_converts_window_and_validates_range(service):
+    payload = service.get_hot_stock_rank_trend("300034.SZ", "20260621", "20260701")
+    assert payload["ts_code"] == "300034.SZ"
+    assert payload["points"][1]["rank"] == 52
+    assert ("rank_trend", "300034.SZ", "2026-06-21", "2026-07-01") in service.client.calls
+
+    with pytest.raises(ValueError):
+        service.get_hot_stock_rank_trend("300034.SZ", "20260701", "20260621")
+    with pytest.raises(ValueError):
+        service.get_hot_stock_rank_trend("300034.SZ", "", "20260701")
+
+
+def test_anomaly_analysis_validates_and_uppercases_tags(service):
+    payload = service.get_anomaly_analysis(["limit_up", "LIMIT_UP", "sharp_fall"])
+    assert payload["tags"] == ["LIMIT_UP", "SHARP_FALL"]  # 大小写归一 + 去重
+    row = payload["items"][0]
+    assert row["ts_code"] == "600519.SH"
+    assert row["name"] == "贵州茅台"
+    assert row["keywords"] == ["白酒", "消费"]
+    assert ("anomaly_list", ["LIMIT_UP", "SHARP_FALL"]) in service.client.calls
+
+    with pytest.raises(ValueError):
+        service.get_anomaly_analysis(["LIMIT_SIDE"])
+
+
+def test_anomaly_analysis_by_stocks_dedupes_and_limits(service):
+    payload = service.get_anomaly_analysis_by_stocks(["600519.SH", "600519.SH"])
+    assert payload["codes"] == ["600519.SH"]
+    assert ("anomaly_stock", ["600519.SH"]) in service.client.calls
+
+    with pytest.raises(ValueError):
+        service.get_anomaly_analysis_by_stocks([])
+    with pytest.raises(ValueError):
+        service.get_anomaly_analysis_by_stocks([f"{i:06d}.SZ" for i in range(51)])
 
 
 def test_hot_stocks_rejects_bad_period(service):

@@ -59,6 +59,9 @@ class _FakeBoardService:
         self.constituents = {"code": "881101.TI", "items": []}
         self.hot = {"period": "day", "hot": [], "skyrocket": []}
         self.search = {"query": "茅台", "items": []}
+        self.hot_history = {"date": "20260904", "items": []}
+        self.rank_trend = {"ts_code": "300034.SZ", "points": []}
+        self.anomaly = {"items": []}
         self.kwargs = {}
 
     def get_limit_up_pool(self, date=None, page=1, size=100):
@@ -91,6 +94,28 @@ class _FakeBoardService:
     def search_tickers(self, query, limit=10):
         self.kwargs["search"] = (query, limit)
         return self.search
+
+    def get_hot_stock_history(self, date=None):
+        self.kwargs["hot_history"] = date
+        return self.hot_history
+
+    def get_hot_stock_rank_trend(self, ts_code, start_date, end_date):
+        self.kwargs["rank_trend"] = (ts_code, start_date, end_date)
+        if start_date > end_date:  # 模拟服务层参数校验
+            raise ValueError("start_date 不能晚于 end_date")
+        return self.rank_trend
+
+    _ANOMALY_TAGS = {"LIMIT_UP", "LIMIT_DOWN", "SHARP_RISE", "SHARP_FALL", "RAPID_RALLY", "RAPID_DECLINE"}
+
+    def get_anomaly_analysis(self, tag_codes=None):
+        self.kwargs["anomaly"] = tag_codes
+        if tag_codes and not set(tag_codes) <= self._ANOMALY_TAGS:  # 模拟服务层参数校验
+            raise ValueError("tags 含非法值")
+        return self.anomaly
+
+    def get_anomaly_analysis_by_stocks(self, codes):
+        self.kwargs["anomaly_stocks"] = codes
+        return self.anomaly
 
 
 @pytest.fixture()
@@ -187,6 +212,55 @@ def test_ticker_search_endpoint(app, fake_service):
     resp = app.test_client().get("/api/market/ticker-search?q=茅台")
     assert resp.get_json()["code"] == 200
     assert fake_service.board.kwargs["search"] == ("茅台", 10)
+
+
+def test_hot_stock_history_endpoint(app, fake_service):
+    assert (
+        app.test_client().get("/api/market/hot-stocks/history?date=2026-09-04").status_code == 400
+    )
+    resp = app.test_client().get("/api/market/hot-stocks/history?date=20260904")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["hot_history"] == "20260904"
+    app.test_client().get("/api/market/hot-stocks/history")
+    assert fake_service.board.kwargs["hot_history"] is None
+
+
+def test_hot_stock_rank_trend_endpoint(app, fake_service):
+    assert (
+        app.test_client().get("/api/market/hot-stocks/rank-trend").status_code == 400
+    )
+    assert (
+        app.test_client()
+        .get("/api/market/hot-stocks/rank-trend?ts_code=300034.SZ&start_date=20260701&end_date=20260621")
+        .status_code
+        == 400
+    )
+    resp = app.test_client().get(
+        "/api/market/hot-stocks/rank-trend?ts_code=300034.SZ&start_date=20260621&end_date=20260701"
+    )
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["rank_trend"] == ("300034.SZ", "20260621", "20260701")
+
+
+def test_anomaly_analysis_endpoints(app, fake_service):
+    resp = app.test_client().get("/api/market/anomaly-analysis?tags=LIMIT_UP,SHARP_FALL")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["anomaly"] == ["LIMIT_UP", "SHARP_FALL"]
+
+    app.test_client().get("/api/market/anomaly-analysis")
+    assert fake_service.board.kwargs["anomaly"] is None
+
+    # 非法标签由服务层 ValueError → 400
+    assert (
+        app.test_client().get("/api/market/anomaly-analysis?tags=LIMIT_SIDE").status_code == 400
+    )
+
+    assert (
+        app.test_client().get("/api/market/anomaly-analysis/stocks").status_code == 400
+    )
+    resp = app.test_client().get("/api/market/anomaly-analysis/stocks?codes=600519.SH,000001.SZ")
+    assert resp.get_json()["code"] == 200
+    assert fake_service.board.kwargs["anomaly_stocks"] == ["600519.SH", "000001.SZ"]
 
 
 def test_limit_up_ladder_endpoint(app, fake_service):
