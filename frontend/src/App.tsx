@@ -39,6 +39,7 @@ const LimitUpLadderPage = lazy(() => import('./pages/LimitUpLadderPage'))
 const HotStocksPage = lazy(() => import('./pages/HotStocksPage'))
 const ConceptAnalysisPage = lazy(() => import('./pages/ConceptAnalysisPage'))
 const IndustryAnalysisPage = lazy(() => import('./pages/IndustryAnalysisPage'))
+const ResearchReportsPage = lazy(() => import('./pages/ResearchReportsPage'))
 const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
@@ -102,6 +103,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/concepts', label: '概念分析', icon: '💡' },
       { to: '/market/industries', label: '行业分析', icon: '🏭' },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: '🐉' },
+      { to: '/research', label: '研报中心', icon: '📑' },
     ],
   },
   {
@@ -239,6 +241,14 @@ function Shell() {
               element={
                 <Suspense fallback={null}>
                   <IndustryAnalysisPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/research"
+              element={
+                <Suspense fallback={null}>
+                  <ResearchReportsPage />
                 </Suspense>
               }
             />
