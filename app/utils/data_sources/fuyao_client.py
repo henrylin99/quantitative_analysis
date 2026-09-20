@@ -39,6 +39,8 @@ DEFAULT_TIMEOUT_SECONDS = 30
 SNAPSHOT_PAGE_SIZE = 6000
 #: thscodes 批量接口单次上限（快照批量/估值快照）
 BATCH_LIMIT = 100
+#: 个股异动原因按股票查询单次上限（去重前 token 数）
+ANOMALY_BATCH_LIMIT = 50
 #: dump 下载分片大小（字节）
 DUMP_CHUNK_SIZE = 1 << 20
 
@@ -382,6 +384,52 @@ class FuyaoClient:
         data = self._get(
             "/api/a-share/special-data/skyrocket-list",
             {"period": period},
+        )
+        return data.get("item") or []
+
+    def hot_stock_list_history(self, date: str) -> Dict[str, Any]:
+        """历史热股排行（date: yyyy-MM-dd，只支持一年内）。
+
+        item ≤30 条，字段：thscode/ticker/name/rank。
+        date 格式非法返回 1002，超出一年返回 1003。
+        """
+        return self._get(
+            "/api/a-share/special-data/hot-stock-list-history",
+            {"date": date},
+        ) or {}
+
+    def hot_stock_rank_trend(self, thscode: str, start_date: str, end_date: str) -> List[Dict[str, Any]]:
+        """个股热榜排名走势（窗口与日期均限一年内，start>end 服务端 1004）。
+
+        item 字段：thscode/ticker/date/date_ms/rank；返回全部点位，不做 Top30 截断。
+        """
+        data = self._get(
+            "/api/a-share/special-data/hot-stock-rank-trend",
+            {"thscode": thscode, "start_date": start_date, "end_date": end_date},
+        )
+        return data.get("item") or []
+
+    def anomaly_analysis_list(self, tag_codes: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
+        """当日个股异动原因列表（tag_codes 多值 OR，服务端大小写不敏感）。
+
+        合法标签：LIMIT_UP/LIMIT_DOWN/SHARP_RISE/SHARP_FALL/RAPID_RALLY/RAPID_DECLINE；
+        item 字段：stock_name/analysis_content/keyword_list/thscode/tag_name；
+        当日数据暂不可用时服务端返回 3002。
+        """
+        data = self._get(
+            "/api/a-share/special-data/anomaly-analysis-list",
+            {"tag_codes": ",".join(tag_codes) if tag_codes else None},
+        )
+        return data.get("item") or []
+
+    def anomaly_analysis_stock(self, thscodes: Sequence[str]) -> List[Dict[str, Any]]:
+        """按代码批量查询当日个股异动原因（去重前 ≤50 个，支持 SH/SZ/BJ 后缀）。
+
+        返回按请求代码首次出现顺序排列；当日无异动的代码被服务端忽略。
+        """
+        data = self._get(
+            "/api/a-share/special-data/anomaly-analysis-stock",
+            {"thscodes": ",".join(thscodes[:ANOMALY_BATCH_LIMIT])},
         )
         return data.get("item") or []
 

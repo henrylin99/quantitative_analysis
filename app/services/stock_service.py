@@ -283,6 +283,13 @@ class StockService:
                     payload[key] = value.strftime("%Y-%m-%d")
                 else:
                     payload[key] = value
+
+            # Tushare 的 setup_date 是 YYYYMMDD 整数/字符串，统一成 ISO 日期便于展示
+            setup = payload.get("setup_date")
+            if setup is not None:
+                text = str(setup).split(".")[0]
+                if len(text) == 8 and text.isdigit():
+                    payload["setup_date"] = f"{text[:4]}-{text[4:6]}-{text[6:]}"
             return payload
         except Exception as e:
             logger.error(f"获取公司信息失败: {ts_code}, 错误: {e}")
