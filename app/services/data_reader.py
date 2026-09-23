@@ -4,6 +4,12 @@ ParquetDataReader — 从本地 Parquet 文件加载日行情数据，替代传�
 存储布局（Hive 分区格式）：
     {data_dir}/daily_history/daily/year=YYYY/month=MM/day=DD/data.parquet
     {data_dir}/daily_basic/daily/year=YYYY/month=MM/day=DD/data.parquet
+
+日频表另有按股票的派生分区（由 app/utils/stock_partition.py 的重建作业生成）：
+    {data_dir}/{table}/stock/ts_code=XXX/data.parquet
+按 ts_code 查询时优先读股票分区（单股一个文件），分区缺失或落后于最新
+日期分区时回退日期分区扫描，两种路径结果一致。设 STOCK_PARTITION_READ=0
+可整体停用股票分区读取。
 """
 
 import os
@@ -377,23 +383,54 @@ class ParquetDataReader:
 
     def get_latest_close(self, ts_code: str) -> Optional[float]:
         """获取指定股票最新收盘价。"""
-        latest = self._read_latest_partition("daily")
-        if latest is None or latest.empty:
+        row = self.get_latest_daily(ts_code)
+        if row is None:
             return None
-        row = latest[latest["ts_code"] == ts_code]
-        if row.empty:
-            return None
-        return float(row.iloc[0]["close"])
+        return float(row["close"])
 
     def get_latest_daily(self, ts_code: str) -> Optional[pd.Series]:
-        """获取指定股票最新日行情（全部字段）。"""
+        """获取指定股票最新日行情（全部字段）。
+
+        优先读个股分区文件 data/daily_history/stock/ts_code=XXX/data.parquet
+        的最新一行；文件缺失或落后于最新日期分区（日更后尚未重建股票分区）
+        时回退读全市场最新日期分区，保证拿到的永远是最新数据。
+        """
+        row = self._latest_row_from_stock_partition(ts_code)
+        if row is not None:
+            return row
         latest = self._read_latest_partition("daily")
         if latest is None or latest.empty:
             return None
-        row = latest[latest["ts_code"] == ts_code]
-        if row.empty:
+        matched = latest[latest["ts_code"] == ts_code]
+        if matched.empty:
             return None
-        return row.iloc[0]
+        return matched.iloc[0]
+
+    def _latest_row_from_stock_partition(self, ts_code: str) -> Optional[pd.Series]:
+        """从个股分区文件取最新一行；分区缺失/过期/读取失败返回 None。"""
+        if os.getenv("STOCK_PARTITION_READ", "1") == "0":
+            return None
+        base = os.path.join(self.data_dir, self.TABLE_DIRS["daily"])
+        path = os.path.join(
+            os.path.dirname(base), "stock", f"ts_code={ts_code}", "data.parquet"
+        )
+        if not os.path.isfile(path):
+            return None
+        try:
+            df = pd.read_parquet(path)
+        except Exception as e:
+            logger.warning(f"读取个股分区失败 {path}: {e}")
+            return None
+        if df.empty or "trade_date" not in df.columns:
+            return None
+        dates = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+        stock_max = dates.max()
+        if pd.isna(stock_max):
+            return None
+        latest_dt = self._latest_partition_datetime(base)
+        if latest_dt is not None and stock_max < latest_dt:
+            return None
+        return df[dates == stock_max].iloc[-1]
 
     def get_trade_dates(
         self,
@@ -461,14 +498,13 @@ class ParquetDataReader:
             logger.warning(f"Parquet 目录不存在: {base}")
             return pd.DataFrame()
 
-        frames = []
-        for parquet_path in self._walk_partitions(base, sd, ed):
-            try:
-                df = pd.read_parquet(parquet_path)
-                if not df.empty:
-                    frames.append(df)
-            except Exception as e:
-                logger.warning(f"读取 parquet 失败 {parquet_path}: {e}")
+        # 按 ts_code 查询时优先走股票分区（app/utils/stock_partition.py 派生），
+        # 返回 None 表示分区不可用/未启用/有过期项需要日期分区兜底
+        frames = None
+        if ts_codes is not None and os.getenv("STOCK_PARTITION_READ", "1") != "0":
+            frames = self._read_stock_partition_frames(table, base, ts_codes, sd, ed)
+        if frames is None:
+            frames = self._read_date_partition_frames(base, sd, ed)
 
         if not frames:
             return pd.DataFrame()
@@ -502,6 +538,111 @@ class ParquetDataReader:
             result = result.sort_values(sort_cols).reset_index(drop=True)
 
         return result
+
+    def _read_date_partition_frames(
+        self, base: str, start_date: Optional[str], end_date: Optional[str]
+    ) -> List[pd.DataFrame]:
+        """按日期分区目录裁剪读取（原有路径）。"""
+        frames = []
+        for parquet_path in self._walk_partitions(base, start_date, end_date):
+            try:
+                df = pd.read_parquet(parquet_path)
+                if not df.empty:
+                    frames.append(df)
+            except Exception as e:
+                logger.warning(f"读取 parquet 失败 {parquet_path}: {e}")
+        return frames
+
+    def _read_stock_partition_frames(
+        self,
+        table: str,
+        base: str,
+        ts_codes: List[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Optional[List[pd.DataFrame]]:
+        """优先从股票分区读取；返回 None 表示应回退日期分区。
+
+        每只代码独立判定：stock/ts_code=XXX/data.parquet 存在且覆盖到
+        min(end_date, 最新日期分区) 才走单文件读取；缺失或过期的代码统一
+        回退日期分区扫描（目录级日期裁剪），保证结果与纯日期分区路径一致。
+        """
+        # 股票分区只对日频表存在（TABLE_DIRS 以 /daily 结尾的表）
+        if not self.TABLE_DIRS.get(table, "").endswith("/daily"):
+            return None
+        stock_base = os.path.join(os.path.dirname(base), "stock")
+        if not os.path.isdir(stock_base):
+            return None
+
+        ed_dt = pd.to_datetime(end_date) if end_date else None
+        latest_dt = self._latest_partition_datetime(base)
+        # 分区覆盖要求：能取到的最新数据是 min(请求上界, 最新日期分区)，
+        # 否则 end_date 传今天/未来日期时股票分区永远被判过期
+        if ed_dt is not None and latest_dt is not None:
+            needed_dt = min(ed_dt, latest_dt)
+        else:
+            needed_dt = ed_dt if ed_dt is not None else latest_dt
+
+        fresh_frames: List[pd.DataFrame] = []
+        pending_codes: List[str] = []
+        for code in dict.fromkeys(ts_codes):
+            path = os.path.join(stock_base, f"ts_code={code}", "data.parquet")
+            if not os.path.isfile(path):
+                pending_codes.append(code)
+                continue
+            try:
+                df = pd.read_parquet(path)
+            except Exception as e:
+                logger.warning(f"读取股票分区失败 {path}: {e}")
+                pending_codes.append(code)
+                continue
+            if df.empty or "trade_date" not in df.columns:
+                pending_codes.append(code)
+                continue
+            dates = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+            stock_max = dates.max()
+            if needed_dt is not None and (pd.isna(stock_max) or stock_max < needed_dt):
+                logger.debug(f"股票分区落后于日期分区，回退扫描 {code}")
+                pending_codes.append(code)
+                continue
+            if start_date or end_date:
+                mask = dates.notna()
+                if start_date:
+                    mask &= dates >= pd.to_datetime(start_date)
+                if end_date:
+                    mask &= dates <= ed_dt
+                df = df[mask]
+            if not df.empty:
+                fresh_frames.append(df)
+
+        if pending_codes:
+            code_set = set(pending_codes)
+            for df in self._read_date_partition_frames(base, start_date, end_date):
+                if "ts_code" in df.columns:
+                    filtered = df[df["ts_code"].isin(code_set)]
+                    if not filtered.empty:
+                        fresh_frames.append(filtered)
+
+        return fresh_frames
+
+    def _latest_partition_datetime(self, base: str) -> Optional[pd.Timestamp]:
+        """从日期分区目录名取最新分区日期，无分区时返回 None。"""
+        latest_path = self._find_latest_parquet(base)
+        if not latest_path:
+            return None
+        parts = os.path.dirname(latest_path).split(os.sep)
+        values = {}
+        for part in parts:
+            for key in ("year", "month", "day"):
+                value = _partition_value(part, key)
+                if value is not None:
+                    values[key] = value
+        if not {"year", "month", "day"}.issubset(values):
+            return None
+        try:
+            return pd.to_datetime(f"{values['year']}-{values['month']}-{values['day']}")
+        except Exception:
+            return None
 
     def _read_latest_partition(self, table: str) -> Optional[pd.DataFrame]:
         """读取最新日期分区的 parquet。"""

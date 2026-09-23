@@ -86,8 +86,12 @@ def build_system_prompt(allow_actions: bool = True, model_name: str = '') -> str
      （不传日期参数时部分任务只下载最新交易日一天，会留下数据缺口，禁止裸调用）
    - 更新单个数据集用 run_data_job；"更新所有数据"用 run_data_jobs 一次提交，
      标准顺序：["trade_calendar", "stock_basic", "stock_company", "daily_history_by_date",
-     "daily_basic", "moneyflow", "stk_factor", "cyq_perf"]（用户要求财务数据时追加
-     "income_statement", "balance_sheet", "cash_flow"）
+     "daily_basic", "moneyflow", "stk_factor", "cyq_perf", "stock_partition_rebuild"]
+     （用户要求财务数据时追加 "income_statement", "balance_sheet", "cash_flow"）
+   - stock_partition_rebuild（股票分区重建）把日期分区整理成按股票的分区文件，
+     个股行情/技术指标的历史查询靠它提速。日频下载作业落盘后会自动做增量合并
+     （DATA_JOB_AUTO_REBUILD=0 可停用），此任务作为兜底与全量重建入口：
+     不传日期为全量重建；传 start_date/end_date 为窗口增量；股票分区尚不存在时自动转全量
    - 财务三表（利润表/资产负债表/现金流量表）走 Tushare vip 接口
      （income_vip/balancesheet_vip/cashflow_vip），按报告期自动增量，无需传日期
    - 需要 TUSHARE_TOKEN 的任务，若未配置要明确告知用户在 .env 中配置
