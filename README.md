@@ -70,12 +70,10 @@
 ## 数据下载
 - 视频讲解地址：v2.0版本 https://youtu.be/SpHsZdlyii8  v3.0版本：https://youtu.be/p0iJxGveW60
 - 为方便学习使用，数据已改为 Parquet 模式，下载后安装环境即可使用，不需要安装 MySQL
-- 数据更新到 2026 年 06 月 03 日，包含历史行情、基本面、技术面、资金流入、筹码分布，后续不定期更新
-- 由于历史数据第一次下载较大，百度网盘没会员下载较慢，现提供其它几个网盘，请根据实际情况选择其中一个下载，后面日更新的数据文件不大，继续放百度网盘
-- 夸克网盘：https://pan.quark.cn/s/30fe0b6ddb86
-- 123网盘：https://1859852554.share.123pan.cn/123pan/tRlivd-xOXLH
+- 数据更新到 2026 年 09 月 22 日，包含历史行情、基本面、技术面、资金流入、筹码分布，每月更新一次
+
 - 百度网盘：https://pan.baidu.com/s/1V7GW68EmA3Ad8lKTLsuG3Q?pwd=bie3
-- 如有 Tushare 接口，可通过数据管理页面更新数据
+- 如有 Tushare 接口，可通过数据管理页面或AI工作台更新数据
 
 ## 工具下载
 - anaconda或者python 二选一就行，以免环境冲突，简单一点用python，需要更多功能用anaconda  
