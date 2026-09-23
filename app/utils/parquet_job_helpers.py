@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
 from app.utils.parquet_writer import save_partitioned_parquet
+from app.utils.stock_partition import auto_rebuild_stock_partition
 
 
 def normalize_ymd(date_str: Optional[str]) -> Optional[str]:
@@ -238,6 +239,7 @@ class DailyFetchJob:
             return 0
 
         total_saved = 0
+        saved_dates: List[str] = []
         failed_dates: List[str] = []
         for trade_date in trade_dates:
             print(f"[{self.job_name}] trade_date={trade_date}")
@@ -245,9 +247,18 @@ class DailyFetchJob:
             if df is None:
                 failed_dates.append(trade_date)
                 continue
-            total_saved += save_partitioned_parquet(df, "trade_date", self.rel_table)
+            saved = save_partitioned_parquet(df, "trade_date", self.rel_table)
+            total_saved += saved
+            if saved > 0:
+                saved_dates.append(trade_date)
 
         print(f"[{self.job_name}] 完成，trade_days={len(trade_dates)}, total_upsert={total_saved}")
+
+        # 落盘成功后同步增量合并股票分区，个股查询保持走快路径；
+        # 重建失败只降级查询速度（自动回退日期分区），不影响下载作业状态
+        if saved_dates:
+            auto_rebuild_stock_partition(self.rel_table, saved_dates)
+
         if failed_dates:
             print(f"[{self.job_name}] 以下交易日重试后仍失败: {failed_dates}")
             sys.exit(1)

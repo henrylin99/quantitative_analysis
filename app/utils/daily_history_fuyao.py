@@ -22,6 +22,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from app.utils.data_sources.fuyao_dump import FuyaoDailyFetcher
 from app.utils.parquet_job_helpers import resolve_trade_dates_with_gap_fill
 from app.utils.parquet_writer import save_to_parquet
+from app.utils.stock_partition import auto_rebuild_stock_partition
 
 REL_TABLE = "daily_history/daily"
 
@@ -36,6 +37,7 @@ def main() -> int:
     frames = fetcher.fetch_dates(trade_dates)
 
     total = 0
+    saved_dates = []
     failed = []
     for trade_date in trade_dates:
         frame = frames.get(trade_date)
@@ -43,12 +45,18 @@ def main() -> int:
             failed.append(trade_date)
             continue
         total += save_to_parquet(frame, trade_date, REL_TABLE)
+        saved_dates.append(trade_date)
 
     saved_days = len(trade_dates) - len(failed)
     print(
         f"[daily_history_fuyao] 完成，trade_days={len(trade_dates)}, "
         f"saved_days={saved_days}, total_upsert={total}"
     )
+
+    # 落盘成功后增量合并股票分区（个股查询快路径），失败不影响本作业
+    if saved_dates:
+        auto_rebuild_stock_partition(REL_TABLE, saved_dates)
+
     if failed:
         print(f"[daily_history_fuyao] 以下交易日未取得数据（作业标记失败，可重试）: {failed}")
         return 1
