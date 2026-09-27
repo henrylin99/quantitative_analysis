@@ -276,3 +276,49 @@ def test_list_data_jobs_reports_token_state(app, monkeypatch):
     daily = next(j for j in outcome['result']['jobs'] if j['job_type'] == 'daily_basic')
     assert daily['needs_tushare_token'] is True
     assert outcome['result']['tushare_token_configured'] is False
+
+
+def test_query_fund_registered_as_read_tool():
+    tool = next(t for t in ai_tools.AI_TOOLS if t.name == 'query_fund')
+    assert tool.kind == 'read'
+    spec = tool.to_spec()
+    topics = spec['function']['parameters']['properties']['topic']['enum']
+    assert 'performance' in topics and 'holdings' in topics
+
+
+def test_query_fund_dispatches_by_topic(app, monkeypatch):
+    calls = {}
+
+    class FakeService:
+        def get_performance(self, thscode):
+            calls['hit'] = ('performance', thscode)
+            return {'thscode': thscode}
+
+    monkeypatch.setattr('app.services.fund_service.get_fund_service', lambda: FakeService())
+
+    outcome = execute_tool('query_fund', {'thscode': '510300.SH', 'topic': 'performance'})
+    assert outcome['ok'] is True
+    assert calls['hit'] == ('performance', '510300.SH')
+
+
+def test_query_fund_validates_input(app):
+    missing = execute_tool('query_fund', {})
+    assert missing['ok'] is False
+    assert 'thscode' in missing['error']
+
+    bad_topic = execute_tool('query_fund', {'thscode': '510300.SH', 'topic': 'nope'})
+    assert bad_topic['ok'] is False
+    assert 'topic' in bad_topic['error']
+
+
+def test_query_fund_maps_fuyao_error(app, monkeypatch):
+    from app.utils.data_sources.fuyao_client import FuyaoError
+
+    class FakeService:
+        def get_profile(self, thscode):
+            raise FuyaoError('3004', '该基金类型不支持')
+
+    monkeypatch.setattr('app.services.fund_service.get_fund_service', lambda: FakeService())
+    outcome = execute_tool('query_fund', {'thscode': '025480.OF'})
+    assert outcome['ok'] is False
+    assert '3004' in outcome['error']
