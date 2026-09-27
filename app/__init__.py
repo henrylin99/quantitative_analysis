@@ -56,6 +56,7 @@ def create_app(config_name='default'):
     from app.api.pattern_screen_api import pattern_screen_api
     from app.api.market_api import market_bp, datasources_bp
     from app.api.research_api import research_bp
+    from app.api.fund_api import fund_bp
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(ml_factor_bp)
     app.register_blueprint(text2sql_bp)
@@ -76,6 +77,7 @@ def create_app(config_name='default'):
     app.register_blueprint(market_bp)
     app.register_blueprint(datasources_bp)
     app.register_blueprint(research_bp)
+    app.register_blueprint(fund_bp)
 
     from app.main import main_bp
     app.register_blueprint(main_bp)

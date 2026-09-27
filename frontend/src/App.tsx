@@ -5,7 +5,7 @@ import {
   ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, HeartPulse, Home,
   LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon,
   Newspaper, PieChart, Plug, Radar, Radio, Search, Shield, Star, Sun, Timer,
-  TrendingUp, Trophy, Zap,
+  TrendingUp, Trophy, Wallet, Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
@@ -50,6 +50,8 @@ const ConceptAnalysisPage = lazy(() => import('./pages/ConceptAnalysisPage'))
 const IndustryAnalysisPage = lazy(() => import('./pages/IndustryAnalysisPage'))
 const ResearchReportsPage = lazy(() => import('./pages/ResearchReportsPage'))
 const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
+const FundCenterPage = lazy(() => import('./pages/FundCenterPage'))
+const FundsListPage = lazy(() => import('./pages/FundsListPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -112,6 +114,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/concepts', label: '概念分析', icon: Lightbulb },
       { to: '/market/industries', label: '行业分析', icon: Factory },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: Trophy },
+      { to: '/funds', label: '基金列表', icon: Wallet },
       { to: '/research', label: '研报中心', icon: Newspaper },
     ],
   },
@@ -325,6 +328,22 @@ function Shell() {
                 <Suspense fallback={null}>
                   <ResearchReportsPage />
                 </Suspense>
+              }
+            />
+            <Route
+              path="/funds"
+              element={
+                <LazyRoute>
+                  <FundsListPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/fund/:thscode"
+              element={
+                <LazyRoute>
+                  <FundCenterPage />
+                </LazyRoute>
               }
             />
             <Route

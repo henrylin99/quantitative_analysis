@@ -635,6 +635,40 @@ def _tool_predict_ml_model(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ----------------------------------------------------------------------
+# 只读工具：基金数据（扶摇 /api/fund/*）
+# ----------------------------------------------------------------------
+
+_FUND_TOPICS = (
+    'profile',
+    'performance',
+    'holdings',
+    'holders',
+    'dividends',
+    'diagnostics',
+    'asset_allocation',
+    'industry_allocation',
+)
+
+
+def _tool_query_fund(args: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.fund_service import get_fund_service
+    from app.utils.data_sources.fuyao_client import FuyaoError
+
+    thscode = str(args.get('thscode') or '').strip()
+    if not thscode:
+        raise ToolError('缺少 thscode 参数（须带市场后缀，如 510300.SH、025480.OF）')
+    topic = str(args.get('topic') or 'profile').strip()
+    if topic not in _FUND_TOPICS:
+        raise ToolError(f'不支持的 topic: {topic}，可选: {", ".join(_FUND_TOPICS)}')
+
+    service = get_fund_service()
+    try:
+        return getattr(service, f'get_{topic}')(thscode)
+    except FuyaoError as exc:
+        raise ToolError(f'基金数据源返回错误 code={exc.code}: {exc.message}') from exc
+
+
+# ----------------------------------------------------------------------
 # 工具注册表
 # ----------------------------------------------------------------------
 
@@ -864,6 +898,28 @@ AI_TOOLS: List[AiTool] = [
         },
         'action',
         _tool_predict_ml_model,
+    ),
+    AiTool(
+        'query_fund',
+        '查询公募基金数据（同花顺扶摇数据源，实时调用，thscode 须带后缀）。'
+        'topic 可选：profile（基本资料/规模/单位净值/经理）、performance（最新净值、区间收益与同类排名、最大回撤）、'
+        'holdings（最新重仓持仓：股票/债券/基金占比、集中度、十大重仓股——可作个股机构关注度信号）、'
+        'holders（机构/个人持有人结构）、dividends（历史分红）、diagnostics（基金诊断）、'
+        'asset_allocation / industry_allocation（历史资产/行业配置）。'
+        '注意：实时行情仅支持 ETF/LOF，历史日线仅支持 ETF。',
+        {
+            'type': 'object',
+            'properties': {
+                'thscode': {
+                    'type': 'string',
+                    'description': '基金完整代码，须带市场后缀，如 510300.SH（ETF）、161725.SZ（LOF）、025480.OF（场外）',
+                },
+                'topic': {'type': 'string', 'enum': list(_FUND_TOPICS), 'description': '查询主题，默认 profile'},
+            },
+            'required': ['thscode'],
+        },
+        'read',
+        _tool_query_fund,
     ),
 ]
 

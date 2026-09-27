@@ -446,6 +446,106 @@ class FuyaoClient:
         )
         return data.get("item") or []
 
+    # ---- 基金 ----
+    # 契约要点（/docs/api-reference/funds/）：
+    # - 单只查询，thscodes 逗号多值不支持；场内快照 ETF/LOF，历史日线仅 ETF
+    # - 窗口 ≤5 自然年（1003）；场外基金走场内接口返回 3004
+    # - 3001 标的不存在 / 3002 数据未就绪
+
+    def fund_profile(self, thscode: str) -> List[Dict[str, Any]]:
+        """基金基本资料（fund_name/estab_date/mgmt_name/manager_name/fund_scale/unit_nav 等）。"""
+        data = self._get("/api/fund/profile/detail", {"thscode": thscode})
+        return data.get("item") or []
+
+    def fund_market_snapshot(self, thscode: str) -> List[Dict[str, Any]]:
+        """场内基金实时快照（仅 ETF/LOF，单只）。"""
+        data = self._get("/api/fund/market/snapshot", {"thscode": thscode})
+        return data.get("item") or []
+
+    def fund_historical(
+        self, thscode: str, start_ms: int, end_ms: int, interval: str = "1d"
+    ) -> List[Dict[str, Any]]:
+        """ETF 前复权历史日线（仅 ETF；窗口 ≤5 自然年由调用方保证）。
+
+        item 字段：date_ms/前复权开高低收/成交量/成交额；adjust 固定 null。
+        """
+        data = self._get(
+            "/api/fund/market/historical",
+            {
+                "thscode": thscode,
+                "interval": interval,
+                "start": start_ms,
+                "end": end_ms,
+            },
+        )
+        return data.get("item") or []
+
+    def fund_nav(
+        self,
+        thscode: str,
+        range: Optional[str] = None,
+        nav_type: str = "unit,adj",
+    ) -> List[Dict[str, Any]]:
+        """基金净值序列（range: week..fyear，缺省仅最新一条；nav_type: unit/adj/unit,adj）。"""
+        data = self._get(
+            "/api/fund/performance/nav",
+            {"thscode": thscode, "range": range, "nav_type": nav_type},
+        )
+        return data.get("item") or []
+
+    def fund_returns(self, thscode: str) -> Dict[str, Any]:
+        """基金区间收益与同类排名（return_*、peer_average_*、rank_*）。"""
+        return self._get("/api/fund/performance/returns", {"thscode": thscode}) or {}
+
+    def fund_drawdowns(self, thscode: str) -> Dict[str, Any]:
+        """基金各区间最大回撤（week..now；nowyear=今年以来 / now=成立以来）。"""
+        return self._get("/api/fund/performance/drawdowns", {"thscode": thscode}) or {}
+
+    def fund_holdings(self, thscode: str) -> Dict[str, Any]:
+        """基金最新重仓持仓：顶层汇总（股票/债券/基金占比、集中度）+ item 明细。"""
+        return self._get("/api/fund/portfolio/holdings", {"thscode": thscode}) or {}
+
+    def fund_holders_detail(self, thscode: str, merge_scope: str = "all") -> List[Dict[str, Any]]:
+        """基金持有人结构（机构/个人占比、户数；merge_scope: all/merged/separate）。"""
+        data = self._get(
+            "/api/fund/holders/detail", {"thscode": thscode, "merge_scope": merge_scope}
+        )
+        return data.get("item") or []
+
+    def fund_holders_top(self, thscode: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """基金前十大持有人（limit ≤10）。"""
+        data = self._get("/api/fund/holders/top", {"thscode": thscode, "limit": limit})
+        return data.get("item") or []
+
+    def fund_asset_allocation(self, thscode: str) -> List[Dict[str, Any]]:
+        """基金历史资产配置（报告期股票/债券/存款/其他占比）。"""
+        data = self._get("/api/fund/portfolio/asset-allocation", {"thscode": thscode})
+        return data.get("item") or []
+
+    def fund_industry_allocation(self, thscode: str) -> List[Dict[str, Any]]:
+        """基金历史行业配置（report_period 如 2026Q2 + industry_name/ratio_pct）。"""
+        data = self._get("/api/fund/portfolio/industry-allocation", {"thscode": thscode})
+        return data.get("item") or []
+
+    def fund_manager_detail(self, manager_id: str) -> List[Dict[str, Any]]:
+        """基金经理详情（manager_id 可从基金基本资料 manager_info 获取）。"""
+        data = self._get("/api/fund/managers/detail", {"manager_id": manager_id})
+        return data.get("item") or []
+
+    def fund_diagnostics(self, thscode: str) -> List[Dict[str, Any]]:
+        """基金诊断详情（诊断维度/同类对比/韧性指标，上游结构原样透传）。"""
+        data = self._get("/api/fund/diagnostics/detail", {"thscode": thscode})
+        return data.get("item") or []
+
+    def fund_dividends(self, thscode: str) -> Dict[str, Any]:
+        """基金历史分红（dividend_count/dividend_total + 每条每 10 份分红与日期）。"""
+        return self._get("/api/fund/corporate-actions/dividends", {"thscode": thscode}) or {}
+
+    def fund_company(self, company_id: str) -> List[Dict[str, Any]]:
+        """基金公司详情（company_id 来自基金基本资料，不能用名称代替）。"""
+        data = self._get("/api/fund/companies/detail", {"company_id": company_id})
+        return data.get("item") or []
+
     # ---- dump 下载 ----
 
     def dump_download_url(self, kind: str) -> Dict[str, Any]:
