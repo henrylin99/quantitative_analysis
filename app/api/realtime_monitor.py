@@ -4,6 +4,7 @@
 """
 
 from flask import Blueprint, request, jsonify
+from app.utils.request_parsing import parse_int_arg
 import logging
 
 from app.services.realtime_monitor_service import RealtimeMonitorService
@@ -36,7 +37,7 @@ def get_realtime_quotes():
         # 获取请求参数
         stock_codes_param = request.args.get('stock_codes')
         period_type = request.args.get('period_type', '5min')
-        limit = int(request.args.get('limit', 50))
+        limit = parse_int_arg('limit', 50, min_val=1, max_val=1000)
         
         # 解析股票代码列表
         stock_codes = None
@@ -51,6 +52,8 @@ def get_realtime_quotes():
         
         return jsonify(result)
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取实时行情失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -60,12 +63,14 @@ def get_realtime_quotes():
 def get_sector_performance():
     """获取板块表现"""
     try:
-        period_hours = int(request.args.get('period_hours', 1))
+        period_hours = parse_int_arg('period_hours', 1, min_val=1, max_val=720)
         
         result = monitor_service.get_sector_performance(period_hours=period_hours)
         
         return jsonify(result)
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取板块表现失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -77,7 +82,7 @@ def detect_anomalies():
     try:
         change_threshold = float(request.args.get('change_threshold', 5.0))
         volume_threshold = float(request.args.get('volume_threshold', 3.0))
-        period_hours = int(request.args.get('period_hours', 1))
+        period_hours = parse_int_arg('period_hours', 1, min_val=1, max_val=720)
         
         result = monitor_service.detect_anomalies(
             change_threshold=change_threshold,
@@ -87,6 +92,10 @@ def detect_anomalies():
         
         return jsonify(result)
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"检测异动股票失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -96,12 +105,14 @@ def detect_anomalies():
 def get_market_sentiment():
     """获取市场情绪"""
     try:
-        period_hours = int(request.args.get('period_hours', 1))
+        period_hours = parse_int_arg('period_hours', 1, min_val=1, max_val=720)
         
         result = monitor_service.get_market_sentiment(period_hours=period_hours)
         
         return jsonify(result)
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取市场情绪失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -183,6 +194,8 @@ def get_price_alerts():
             'message': f'获取到 {len(alerts)} 个价格预警'
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取价格预警失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -192,7 +205,7 @@ def get_price_alerts():
 def get_market_heatmap():
     """获取市场热力图数据"""
     try:
-        period_hours = int(request.args.get('period_hours', 1))
+        period_hours = parse_int_arg('period_hours', 1, min_val=1, max_val=720)
         
         # 获取板块表现数据
         sector_result = monitor_service.get_sector_performance(period_hours=period_hours)
@@ -223,6 +236,8 @@ def get_market_heatmap():
             'message': f'获取到 {len(heatmap_data)} 个板块的热力图数据'
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取市场热力图失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -232,7 +247,7 @@ def get_market_heatmap():
 def get_top_movers():
     """获取涨跌幅排行"""
     try:
-        limit = int(request.args.get('limit', 20))
+        limit = parse_int_arg('limit', 20, min_val=1, max_val=1000)
         period_type = request.args.get('period_type', '5min')
         
         # 获取实时行情数据
@@ -268,6 +283,8 @@ def get_top_movers():
             'message': '获取涨跌幅排行成功'
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取涨跌幅排行失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -277,7 +294,7 @@ def get_top_movers():
 def get_market_stats():
     """获取市场统计数据"""
     try:
-        period_hours = int(request.args.get('period_hours', 1))
+        period_hours = parse_int_arg('period_hours', 1, min_val=1, max_val=720)
         
         # 获取市场情绪数据
         sentiment_result = monitor_service.get_market_sentiment(period_hours=period_hours)
@@ -329,6 +346,8 @@ def get_market_stats():
             'message': '市场统计数据获取成功'
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取市场统计数据失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}) 
