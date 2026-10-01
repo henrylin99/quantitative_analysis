@@ -4,6 +4,7 @@
 """
 
 from flask import Blueprint, request, jsonify
+from app.utils.request_parsing import parse_int_arg
 from datetime import datetime, timedelta
 import logging
 import os
@@ -95,7 +96,7 @@ def get_active_signals():
     try:
         ts_code = request.args.get('ts_code')
         strategy_name = request.args.get('strategy_name')
-        limit = int(request.args.get('limit', 100))
+        limit = parse_int_arg('limit', 100, min_val=1, max_val=1000)
         
         # 获取活跃信号
         signals = TradingSignal.get_active_signals(
@@ -115,6 +116,8 @@ def get_active_signals():
             'strategy_name': strategy_name
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取活跃信号失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -174,7 +177,7 @@ def get_signal_performance():
     """获取信号表现"""
     try:
         strategy_name = request.args.get('strategy_name')
-        days = int(request.args.get('days', 30))
+        days = parse_int_arg('days', 30, min_val=1, max_val=365)
         
         # 获取信号表现统计
         performance = TradingSignal.get_signal_performance(
@@ -189,6 +192,8 @@ def get_signal_performance():
             'days': days
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取信号表现失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -412,7 +417,7 @@ def get_signal_strength_distribution():
     try:
         ts_code = request.args.get('ts_code')
         strategy_name = request.args.get('strategy_name')
-        days = int(request.args.get('days', 30))
+        days = parse_int_arg('days', 30, min_val=1, max_val=365)
         
         # 获取最近N天的信号
         end_time = datetime.now()
@@ -461,6 +466,8 @@ def get_signal_strength_distribution():
             }
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取信号强度分布失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}) 

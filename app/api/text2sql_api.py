@@ -8,6 +8,7 @@ from flask import Blueprint, request, jsonify, render_template
 from app.services.text2sql_engine import get_text2sql_engine
 from app.services.sql_generator import validate_readonly_sql
 from app.models.text2sql_metadata import QueryHistory, QueryTemplate, BusinessDictionary
+from app.utils.request_parsing import parse_int_arg
 
 # 创建蓝图
 text2sql_bp = Blueprint('text2sql', __name__, url_prefix='/api/text2sql')
@@ -55,7 +56,9 @@ def process_query():
                 'chart_config': result.get('chart_config'),
                 'explanation': result.get('explanation'),
                 'execution_time': result['execution_time'],
-                'result_count': result['result_count']
+                'result_count': result['result_count'],
+                # 虚拟表实际覆盖的日期范围——历史日期查询时据此提示数据口径
+                'data_scope': result.get('data_scope'),
             })
         else:
             return jsonify({
@@ -65,12 +68,13 @@ def process_query():
                 'intent': result.get('intent'),
                 'entities': result.get('entities'),
                 'sql': result.get('sql'),
-                'execution_time': result['execution_time']
+                'execution_time': result['execution_time'],
+                'data_scope': result.get('data_scope'),
             }), 400
-        
-    except Exception as e:
-        logger.error(f"处理查询失败: {e}")
-        return jsonify({'error': f'服务器内部错误: {str(e)}'}), 500
+
+    except Exception:
+        logger.exception("处理查询失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/suggestions', methods=['GET'])
@@ -85,30 +89,31 @@ def get_query_suggestions():
             'suggestions': suggestions
         })
         
-    except Exception as e:
-        logger.error(f"获取查询建议失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("获取查询建议失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/history', methods=['GET'])
 def get_query_history():
     """获取查询历史"""
     try:
-        limit = request.args.get('limit', 10, type=int)
-        limit = min(limit, 100)  # 最大限制100条
-        
+        limit = parse_int_arg('limit', 10, min_val=1, max_val=100)
+
         engine = get_text2sql_engine()
         history = engine.get_query_history(limit)
-        
+
         return jsonify({
             'success': True,
             'history': history,
             'count': len(history)
         })
-        
-    except Exception as e:
-        logger.error(f"获取查询历史失败: {e}")
-        return jsonify({'error': str(e)}), 500
+
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception:
+        logger.exception("获取查询历史失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/templates', methods=['GET'])
@@ -134,9 +139,9 @@ def get_query_templates():
             'count': len(template_list)
         })
         
-    except Exception as e:
-        logger.error(f"获取查询模板失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("获取查询模板失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/templates', methods=['POST'])
@@ -178,9 +183,9 @@ def create_query_template():
             'template': template.to_dict()
         })
         
-    except Exception as e:
-        logger.error(f"创建查询模板失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("创建查询模板失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/templates/<template_id>', methods=['PUT'])
@@ -216,9 +221,9 @@ def update_query_template(template_id):
             'template': template.to_dict()
         })
         
-    except Exception as e:
-        logger.error(f"更新查询模板失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("更新查询模板失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/templates/<template_id>', methods=['DELETE'])
@@ -235,9 +240,9 @@ def delete_query_template(template_id):
             'message': '模板删除成功'
         })
         
-    except Exception as e:
-        logger.error(f"删除查询模板失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("删除查询模板失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/dictionary', methods=['GET'])
@@ -258,9 +263,9 @@ def get_business_dictionary():
             'count': len(dict_list)
         })
         
-    except Exception as e:
-        logger.error(f"获取业务词典失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("获取业务词典失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/dictionary', methods=['POST'])
@@ -293,9 +298,9 @@ def create_business_dictionary():
             'dictionary': dictionary.to_dict()
         })
         
-    except Exception as e:
-        logger.error(f"创建业务词典失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("创建业务词典失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/statistics', methods=['GET'])
@@ -332,9 +337,9 @@ def get_query_statistics():
             }
         })
         
-    except Exception as e:
-        logger.error(f"获取查询统计失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("获取查询统计失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/validate', methods=['POST'])
@@ -371,9 +376,9 @@ def validate_query():
             'explanation': sql_result.get('explanation')
         })
         
-    except Exception as e:
-        logger.error(f"验证查询失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("验证查询失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/export', methods=['POST'])
@@ -402,9 +407,9 @@ def export_query_result():
             'record_count': len(query_data)
         })
         
-    except Exception as e:
-        logger.error(f"导出查询结果失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("导出查询结果失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/llm/status', methods=['GET'])
@@ -421,9 +426,9 @@ def get_llm_status():
             'status': status
         })
         
-    except Exception as e:
-        logger.error(f"获取大模型状态失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("获取大模型状态失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @text2sql_bp.route('/llm/test', methods=['POST'])
@@ -461,9 +466,9 @@ def test_llm_service():
                 'message': '大模型服务测试失败'
             }), 400
         
-    except Exception as e:
-        logger.error(f"测试大模型服务失败: {e}")
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("测试大模型服务失败")
+        return jsonify({'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 # 错误处理

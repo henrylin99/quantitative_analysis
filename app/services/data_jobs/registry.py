@@ -198,6 +198,10 @@ class JobRegistry:
             raise KeyError(f"unknown job type: {job_type}")
         return self._jobs[job_type]
 
+    def is_visible(self, job_type: str) -> bool:
+        """该任务类型是否对页面/API 开放提交（隐藏任务仅限内部使用）。"""
+        return job_type in self._visible_job_types
+
     def list_jobs(self) -> List[JobDefinition]:
         return list(self._jobs.values())
 

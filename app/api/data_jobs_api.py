@@ -1,12 +1,19 @@
+import logging
+
 from flask import Blueprint, jsonify, request
 
+from app.services.data_jobs.registry import JobRegistry
 from app.services.data_jobs.service import DataJobService
 from app.services.wide_table_status import get_wide_table_status
+from app.utils.request_parsing import parse_int_arg
 
 
 data_jobs_bp = Blueprint("data_jobs", __name__, url_prefix="/api/data-jobs")
 
+logger = logging.getLogger(__name__)
+
 _service = None
+_registry = None
 
 
 def get_data_job_service() -> DataJobService:
@@ -16,12 +23,32 @@ def get_data_job_service() -> DataJobService:
     return _service
 
 
+def get_job_registry() -> JobRegistry:
+    global _registry
+    if _registry is None:
+        _registry = JobRegistry()
+    return _registry
+
+
 @data_jobs_bp.route("/submit", methods=["POST"])
 def submit_job():
     payload = request.get_json(silent=True) or {}
     job_type = payload.get("job_type")
     if not job_type:
         return jsonify({"success": False, "error": "missing job_type"}), 400
+
+    # 服务端 allowlist：只允许页面可见任务经 API 提交，
+    # 防止绕过前端直接触发隐藏任务/危险任务
+    registry = get_job_registry()
+    try:
+        registry.get_job(job_type)
+    except KeyError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    if not registry.is_visible(job_type):
+        return jsonify({
+            "success": False,
+            "error": f"任务 {job_type} 未开放 API 提交（仅限数据管理页面/内部使用）",
+        }), 403
 
     # 大宽表构建任务需通过 18:00 校验
     if job_type == "wide_table_builder":
@@ -38,8 +65,9 @@ def submit_job():
         run = get_data_job_service().submit(job_type, params)
     except (KeyError, ValueError) as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("提交数据任务 %s 失败", job_type)
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
 
     return jsonify(
         {
@@ -63,7 +91,10 @@ def list_jobs():
 
 @data_jobs_bp.route("/list", methods=["GET"])
 def list_runs():
-    limit = int(request.args.get("limit", 50))
+    try:
+        limit = parse_int_arg("limit", 50, min_val=1, max_val=500)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
     status = request.args.get("status")
     runs = [run.to_dict() for run in get_data_job_service().list_runs(limit=limit, status=status)]
     return jsonify({"success": True, "runs": runs, "count": len(runs)})
@@ -83,8 +114,9 @@ def retry_run(run_id: int):
         run = get_data_job_service().retry(run_id)
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 404
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("重试数据任务 %s 失败", run_id)
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
 
     return jsonify({"success": True, "run_id": run.id, "status": run.status})
 
@@ -96,8 +128,9 @@ def init_status():
 
     try:
         return jsonify({"success": True, "status": inspect_data_management_status()})
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("读取数据资产初始化状态失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
 
 
 @data_jobs_bp.route("/wide-table/status", methods=["GET"])
@@ -108,8 +141,9 @@ def wide_table_status():
         data_dir = current_app.config.get("DATA_DIR")
         status = get_wide_table_status(data_dir)
         return jsonify({"success": True, "status": status})
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("读取大宽表状态失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
 
 
 @data_jobs_bp.route("/wide-table/build", methods=["POST"])
@@ -140,5 +174,6 @@ def build_wide_table():
         })
     except (KeyError, ValueError) as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("提交大宽表构建任务失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500

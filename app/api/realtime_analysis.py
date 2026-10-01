@@ -6,6 +6,7 @@
 import os
 
 from flask import Blueprint, request, jsonify
+from app.utils.request_parsing import parse_int_arg
 from app.services.realtime_data_manager import RealtimeDataManager
 import logging
 
@@ -164,7 +165,7 @@ def get_sync_status():
     try:
         ts_code = request.args.get('ts_code')
         period_type = request.args.get('period_type', '1min')
-        hours = int(request.args.get('hours', 24))
+        hours = parse_int_arg('hours', 24, min_val=1, max_val=720)
         
         if not ts_code:
             return jsonify({
@@ -183,6 +184,8 @@ def get_sync_status():
             }
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取同步状态API错误: {str(e)}")
         return jsonify({
@@ -229,7 +232,7 @@ def check_data_quality():
     try:
         ts_code = request.args.get('ts_code')
         period_type = request.args.get('period_type', '1min')
-        hours = int(request.args.get('hours', 24))
+        hours = parse_int_arg('hours', 24, min_val=1, max_val=720)
         
         if not ts_code:
             return jsonify({
@@ -245,6 +248,8 @@ def check_data_quality():
             'data': result
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"数据质量检查API错误: {str(e)}")
         return jsonify({
@@ -259,7 +264,7 @@ def get_latest_data():
     try:
         ts_code = request.args.get('ts_code')
         period_type = request.args.get('period_type', '1min')
-        limit = int(request.args.get('limit', 100))
+        limit = parse_int_arg('limit', 100, min_val=1, max_val=1000)
         
         if not ts_code:
             return jsonify({
@@ -275,6 +280,8 @@ def get_latest_data():
             'count': len(data)
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取最新数据API错误: {str(e)}")
         return jsonify({

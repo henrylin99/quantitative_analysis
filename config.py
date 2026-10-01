@@ -125,6 +125,18 @@ class ProductionConfig(Config):
                 "生产环境必须设置真实的 SECRET_KEY（环境变量 SECRET_KEY），"
                 "当前为空或仍为示例值"
             )
+        cors = (app_config.get('CORS_ORIGINS') or '').strip()
+        if not cors or cors == '*':
+            raise RuntimeError(
+                "生产环境必须通过环境变量 CORS_ORIGINS 指定允许的来源"
+                "（如 https://your-domain.com），不允许留空或使用 '*' 全开放"
+            )
+        token = (os.getenv('API_AUTH_TOKEN') or '').strip()
+        if not token or len(token) < 16:
+            raise RuntimeError(
+                "生产环境必须设置 API_AUTH_TOKEN（至少 16 位的随机串），"
+                "所有 /api/* 请求需携带该 Token（建议由反向代理注入 X-API-Token 头）"
+            )
 
 
 class TestingConfig(Config):

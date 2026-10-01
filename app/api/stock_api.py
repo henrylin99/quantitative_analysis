@@ -1,4 +1,5 @@
 from flask import request, jsonify
+from app.utils.request_parsing import parse_int_arg
 from app.api import api_bp
 from app.services.stock_service import StockService
 from loguru import logger
@@ -11,8 +12,8 @@ def get_stocks():
         industry = request.args.get('industry')
         area = request.args.get('area')
         search = request.args.get('search')
-        page = int(request.args.get('page', 1))
-        page_size = min(int(request.args.get('page_size', 20)), 100)
+        page = parse_int_arg('page', 1, min_val=1)
+        page_size = parse_int_arg('page_size', 20, min_val=1, max_val=100)
         
         # 调用服务
         result = StockService.get_stock_list(
@@ -28,6 +29,8 @@ def get_stocks():
             'message': '成功',
             'data': result
         })
+    except ValueError as exc:
+        return jsonify({'code': 400, 'message': str(exc), 'data': None}), 400
     except Exception as e:
         logger.error(f"获取股票列表API错误: {e}")
         return jsonify({
@@ -68,7 +71,7 @@ def get_stock_history(ts_code):
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        limit = int(request.args.get('limit', 60))
+        limit = parse_int_arg('limit', 60, min_val=1, max_val=1000)
         
         result = StockService.get_daily_history(
             ts_code=ts_code,
@@ -82,6 +85,8 @@ def get_stock_history(ts_code):
             'message': '成功',
             'data': result
         })
+    except ValueError as exc:
+        return jsonify({'code': 400, 'message': str(exc), 'data': None}), 400
     except Exception as e:
         logger.error(f"获取股票历史数据API错误: {ts_code}, {e}")
         return jsonify({
@@ -96,7 +101,7 @@ def get_stock_factors(ts_code):
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        limit = int(request.args.get('limit', 60))
+        limit = parse_int_arg('limit', 60, min_val=1, max_val=1000)
         
         result = StockService.get_stock_factors(
             ts_code=ts_code,
@@ -110,6 +115,8 @@ def get_stock_factors(ts_code):
             'message': '成功',
             'data': result
         })
+    except ValueError as exc:
+        return jsonify({'code': 400, 'message': str(exc), 'data': None}), 400
     except Exception as e:
         logger.error(f"获取股票技术因子API错误: {ts_code}, {e}")
         return jsonify({
@@ -124,7 +131,7 @@ def get_stock_moneyflow(ts_code):
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        limit = int(request.args.get('limit', 30))
+        limit = parse_int_arg('limit', 30, min_val=1, max_val=1000)
         
         result = StockService.get_moneyflow(
             ts_code=ts_code,
@@ -138,6 +145,8 @@ def get_stock_moneyflow(ts_code):
             'message': '成功',
             'data': result
         })
+    except ValueError as exc:
+        return jsonify({'code': 400, 'message': str(exc), 'data': None}), 400
     except Exception as e:
         logger.error(f"获取股票资金流向API错误: {ts_code}, {e}")
         return jsonify({
@@ -152,7 +161,7 @@ def get_stock_cyq(ts_code):
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        limit = int(request.args.get('limit', 30))
+        limit = parse_int_arg('limit', 30, min_val=1, max_val=1000)
         
         result = StockService.get_cyq_perf(
             ts_code=ts_code,
@@ -166,6 +175,8 @@ def get_stock_cyq(ts_code):
             'message': '成功',
             'data': result
         })
+    except ValueError as exc:
+        return jsonify({'code': 400, 'message': str(exc), 'data': None}), 400
     except Exception as e:
         logger.error(f"获取股票筹码分布API错误: {ts_code}, {e}")
         return jsonify({

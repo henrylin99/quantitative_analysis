@@ -1,12 +1,47 @@
+import os
+
 from runtime_compat import ensure_click_parameter_source
 
 ensure_click_parameter_source()
 
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from config import config  # noqa: F401
 from app.extensions import db, socketio
 from app.utils.logger import setup_logger
+
+
+def _install_api_token_guard(app: Flask) -> None:
+    """API 数据面门禁：设置 API_AUTH_TOKEN 后，所有 /api/* 请求（含 GET）
+    必须携带 X-API-Token 头或 Authorization: Bearer <token>。
+
+    会话、查询历史、任务结果等数据同样受保护，避免匿名读取。
+    未设置时保持原行为（本机单人使用，无鉴权；生产配置会强制要求设置）。
+    浏览器直连场景请通过反向代理注入该头（如 nginx proxy_set_header）。
+    """
+    token = (os.getenv('API_AUTH_TOKEN') or '').strip()
+    if not token:
+        return
+
+    @app.before_request
+    def _require_api_token():
+        # CORS 预检请求不带 Token（浏览器规范），必须放行交给 Flask-CORS 处理，
+        # 否则带 Token 的跨域调用会在预检阶段被 401 拦死
+        if request.method == 'OPTIONS':
+            return None
+        # socket.io 走 POST 轮询握手，浏览器端无法携带自定义头；
+        # 推送通道本身受同源策略约束，不在此设防
+        if not request.path.startswith('/api/') or request.path.startswith('/socket.io'):
+            return None
+        provided = request.headers.get('X-API-Token', '')
+        auth_header = request.headers.get('Authorization', '')
+        if not provided and auth_header.startswith('Bearer '):
+            provided = auth_header[len('Bearer '):]
+        if provided != token:
+            return jsonify({'success': False, 'error': '未授权：缺少或错误的 API Token'}), 401
+        return None
+
+
 
 def create_app(config_name='default'):
     """应用工厂函数"""
@@ -35,7 +70,10 @@ def create_app(config_name='default'):
     
     # 设置日志
     setup_logger(app.config['LOG_LEVEL'], app.config['LOG_FILE'])
-    
+
+    # 可选写操作 Token 门禁（API_AUTH_TOKEN 未设置时不生效）
+    _install_api_token_guard(app)
+
     # 注册蓝图
     from app.api import api_bp
     from app.api.ml_factor_api import ml_factor_bp
@@ -84,5 +122,22 @@ def create_app(config_name='default'):
     
     # 注册WebSocket事件处理器
     from app.websocket import websocket_events  # noqa: F401
-    
-    return app 
+
+    # 启动时按超时口径清理僵尸数据任务：run 超过 DATA_JOB_TIMEOUT 仍停在
+    # pending/queued/running 判定为 worker 中断遗留。不用"启动即清空"是因为
+    # 多 worker 部署下其他进程可能有任务正在执行，会被误杀。
+    with app.app_context():
+        try:
+            from app.services.data_jobs.parquet_state_store import ParquetDataJobStateStore
+
+            reaped = ParquetDataJobStateStore().reap_stale_runs()
+            if reaped:
+                app.logger.warning(
+                    "启动清理僵尸数据任务 %d 个（标记为 failed）: %s",
+                    len(reaped), [r.id for r in reaped],
+                )
+        except Exception:
+            app.logger.warning("启动清理僵尸数据任务失败（不阻塞应用启动）", exc_info=True)
+
+    return app
+

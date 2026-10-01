@@ -4,6 +4,7 @@
 """
 
 from flask import Blueprint, request, jsonify
+from app.utils.request_parsing import parse_int_arg
 from datetime import datetime
 import os
 import logging
@@ -173,7 +174,7 @@ def get_latest_indicators():
         ts_code = request.args.get('ts_code')
         period_type = request.args.get('period_type', '5min')
         indicator_names = request.args.getlist('indicators')
-        limit = int(request.args.get('limit', 100))
+        limit = parse_int_arg('limit', 100, min_val=1, max_val=1000)
         
         if not ts_code:
             return jsonify({'success': False, 'message': '股票代码不能为空'})
@@ -197,6 +198,8 @@ def get_latest_indicators():
             'period_type': period_type
         })
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取最新指标数据失败: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})

@@ -7,8 +7,14 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 from typing import Dict, List, Any, Optional, Set
+
+try:
+    import fcntl  # 跨进程文件锁（POSIX）；Windows 降级为仅进程内锁
+except ImportError:  # pragma: no cover
+    fcntl = None
 
 logger = logging.getLogger(__name__)
 from flask import request
@@ -94,18 +100,21 @@ class Text2SQLEngine:
                 'explanation': sql_result.get('explanation'),
                 'execution_time': execution_time,
                 'result_count': len(execution_result['data']),
+                'data_scope': execution_result.get('data_scope'),
                 'llm_enhanced': sql_result.get('template_used') == 'llm_enhanced'
             }
             
-        except Exception as e:
+        except Exception:
             execution_time = time.time() - start_time
-            error_msg = str(e)
-            
+            # 完整异常进日志；返回值与查询历史（会经 /history API 暴露）只保留通用消息
+            logger.exception("Text2SQL 查询处理失败: %s", user_query[:200])
+            error_msg = '查询处理失败，请调整查询后重试（详情见服务日志）'
+
             # 记录错误
             self._save_query_history(
                 user_query, {}, None, 0, False, error_msg, None, execution_time
             )
-            
+
             return {
                 'success': False,
                 'query': user_query,
@@ -246,16 +255,31 @@ class QueryExecutor:
     使生成的 SQL 可以直接在 SQLite 上执行。
     """
 
+    # 进程级加载锁：并发请求触发同一虚拟表加载时串行执行，
+    # 配合"临时表 + 事务内改名"保证读连接要么看到旧表要么看到新表
+    _load_lock = threading.Lock()
+
+    # 单次加载行数上限：日期范围过大时截断保留最近的数据，
+    # 防止全历史加载把请求拖到分钟级（可用 TEXT2SQL_MAX_LOAD_ROWS 调整）
+    MAX_LOAD_ROWS = int(os.getenv('TEXT2SQL_MAX_LOAD_ROWS', '500000'))
+
+    # SQL 中的日期字面量（'YYYY-MM-DD' 或 'YYYYMMDD'）
+    _DATE_LITERAL_RE = re.compile(r"'(\d{4}-\d{2}-\d{2}|\d{8})'")
+
     def __init__(self):
         self.max_result_count = 1000
-        self._loaded_tables: Set[str] = set()
+        # {虚拟表名: 加载时的日期范围 key} — 范围不同的查询会触发重新加载
+        self._loaded_tables: Dict[str, str] = {}
         # {parquet_abs_path: mtime_at_load} — 用于检测文件是否被重建
         self._file_mtimes: Dict[str, float] = {}
+        # {(虚拟表名, 范围 key)} — 加载时被行数上限截断的范围，命中即拒绝执行
+        self._truncated_scopes: Set[Any] = set()
 
     def invalidate_cache(self):
         """清除已加载的临时表记录，下次查询时重新从 Parquet 加载。"""
         self._loaded_tables.clear()
         self._file_mtimes.clear()
+        self._truncated_scopes.clear()
 
     # ---- Parquet → SQLite 列名映射 ----
     # key = SQL 模板中使用的列名, value = Parquet 文件中的实际列名
@@ -310,6 +334,7 @@ class QueryExecutor:
           （query_history/query_templates 等应用数据）物理隔离，
           即使校验被绕过也无法读写应用数据
         """
+        scope = None
         try:
             if not sql:
                 return {'success': False, 'error': 'SQL为空'}
@@ -319,8 +344,22 @@ class QueryExecutor:
                 logger.warning(f"拒绝执行非只读SQL: {readonly_error}; sql={sql[:200]}")
                 return {'success': False, 'error': f'仅允许只读SELECT查询: {readonly_error}'}
 
-            # 确保 SQL 引用的数据表已从 Parquet 加载到查询库
-            self._ensure_data_tables(sql)
+            # 确保 SQL 引用的数据表已按查询日期范围加载到查询库
+            scope = self._ensure_data_tables(sql)
+
+            # fail-closed：目标范围加载时被行数上限截断（含缓存命中），
+            # 拒绝返回可能不完整的结果，而不是静默给出近似数据
+            needed_tables = [t for t in self._extract_table_names(sql) if t in self.TABLE_COLUMNS]
+            if any((t, scope['key']) in self._truncated_scopes for t in needed_tables):
+                return {
+                    'success': False,
+                    'error': (
+                        f"查询涉及的日期范围数据量超过加载上限"
+                        f"（TEXT2SQL_MAX_LOAD_ROWS={self.MAX_LOAD_ROWS}），"
+                        "为避免返回不完整结果已拒绝执行；请缩小日期范围或添加筛选条件"
+                    ),
+                    'data_scope': scope,
+                }
 
             conn = self._open_readonly_connection()
             try:
@@ -334,7 +373,8 @@ class QueryExecutor:
             if len(rows) > self.max_result_count:
                 return {
                     'success': False,
-                    'error': f'查询结果过多(超过{self.max_result_count}条)，请添加更多筛选条件'
+                    'error': f'查询结果过多(超过{self.max_result_count}条)，请添加更多筛选条件',
+                    'data_scope': scope,
                 }
 
             # 转换为字典列表
@@ -356,7 +396,8 @@ class QueryExecutor:
                 'success': True,
                 'data': data,
                 'columns': columns,
-                'row_count': len(data)
+                'row_count': len(data),
+                'data_scope': scope,
             }
 
         except sqlite3.OperationalError as e:
@@ -372,15 +413,20 @@ class QueryExecutor:
                 'error': error_msg,
                 'data': [],
                 'columns': [],
-                'row_count': 0
+                'row_count': 0,
+                'data_scope': scope,
             }
-        except Exception as e:
+        except Exception:
+            # 未知异常不外透细节：避免向客户端暴露 SQL/内部结构，
+            # 完整堆栈留在服务日志
+            logger.exception("查询执行失败")
             return {
                 'success': False,
-                'error': str(e),
+                'error': '查询执行失败，请调整查询后重试（详情见服务日志）',
                 'data': [],
                 'columns': [],
-                'row_count': 0
+                'row_count': 0,
+                'data_scope': scope,
             }
 
     # ---- private: 查询库连接 ----
@@ -394,27 +440,55 @@ class QueryExecutor:
         return os.path.join(data_dir, 'text2sql_query.db')
 
     def _open_readonly_connection(self) -> sqlite3.Connection:
-        """以只读模式打开查询库（URI mode=ro，写操作会被 SQLite 本身拒绝）。"""
+        """以只读模式打开查询库（URI mode=ro，写操作会被 SQLite 本身拒绝）。
+
+        timeout 为 busy handler 等待秒数：另一进程正在写查询库时
+        读连接等待而非立即抛 database is locked。
+        """
         path = self._query_db_path()
         if not os.path.exists(path):
             os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
             sqlite3.connect(path).close()  # 确保文件存在
-        return sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+        return sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=30)
 
     # ---- private: Parquet → SQLite 桥接 ----
 
-    def _ensure_data_tables(self, sql: str):
-        """检查 SQL 引用的表，若缺失或源文件已变更则重新加载。
+    @classmethod
+    def _resolve_date_scope(cls, sql: str) -> Dict[str, Any]:
+        """根据 SQL 推断虚拟表需要覆盖的日期范围。
+
+        - SQL 带日期字面量 → 加载 [min, max] 范围（受 MAX_LOAD_ROWS 上限，超出保留最近）
+        - SQL 引用 trade_date 但无字面量（如 ORDER BY trade_date）→ 不限日期，同样受上限
+        - 与日期无关的查询 → 仅加载最新交易日，保持 SQLite 轻量
+        """
+        mentions_trade_date = 'trade_date' in sql.lower()
+        dates = []
+        for raw in cls._DATE_LITERAL_RE.findall(sql):
+            # Parquet 中 trade_date 为 'YYYY-MM-DD' 字符串，统一成该格式再比较
+            dates.append(raw if '-' in raw else f"{raw[:4]}-{raw[4:6]}-{raw[6:]}")
+        if dates:
+            start, end = min(dates), max(dates)
+            return {'mode': 'range', 'start': start, 'end': end, 'key': f'{start}~{end}', 'tables': {}}
+        if mentions_trade_date:
+            return {'mode': 'range', 'start': None, 'end': None, 'key': 'history', 'tables': {}}
+        return {'mode': 'latest', 'start': None, 'end': None, 'key': 'latest', 'tables': {}}
+
+    def _ensure_data_tables(self, sql: str) -> Dict[str, Any]:
+        """检查 SQL 引用的表，按查询日期范围加载缺失/过期/口径不符的虚拟表。
+
         同一 Parquet 文件可能对应多个虚拟表（如 stock_business.parquet
         同时是 stock_business / stock_factor / stock_moneyflow 的源），
         文件变更时需重置所有共享该文件的已加载虚拟表。
+        返回本次查询的数据范围说明（data_scope），随查询结果一并返回，
+        让调用方知道虚拟表实际覆盖的日期，避免"看似成功实则缺历史"。
         """
+        scope = self._resolve_date_scope(sql)
         tables = self._extract_table_names(sql)
         stale_tables = set()
         for tbl in tables:
             if tbl not in self.TABLE_COLUMNS:
                 continue
-            if tbl not in self._loaded_tables:
+            if self._loaded_tables.get(tbl) != scope['key']:
                 stale_tables.add(tbl)
             elif self._is_parquet_stale(tbl):
                 stale_tables.add(tbl)
@@ -425,7 +499,15 @@ class QueryExecutor:
                         stale_tables.add(loaded_tbl)
 
         for tbl in stale_tables:
-            self._load_parquet_to_sqlite(tbl)
+            self._load_parquet_to_sqlite(tbl, scope)
+
+        if scope['mode'] == 'latest':
+            scope['note'] = '虚拟表仅包含最新交易日的数据（查询未涉及日期条件）'
+        elif scope['start']:
+            scope['note'] = f"虚拟表覆盖 {scope['start']} ~ {scope['end']} 的数据（受行数上限约束）"
+        else:
+            scope['note'] = '虚拟表包含历史数据（受行数上限约束，超限保留最近的数据）'
+        return scope
 
     def _is_parquet_stale(self, table_name: str) -> bool:
         """检测 Parquet 源文件是否在上次加载后被修改（跨进程安全）。"""
@@ -453,8 +535,27 @@ class QueryExecutor:
         """从 FROM / JOIN 子句提取表名"""
         return set(re.findall(r'(?:FROM|JOIN)\s+(\w+)', sql, re.IGNORECASE))
 
-    def _load_parquet_to_sqlite(self, table_name: str):
-        """从 Parquet 文件加载数据到 SQLite 临时表"""
+    def _load_parquet_to_sqlite(self, table_name: str, scope: Dict[str, Any]):
+        """按日期范围从 Parquet 加载数据到 SQLite 虚拟表。
+
+        双层锁：
+        - threading.Lock 串行化进程内并发请求
+        - flock 文件锁串行化多进程部署（多个 gunicorn worker）下的加载
+        加上"临时表 + 事务内改名"，读连接要么看到旧表要么看到新表
+        """
+        with QueryExecutor._load_lock:
+            lock_path = self._query_db_path() + '.load.lock'
+            os.makedirs(os.path.dirname(lock_path) or '.', exist_ok=True)
+            with open(lock_path, 'a+') as lock_fh:
+                if fcntl is not None:
+                    fcntl.flock(lock_fh, fcntl.LOCK_EX)
+                try:
+                    self._load_parquet_to_sqlite_locked(table_name, scope)
+                finally:
+                    if fcntl is not None:
+                        fcntl.flock(lock_fh, fcntl.LOCK_UN)
+
+    def _load_parquet_to_sqlite_locked(self, table_name: str, scope: Dict[str, Any]):
         try:
             import pandas as pd
             from flask import current_app
@@ -469,12 +570,29 @@ class QueryExecutor:
                 logger.warning(f"Parquet 文件不存在: {parquet_path}")
                 return
 
+            current_mtime = os.path.getmtime(parquet_path)
+            # 双重检查：等其他线程释放锁期间，同一 scope 可能已由别人加载完成
+            if (self._loaded_tables.get(table_name) == scope['key']
+                    and self._file_mtimes.get((table_name, parquet_path), 0) >= current_mtime):
+                return
+
             df = pd.read_parquet(parquet_path)
 
-            # 只取最新交易日数据（约 5K 行），保持 SQLite 轻量
+            truncated = False
             if 'trade_date' in df.columns:
-                latest_date = df['trade_date'].max()
-                df = df[df['trade_date'] == latest_date]
+                if scope['mode'] == 'latest':
+                    # 无日期条件的查询只取最新交易日（约 5K 行），保持 SQLite 轻量
+                    latest_date = df['trade_date'].max()
+                    df = df[df['trade_date'] == latest_date]
+                else:
+                    if scope.get('start'):
+                        df = df[df['trade_date'] >= scope['start']]
+                    if scope.get('end'):
+                        df = df[df['trade_date'] <= scope['end']]
+                    if len(df) > self.MAX_LOAD_ROWS:
+                        # trade_date 为 ISO 字符串，字典序即时序；超限保留最近的数据
+                        df = df.sort_values('trade_date', kind='stable').tail(self.MAX_LOAD_ROWS)
+                        truncated = True
 
             # 按 TABLE_COLUMNS 映射选取并重命名列
             col_map = self.TABLE_COLUMNS[table_name]
@@ -504,17 +622,38 @@ class QueryExecutor:
             # NaN → None（SQLite 不支持 NaN）
             df = df.where(pd.notnull(df), None)
 
-            # 写入隔离的查询库（不是应用主库），生成的 SQL 只能触达行情数据
-            conn = sqlite3.connect(self._query_db_path())
+            # 先写入 staging 临时表，再在同一事务内 DROP 旧表 + 改名，
+            # 保证并发读连接不会观察到表被清空的中间状态
+            conn = sqlite3.connect(self._query_db_path(), timeout=30)
+            staging = f"{table_name}__staging"
             try:
-                df.to_sql(table_name, conn, if_exists='replace', index=False)
+                df.to_sql(staging, conn, if_exists='replace', index=False)
+                conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.execute(f'ALTER TABLE "{staging}" RENAME TO "{table_name}"')
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
             finally:
                 conn.close()
 
-            self._loaded_tables.add(table_name)
+            self._loaded_tables[table_name] = scope['key']
             # 按 (虚拟表名, 文件路径) 记录 mtime，同一文件的不同虚拟表独立追踪
-            self._file_mtimes[(table_name, parquet_path)] = os.path.getmtime(parquet_path)
-            logger.info(f"Loaded {len(df)} rows into '{table_name}' from {parquet_file}")
+            self._file_mtimes[(table_name, parquet_path)] = current_mtime
+            if truncated:
+                self._truncated_scopes.add((table_name, scope['key']))
+            else:
+                self._truncated_scopes.discard((table_name, scope['key']))
+            scope['tables'][table_name] = {
+                'rows': int(len(df)),
+                'loaded_start': str(df['trade_date'].min()) if 'trade_date' in df.columns and len(df) else None,
+                'loaded_end': str(df['trade_date'].max()) if 'trade_date' in df.columns and len(df) else None,
+                'truncated': truncated,
+            }
+            logger.info(
+                f"Loaded {len(df)} rows into '{table_name}' from {parquet_file} "
+                f"(scope={scope['key']}, truncated={truncated})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to load '{table_name}' from Parquet: {e}")
