@@ -160,11 +160,15 @@ def _tool_query_data(args: Dict[str, Any]) -> Dict[str, Any]:
     rows = result.get('data') or []
     columns = result.get('columns') or []
     truncated = len(rows) > MAX_ROWS_FOR_LLM
+    # 虚拟表实际覆盖的日期范围：让模型知道口径，避免拿最新日数据冒充历史
+    data_scope = result.get('data_scope') or {}
+    scope_note = data_scope.get('note')
     return {
         'columns': columns,
         'row_count': len(rows),
         'rows': rows[:MAX_ROWS_FOR_LLM],
         'truncated': truncated,
+        'data_scope': scope_note,
         'note': f'结果超过 {MAX_ROWS_FOR_LLM} 行，仅返回前 {MAX_ROWS_FOR_LLM} 行，请用聚合查询或添加 LIMIT/WHERE 缩小范围'
         if truncated
         else None,
@@ -305,8 +309,9 @@ def _data_job_execution_mode() -> str:
 def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
     from app.services.data_jobs.registry import JobRegistry
 
+    registry = JobRegistry()
     jobs = []
-    for definition in JobRegistry().list_jobs():
+    for definition in registry.list_jobs():
         jobs.append(
             {
                 'job_type': definition.job_type,
@@ -317,7 +322,7 @@ def _tool_list_data_jobs(_args: Dict[str, Any]) -> Dict[str, Any]:
                 'needs_tushare_token': definition.source_name == 'tushare',
                 'source_name': definition.source_name,
                 'dangerous': bool(definition.dangerous),
-                'visible': definition.job_type in JobRegistry()._visible_job_types,
+                'visible': registry.is_visible(definition.job_type),
             }
         )
     return {

@@ -13,6 +13,7 @@ import logging
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from app.services.ai.assistant_service import AssistantError, AssistantService
+from app.utils.request_parsing import parse_int_arg
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +25,21 @@ def status():
     try:
         service = AssistantService()
         return jsonify({'success': True, 'data': service.status()})
-    except Exception as exc:
+    except Exception:
         logger.exception('获取 AI 工作台状态失败')
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @ai_assistant_bp.route('/sessions', methods=['GET'])
 def list_sessions():
     try:
-        limit = int(request.args.get('limit', 50))
+        limit = parse_int_arg('limit', 50, min_val=1, max_val=200)
         return jsonify({'success': True, 'sessions': AssistantService().list_sessions(limit)})
-    except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        logger.exception('列出 AI 会话失败')
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @ai_assistant_bp.route('/sessions', methods=['POST'])
@@ -44,9 +48,9 @@ def create_session():
     try:
         session = AssistantService().create_session(payload.get('title'))
         return jsonify({'success': True, 'session': session.to_dict()}), 201
-    except Exception as exc:
+    except Exception:
         logger.exception('创建会话失败')
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @ai_assistant_bp.route('/sessions/<int:session_id>', methods=['DELETE'])
@@ -56,19 +60,23 @@ def delete_session(session_id):
         if not deleted:
             return jsonify({'success': False, 'error': '会话不存在'}), 404
         return jsonify({'success': True})
-    except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+    except Exception:
+        logger.exception('删除会话 %s 失败', session_id)
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @ai_assistant_bp.route('/sessions/<int:session_id>/messages', methods=['GET'])
 def session_messages(session_id):
     try:
-        limit = int(request.args.get('limit', 200))
+        limit = parse_int_arg('limit', 200, min_val=1, max_val=1000)
         return jsonify({'success': True, 'messages': AssistantService().get_messages(session_id, limit)})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
     except AssistantError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 404
-    except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+    except Exception:
+        logger.exception('读取会话 %s 消息失败', session_id)
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
 @ai_assistant_bp.route('/chat', methods=['POST'])
@@ -82,7 +90,9 @@ def chat():
         return jsonify({'success': False, 'error': '消息内容不能为空'}), 400
 
     session_id = payload.get('session_id')
-    allow_actions = bool(payload.get('allow_actions', True))
+    # 默认关闭动作执行：数据下载/模型训练等动作必须由前端显式开启
+    # （前端开关默认也是关），避免匿名请求误触发高危操作
+    allow_actions = bool(payload.get('allow_actions', False))
 
     service = AssistantService()
     if not service.client.configured:
@@ -112,9 +122,9 @@ def chat():
                 yield f'data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n'
         except AssistantError as exc:
             yield f'data: {json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)}\n\n'
-        except Exception as exc:  # pragma: no cover - 流中断兜底
+        except Exception:  # pragma: no cover - 流中断兜底
             logger.exception('AI 对话流中断')
-            yield f'data: {json.dumps({"type": "error", "message": f"对话流中断: {exc}"}, ensure_ascii=False)}\n\n'
+            yield f'data: {json.dumps({"type": "error", "message": "对话流中断，请稍后重试（详情见服务日志）"}, ensure_ascii=False)}\n\n'
 
     response = Response(
         stream_with_context(sse_stream()),

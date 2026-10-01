@@ -15,8 +15,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements_minimal.txt
-          pip install pytest
+          pip install -r requirements-dev.txt
       - name: Run tests
         run: |
           python -m pytest -q
@@ -41,7 +40,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements_minimal.txt
-          pip install pytest
+          pip install -r requirements-dev.txt
       - name: Run module gate
         run: pytest -m ${{ matrix.module }} -q

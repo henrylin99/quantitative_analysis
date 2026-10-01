@@ -1,0 +1,3 @@
+# 开发/测试环境：CI 与本地跑 pytest 用这一份（全新 venv 可复现安装）
+-r requirements_minimal.txt
+pytest>=7.0

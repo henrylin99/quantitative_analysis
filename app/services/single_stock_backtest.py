@@ -356,6 +356,12 @@ class SingleStockBacktestEngine:
             self.cash += self.position * final_price - commission - slippage - stamp_duty
             self.liquidation_cost = commission + slippage + stamp_duty
             self.position = 0
+            # 强平后的资金回写最后一个净值点：总收益用强平后资金，
+            # 回撤/波动/夏普如果还用强平前净值就是两个口径
+            if self.daily_values:
+                self.daily_values[-1]['cash'] = self.cash
+                self.daily_values[-1]['position_value'] = 0.0
+                self.daily_values[-1]['total_value'] = self.cash
 
         final_capital = self.cash
         total_return = (final_capital - self.initial_capital) / self.initial_capital

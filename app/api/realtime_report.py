@@ -4,6 +4,7 @@
 """
 
 from flask import Blueprint, request, jsonify
+from app.utils.request_parsing import parse_int_arg
 import logging
 
 from app.services.realtime_report_generator import RealtimeReportGenerator
@@ -62,11 +63,13 @@ def get_reports():
     """获取报告列表"""
     try:
         report_type = request.args.get('report_type')
-        limit = int(request.args.get('limit', 50))
+        limit = parse_int_arg('limit', 50, min_val=1, max_val=1000)
         
         result = report_generator.get_reports(report_type, limit)
         return jsonify(result)
         
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as e:
         logger.error(f"获取报告列表API错误: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
