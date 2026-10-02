@@ -4,6 +4,10 @@
 本作业，将内置因子与自定义表达式因子的值批量计算并写入 factor_values
 存储，供打分/回测读取。
 
+alpha191 因子（alpha_001~alpha_191）走全市场宽面板批量计算
+（Alpha191FactorService.calculate_many：面板只加载一次），逐因子调用会
+各自重复加载 400 天预热面板，量级上不可行。
+
 Usage:
     python app/utils/factor_compute.py
 
@@ -24,6 +28,7 @@ if _project_root not in sys.path:
 
 from loguru import logger
 
+from app.services.alpha191_factor_service import ALPHA191_FACTORS, computable_factors
 from app.services.data_reader import ParquetDataReader
 from app.services.factor_engine import FactorEngine
 
@@ -33,6 +38,34 @@ def _split_env(name):
     if not value:
         return None
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _run_alpha191_batch(engine, alpha_ids, start_date, end_date, ts_codes,
+                        per_factor_stats) -> int:
+    """alpha191 宽面板批量：面板只加载一次，逐因子落库，返回成功行数。"""
+    from app.services.alpha191_factor_service import Alpha191FactorService
+
+    total = 0
+    service = Alpha191FactorService(engine.data_reader)
+
+    def _on_result(factor_id, long_df):
+        nonlocal total
+        if long_df is None or long_df.empty:
+            per_factor_stats[factor_id] = 0
+            return
+        try:
+            engine.save_factor_values(long_df)
+            per_factor_stats[factor_id] = len(long_df)
+            total += len(long_df)
+        except Exception as exc:  # noqa: BLE001 - 单因子落库失败不中断批次
+            logger.error(f"保存因子 {factor_id} 失败: {exc}")
+            per_factor_stats[factor_id] = f"error: {exc}"
+
+    service.calculate_many(
+        alpha_ids, start_date, end_date, ts_codes=ts_codes,
+        on_result=_on_result, collect_results=False,
+    )
+    return total
 
 
 def main():
@@ -57,14 +90,34 @@ def main():
     if not start_date:
         start_date = end_date or trade_date
 
+    alpha_ids: list = []
+    other_ids: list = []
+    if factor_ids:
+        alpha_ids = [fid for fid in factor_ids if fid in ALPHA191_FACTORS]
+        other_ids = [fid for fid in factor_ids if fid not in ALPHA191_FACTORS]
+    else:
+        alpha_ids = sorted(computable_factors())
+
     total_saved = 0
     per_factor_stats = {}
     failed = 0
     attempted = 0
 
-    if factor_ids:
-        # 指定因子：区间一次算完（内置因子支持任意区间）
-        for factor_id in factor_ids:
+    if alpha_ids:
+        # alpha191：区间一次算完（宽面板共享一次加载）
+        attempted += 1
+        try:
+            total_saved += _run_alpha191_batch(
+                engine, alpha_ids, start_date, end_date, ts_codes,
+                per_factor_stats,
+            )
+        except Exception as e:
+            failed += 1
+            logger.error(f"alpha191 批量计算失败: {e}")
+
+    if other_ids:
+        # 指定普通因子：区间一次算完（内置因子支持任意区间）
+        for factor_id in other_ids:
             attempted += 1
             try:
                 result = engine.calculate_factor(
@@ -80,8 +133,10 @@ def main():
                 failed += 1
                 logger.error(f"计算因子 {factor_id} 失败: {e}")
                 per_factor_stats[factor_id] = f"error: {e}"
-    else:
-        # 全部因子：calculate_all_factors 按单日截面计算
+
+    if not factor_ids:
+        # 全部因子：calculate_all_factors 按单日截面计算内置与自定义因子
+        # （alpha191 已在上方按区间批量算过，calculate_all_factors 会跳过它们）
         dates = ParquetDataReader().get_trade_dates(start_date, end_date)
         if not dates:
             print(f"区间 {start_date} ~ {end_date} 没有交易日数据")

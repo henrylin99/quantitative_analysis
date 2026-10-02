@@ -7,6 +7,7 @@ from loguru import logger
 
 from app.services.factor_expression_engine import FactorExpressionEngine
 from app.services.data_reader import ParquetDataReader
+from app.services.alpha191_factor_service import ALPHA191_FACTORS, computable_factors
 from app.services.parquet_state_store import FactorRepository, ParquetStateStore
 
 
@@ -60,6 +61,11 @@ class FactorEngine:
             'chip_concentration': self._chip_concentration_factor,
             'winner_rate_change': self._winner_rate_change_factor,
         }
+        # Alpha191 因子（全市场宽面板计算，走 _alpha191_factor 分发）；
+        # 批量计算走 scripts/compute_alpha191.py（面板共享一次加载），
+        # calculate_all_factors 会跳过它们，避免每日调度被拖慢
+        for _alpha_id in computable_factors():
+            self.builtin_factors[_alpha_id] = self._alpha191_factor
     
     def load_factor_definitions(self):
         """加载因子定义"""
@@ -214,6 +220,11 @@ class FactorEngine:
         """计算内置因子"""
         factor_func = self.builtin_factors[factor_id]
 
+        # Alpha191 因子依赖全市场截面排名，不按 ts_codes 逐票取数，
+        # 走独立分发：全市场面板计算后再过滤回请求的股票
+        if factor_id in ALPHA191_FACTORS:
+            return self._alpha191_factor(factor_id, ts_codes, start_date, end_date)
+
         # 按声明获取数据源（可跨因子共享缓存，避免同一窗口重复读表）
         data = self._get_factor_data(factor_id, ts_codes, start_date, end_date,
                                      data_cache=data_cache)
@@ -234,6 +245,24 @@ class FactorEngine:
                 mask &= td <= end_dt
             result = result[mask]
 
+        return result
+
+    def _alpha191_factor(self, factor_id: str, ts_codes: List[str],
+                         start_date: str, end_date: str) -> pd.DataFrame:
+        """Alpha191 因子：全市场宽面板向量化计算后过滤回请求股票。
+
+        Alpha191 公式含截面排名，必须对全市场计算——即使只请求少量
+        ts_codes，面板也要按全市场加载，否则截面排名失真。
+        """
+        from app.services.alpha191_factor_service import Alpha191FactorService
+
+        try:
+            result = Alpha191FactorService(self.data_reader).calculate(
+                factor_id, start_date, end_date, ts_codes=ts_codes or None
+            )
+        except Exception as e:
+            logger.error(f"Alpha191 因子计算失败: {factor_id}, 错误: {e}")
+            return pd.DataFrame()
         return result
     
     # 内置因子 → 数据源声明。键为 _get_factor_data 返回 dict 的键；
@@ -770,6 +799,10 @@ class FactorEngine:
 
             # 计算内置因子
             for factor_id in self.builtin_factors.keys():
+                # Alpha191 因子不在每日全量批处理里计算：189 个公式共享
+                # 的全市场面板需一次性加载，走 scripts/compute_alpha191.py
+                if factor_id in ALPHA191_FACTORS:
+                    continue
                 try:
                     result = self._calculate_builtin_factor(
                         factor_id, ts_codes, trade_date, trade_date,
@@ -948,7 +981,9 @@ class FactorEngine:
             # 添加内置因子
             for factor_id, func in self.builtin_factors.items():
                 # 根据因子ID推断因子类型
-                if any(x in factor_id for x in ['momentum', 'volatility', 'volume', 'price', 'ma']):
+                if factor_id in ALPHA191_FACTORS:
+                    ftype = 'alpha'
+                elif any(x in factor_id for x in ['momentum', 'volatility', 'volume', 'price', 'ma']):
                     ftype = 'technical'
                 elif any(x in factor_id for x in ['pe', 'pb', 'ps', 'roe', 'roa', 'revenue', 'profit']):
                     ftype = 'fundamental'
@@ -960,13 +995,16 @@ class FactorEngine:
                     ftype = 'other'
                 
                 if factor_type is None or ftype == factor_type:
+                    alpha_meta = ALPHA191_FACTORS.get(factor_id)
                     factor_list.append({
                         'factor_id': factor_id,
-                        'factor_name': factor_id.replace('_', ' ').title(),
+                        'factor_name': (alpha_meta or {}).get('name')
+                                       or factor_id.replace('_', ' ').title(),
                         'factor_type': ftype,
                         'is_builtin': True,
                         'is_active': True,
-                        'description': f"内置{ftype}因子"
+                        'description': (alpha_meta or {}).get('description')
+                                       or f"内置{ftype}因子"
                     })
             
             # 添加自定义因子

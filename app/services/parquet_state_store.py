@@ -76,6 +76,12 @@ def _normalize_json(value: Any) -> Any:
     return value
 
 
+def _json_dict(value: Any) -> Dict[str, Any]:
+    """summary_json 等字段的历史脏数据可能是标量（NaN/浮点），统一收口为 dict。"""
+    normalized = _normalize_json(value)
+    return normalized if isinstance(normalized, dict) else {}
+
+
 class ParquetStateStore:
     """Filesystem-backed store for Parquet state tables."""
 
@@ -197,8 +203,14 @@ class FactorRepository:
 
     def upsert_definition(self, record: Dict[str, Any]) -> Dict[str, Any]:
         now = _now_iso()
+        # params 存 JSON 字符串：空 dict 直接写 parquet 会变成无字段的
+        # struct 被 pyarrow 拒绝（"Cannot write struct type 'params' with
+        # no child field"），与 ModelRepository 的 factor_list 同一处理
+        raw_params = record.get("params")
         record = {
             **record,
+            "params": json.dumps(raw_params, ensure_ascii=False)
+                      if isinstance(raw_params, (dict, list)) else raw_params,
             "is_active": bool(record.get("is_active", True)),
             "created_at": _as_iso(record.get("created_at")) or now,
             "updated_at": now,
@@ -223,7 +235,7 @@ class FactorRepository:
             df = df[df["is_active"].fillna(True).astype(bool)]
         if "factor_id" in df.columns:
             df = df.sort_values(["factor_id"]).reset_index(drop=True)
-        return [_record_to_dict(row) for _, row in df.iterrows()]
+        return [_record_to_dict(row, json_columns={"params"}) for _, row in df.iterrows()]
 
     def get_definition(self, factor_id: str) -> Optional[Dict[str, Any]]:
         df = self.store.read_frame(self.TABLE_DEFINITIONS)
@@ -232,7 +244,7 @@ class FactorRepository:
         match = df[df["factor_id"] == factor_id]
         if match.empty:
             return None
-        return _record_to_dict(match.iloc[-1])
+        return _record_to_dict(match.iloc[-1], json_columns={"params"})
 
     def deactivate_definition(self, factor_id: str) -> bool:
         with self.store.locked(self.TABLE_DEFINITIONS):
@@ -809,12 +821,12 @@ class BacktestRepository:
         row = match.iloc[-1]
         return {
             "id": int(_to_python_scalar(row["id"])),
-            "strategy_config": _normalize_json(row.get("strategy_config_json")) or {},
+            "strategy_config": _json_dict(row.get("strategy_config_json")),
             "start_date": _to_python_scalar(row.get("start_date")),
             "end_date": _to_python_scalar(row.get("end_date")),
             "initial_capital": float(_to_python_scalar(row.get("initial_capital")) or 0),
             "rebalance_frequency": _to_python_scalar(row.get("rebalance_frequency")),
-            "summary": _normalize_json(row.get("summary_json")) or {},
+            "summary": _json_dict(row.get("summary_json")),
             "created_at": _as_iso(row.get("created_at")),
         }
 
@@ -850,7 +862,7 @@ class BacktestRepository:
                 run_id = int(_to_python_scalar(row["id"]))
                 if is_active(run_id):
                     continue
-                summary = _normalize_json(row.get("summary_json")) or {}
+                summary = _json_dict(row.get("summary_json"))
                 status = summary.get("status")
                 if status not in {"queued", "running"}:
                     continue
@@ -876,12 +888,12 @@ class BacktestRepository:
         return [
             {
                 "id": int(_to_python_scalar(row["id"])),
-                "strategy_config": _normalize_json(row.get("strategy_config_json")) or {},
+                "strategy_config": _json_dict(row.get("strategy_config_json")),
                 "start_date": _to_python_scalar(row.get("start_date")),
                 "end_date": _to_python_scalar(row.get("end_date")),
                 "initial_capital": float(_to_python_scalar(row.get("initial_capital")) or 0),
                 "rebalance_frequency": _to_python_scalar(row.get("rebalance_frequency")),
-                "summary": _normalize_json(row.get("summary_json")) or {},
+                "summary": _json_dict(row.get("summary_json")),
                 "created_at": _as_iso(row.get("created_at")),
             }
             for _, row in df.iterrows()
