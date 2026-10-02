@@ -15,6 +15,8 @@
 import json
 import logging
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -559,6 +561,202 @@ def _tool_calculate_factors(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _tool_calculate_factors_range(args: Dict[str, Any]) -> Dict[str, Any]:
+    start_date = _normalize_trade_date(args.get('start_date'))
+    end_date = _normalize_trade_date(args.get('end_date'))
+    if start_date > end_date:
+        raise ToolError(f'start_date({start_date}) 不能晚于 end_date({end_date})')
+
+    factor_ids = args.get('factor_ids') or []
+    ts_codes = args.get('ts_codes') or []
+    if not isinstance(factor_ids, list) or not isinstance(ts_codes, list):
+        raise ToolError('factor_ids 与 ts_codes 必须是数组')
+    factor_ids = [str(f).strip() for f in factor_ids if str(f).strip()]
+    ts_codes = [str(c).strip() for c in ts_codes if str(c).strip()]
+
+    if factor_ids:
+        available = {f['factor_id'] for f in _get_factor_engine().get_factor_list()}
+        unknown = [f for f in factor_ids if f not in available]
+        if unknown:
+            raise ToolError(
+                f'未知因子: {unknown}，可先调用 list_factors 查看全部可用因子'
+            )
+
+    # ScriptRunner 按逗号分隔解析 DATA_JOB_PARAM_*，列表必须先 join
+    params: Dict[str, Any] = {'start_date': start_date, 'end_date': end_date}
+    if factor_ids:
+        params['factor_ids'] = ','.join(factor_ids)
+    if ts_codes:
+        params['ts_codes'] = ','.join(ts_codes)
+
+    try:
+        run = _get_data_job_service().submit('factor_compute', params)
+    except ValueError as exc:
+        raise ToolError(f'因子批量计算任务提交失败: {exc}')
+
+    return {
+        'run_id': run.id,
+        'job_type': run.job_type,
+        'status': run.status,
+        'start_date': start_date,
+        'end_date': end_date,
+        'factor_ids': factor_ids if factor_ids else '全部因子（含 alpha191 全套）',
+        'note': (
+            '批量计算在后台执行：全市场 alpha191 全套约需数分钟到十几分钟。'
+            '可用 get_data_job_status(run_id=...) 轮询进度，完成后因子值落库即可用于回测'
+        ),
+    }
+
+
+def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
+    factor_ids = args.get('factor_ids') or []
+    if not isinstance(factor_ids, list):
+        raise ToolError('factor_ids 必须是数组')
+    factor_ids = [str(f).strip() for f in factor_ids if str(f).strip()]
+    if not factor_ids:
+        raise ToolError('factor_ids 不能为空（如 ["alpha_001"]），可先调用 list_factors 查看可用因子')
+
+    start_date = _normalize_trade_date(args.get('start_date'))
+    end_date = _normalize_trade_date(args.get('end_date'))
+    if start_date > end_date:
+        raise ToolError(f'start_date({start_date}) 不能晚于 end_date({end_date})')
+
+    benchmark_index = str(args.get('benchmark_index') or '000300.SH').strip()
+    raw_top_n = args.get('top_n')
+    try:
+        top_n = int(50 if raw_top_n is None else raw_top_n)
+    except (TypeError, ValueError):
+        raise ToolError('top_n 必须是整数')
+    if not 1 <= top_n <= 500:
+        raise ToolError('top_n 需在 1~500 之间')
+
+    rebalance_frequency = str(args.get('rebalance_frequency') or 'monthly').strip().lower()
+    if rebalance_frequency not in ('daily', 'weekly', 'monthly'):
+        raise ToolError('rebalance_frequency 仅支持 daily / weekly / monthly')
+
+    raw_capital = args.get('initial_capital')
+    try:
+        initial_capital = float(1000000.0 if raw_capital is None else raw_capital)
+    except (TypeError, ValueError):
+        raise ToolError('initial_capital 必须是数字')
+    if initial_capital <= 0:
+        raise ToolError('initial_capital 必须大于 0')
+
+    strategy_config = {
+        'selection_method': 'factor_based',
+        'factor_list': factor_ids,
+        'top_n': top_n,
+        'benchmark_index': benchmark_index,
+    }
+
+    # 与 /api/ml-factor/backtest/run 异步路径同构：先建 run 记录，
+    # 再交后台线程执行，结果落盘 BacktestRepository
+    from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
+    from app.tasks.backtest_tasks import (
+        mark_run_active,
+        reap_orphans_once,
+        run_backtest_task,
+    )
+
+    try:
+        reap_orphans_once()
+    except Exception:  # noqa: BLE001 - 孤儿清理失败不阻断提交
+        logger.warning('清理孤儿回测 run 失败', exc_info=True)
+
+    repo = BacktestRepository(ParquetStateStore())
+    run = repo.create_run(
+        strategy_config=strategy_config,
+        start_date=start_date,
+        end_date=end_date,
+        initial_capital=initial_capital,
+        rebalance_frequency=rebalance_frequency,
+    )
+    run_id = int(run['id'])
+    repo.update_summary(run_id, {'status': 'queued'})
+    mark_run_active(run_id)
+    threading.Thread(
+        target=run_backtest_task,
+        args=(run_id, strategy_config, start_date, end_date,
+              initial_capital, rebalance_frequency),
+        name=f'ai-backtest-{run_id}',
+        daemon=True,
+    ).start()
+
+    return {
+        'run_id': run_id,
+        'status': 'queued',
+        'strategy_config': strategy_config,
+        'start_date': start_date,
+        'end_date': end_date,
+        'initial_capital': initial_capital,
+        'rebalance_frequency': rebalance_frequency,
+        'note': (
+            '回测在后台线程执行（分钟级）。可用 get_backtest_status(run_id=...) '
+            '查询进度与结果指标。若回测因因子值覆盖率不足失败，'
+            '请先用 calculate_factors_range 补算区间因子值'
+        ),
+    }
+
+
+def _tool_get_backtest_status(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        run_id = int(args.get('run_id'))
+    except (TypeError, ValueError):
+        raise ToolError('run_id 必须是整数')
+
+    try:
+        wait_seconds = min(max(int(args.get('wait_seconds') or 0), 0), 120)
+    except (TypeError, ValueError):
+        raise ToolError('wait_seconds 必须是 0~120 的整数')
+
+    from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
+
+    repo = BacktestRepository(ParquetStateStore())
+    deadline = time.time() + wait_seconds
+    while True:
+        run = repo.get_run(run_id)
+        if run is None:
+            raise ToolError(f'未找到回测记录 run_id={run_id}')
+        status = (run.get('summary') or {}).get('status')
+        if status not in ('queued', 'running') or time.time() >= deadline:
+            break
+        time.sleep(2)
+
+    summary = dict(run.get('summary') or {})
+    payload: Dict[str, Any] = {
+        'run_id': run_id,
+        'status': status,
+        'start_date': run.get('start_date'),
+        'end_date': run.get('end_date'),
+        'error': summary.get('error'),
+    }
+    if status == 'succeeded':
+        # 完整结果含逐日净值/持仓，体积大；只回传大模型需要的核心指标
+        result = repo.get_result(run_id) or {}
+        metrics = result.get('performance_metrics') or {}
+        payload['metrics'] = {
+            'benchmark_index': (result.get('strategy_config') or {}).get('benchmark_index'),
+            'initial_capital': result.get('initial_capital'),
+            'final_value': result.get('final_value'),
+            'total_return': result.get('total_return'),
+            'annualized_return': metrics.get('annualized_return'),
+            'sharpe_ratio': metrics.get('sharpe_ratio'),
+            'max_drawdown': metrics.get('max_drawdown'),
+            'win_rate': metrics.get('win_rate'),
+            'calmar_ratio': metrics.get('calmar_ratio'),
+            'total_trades': metrics.get('total_trades'),
+            'alpha': metrics.get('alpha'),
+            'beta': metrics.get('beta'),
+            'information_ratio': metrics.get('information_ratio'),
+        }
+        failed_dates = result.get('failed_signal_dates') or []
+        if failed_dates:
+            payload['failed_signal_dates_count'] = len(failed_dates)
+    elif status in ('queued', 'running'):
+        payload['note'] = '回测仍在进行，可稍后再次查询（可传 wait_seconds 最多等待 120 秒）'
+    return payload
+
+
 def _tool_create_custom_factor(args: Dict[str, Any]) -> Dict[str, Any]:
     factor_id = (args.get('factor_id') or '').strip()
     factor_name = (args.get('factor_name') or '').strip()
@@ -839,6 +1037,25 @@ AI_TOOLS: List[AiTool] = [
         _tool_calculate_factors,
     ),
     AiTool(
+        'calculate_factors_range',
+        '按日期区间批量计算因子值并落库（后台任务，返回 run_id 供 get_data_job_status 轮询）。'
+        '普通因子逐日截面计算；alpha191 因子（alpha_001~alpha_191）走全市场宽面板批量计算，'
+        '全套约需数分钟到十几分钟。不传 factor_ids 时计算全部因子（含 alpha191 全套）。'
+        '回测前若区间内因子值缺失，先用本工具补算。',
+        {
+            'type': 'object',
+            'properties': {
+                'start_date': {'type': 'string', 'description': '起始日期 YYYY-MM-DD 或 YYYYMMDD'},
+                'end_date': {'type': 'string', 'description': '结束日期 YYYY-MM-DD 或 YYYYMMDD'},
+                'factor_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '可选，如 ["alpha_001"]；缺省算全部因子'},
+                'ts_codes': {'type': 'array', 'items': {'type': 'string'}, 'description': '可选，股票代码列表；缺省全市场'},
+            },
+            'required': ['start_date', 'end_date'],
+        },
+        'action',
+        _tool_calculate_factors_range,
+    ),
+    AiTool(
         'create_custom_factor',
         '创建自定义因子定义（公式仅支持白名单表达式，如 close/open、均值、涨幅等算术表达式）。',
         {
@@ -903,6 +1120,44 @@ AI_TOOLS: List[AiTool] = [
         },
         'action',
         _tool_predict_ml_model,
+    ),
+    AiTool(
+        'run_backtest',
+        '基于因子选股运行组合回测（后台执行，返回 run_id）。策略按 factor_list 中因子打分，'
+        '每个调仓期选前 top_n 只股票，支持与基准指数对比（默认沪深300）。'
+        '回测区间内因子值必须已落库，缺失时先调 calculate_factors_range 补算。'
+        '提交后用 get_backtest_status 查询进度与结果指标。',
+        {
+            'type': 'object',
+            'properties': {
+                'factor_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '选股因子，如 ["alpha_001"]'},
+                'start_date': {'type': 'string', 'description': '回测起始日期 YYYY-MM-DD 或 YYYYMMDD'},
+                'end_date': {'type': 'string', 'description': '回测结束日期 YYYY-MM-DD 或 YYYYMMDD'},
+                'benchmark_index': {'type': 'string', 'description': '基准指数代码，默认 000300.SH（沪深300）'},
+                'top_n': {'type': 'integer', 'description': '每期持仓股票数，默认 50'},
+                'initial_capital': {'type': 'number', 'description': '初始资金，默认 1000000'},
+                'rebalance_frequency': {'type': 'string', 'enum': ['daily', 'weekly', 'monthly'], 'description': '调仓频率，默认 monthly'},
+            },
+            'required': ['factor_ids', 'start_date', 'end_date'],
+        },
+        'action',
+        _tool_run_backtest,
+    ),
+    AiTool(
+        'get_backtest_status',
+        '查询回测任务的进度与结果指标（run_id 来自 run_backtest）。'
+        '可传 wait_seconds（0~120）阻塞等待任务完成；完成后返回总收益、年化收益、'
+        '最大回撤、夏普比率、胜率及相对基准的 alpha/beta 等关键指标。',
+        {
+            'type': 'object',
+            'properties': {
+                'run_id': {'type': 'integer'},
+                'wait_seconds': {'type': 'integer', 'description': '可选，最多等待任务完成的秒数（0~120）'},
+            },
+            'required': ['run_id'],
+        },
+        'read',
+        _tool_get_backtest_status,
     ),
     AiTool(
         'query_fund',
