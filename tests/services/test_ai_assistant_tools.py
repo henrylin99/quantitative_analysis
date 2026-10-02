@@ -322,3 +322,264 @@ def test_query_fund_maps_fuyao_error(app, monkeypatch):
     outcome = execute_tool('query_fund', {'thscode': '025480.OF'})
     assert outcome['ok'] is False
     assert '3004' in outcome['error']
+
+
+# ---------------- 因子区间批量计算（calculate_factors_range） ----------------
+
+def test_calculate_factors_range_submits_factor_compute_job(app, monkeypatch):
+    captured = {}
+
+    def fake_submit(job_type, params):
+        captured['job_type'] = job_type
+        captured['params'] = params
+        return SimpleNamespace(
+            id=11, job_type=job_type, status='queued', progress=0.0,
+            progress_message='已入队', error_message=None,
+        )
+
+    fake_engine = SimpleNamespace(
+        get_factor_list=lambda: [{'factor_id': 'alpha_001'}, {'factor_id': 'ma_cross'}]
+    )
+    monkeypatch.setattr(ai_tools, '_get_data_job_service', lambda: SimpleNamespace(submit=fake_submit))
+    monkeypatch.setattr(ai_tools, '_get_factor_engine', lambda: fake_engine)
+
+    outcome = execute_tool(
+        'calculate_factors_range',
+        {'start_date': '20260101', 'end_date': '2026-09-30',
+         'factor_ids': ['alpha_001'], 'ts_codes': ['000001.SZ']},
+    )
+    assert outcome['ok'] is True
+    assert outcome['result']['run_id'] == 11
+    assert captured['job_type'] == 'factor_compute'
+    # 日期归一化为 YYYY-MM-DD；列表参数以逗号串透传（ScriptRunner 按逗号拆分）
+    assert captured['params']['start_date'] == '2026-01-01'
+    assert captured['params']['end_date'] == '2026-09-30'
+    assert captured['params']['factor_ids'] == 'alpha_001'
+    assert captured['params']['ts_codes'] == '000001.SZ'
+
+
+def test_calculate_factors_range_validates_dates_and_factors(app, monkeypatch):
+    fake_engine = SimpleNamespace(
+        get_factor_list=lambda: [{'factor_id': 'alpha_001'}]
+    )
+    monkeypatch.setattr(ai_tools, '_get_factor_engine', lambda: fake_engine)
+
+    bad_order = execute_tool(
+        'calculate_factors_range', {'start_date': '20260930', 'end_date': '20260101'}
+    )
+    assert bad_order['ok'] is False
+    assert '不能晚于' in bad_order['error']
+
+    bad_date = execute_tool(
+        'calculate_factors_range', {'start_date': '2026/01/01', 'end_date': '20260930'}
+    )
+    assert bad_date['ok'] is False
+    assert '日期格式' in bad_date['error']
+
+    unknown = execute_tool(
+        'calculate_factors_range',
+        {'start_date': '20260101', 'end_date': '20260930', 'factor_ids': ['nope_001']},
+    )
+    assert unknown['ok'] is False
+    assert 'list_factors' in unknown['error']
+
+
+def test_calculate_factors_range_defaults_to_all_factors(app, monkeypatch):
+    captured = {}
+
+    def fake_submit(job_type, params):
+        captured['params'] = params
+        return SimpleNamespace(id=12, job_type=job_type, status='queued',
+                               progress=0.0, progress_message='', error_message=None)
+
+    monkeypatch.setattr(ai_tools, '_get_data_job_service', lambda: SimpleNamespace(submit=fake_submit))
+    monkeypatch.setattr(ai_tools, '_get_factor_engine', lambda: SimpleNamespace(get_factor_list=lambda: []))
+
+    outcome = execute_tool(
+        'calculate_factors_range', {'start_date': '20260101', 'end_date': '20260131'}
+    )
+    assert outcome['ok'] is True
+    assert 'factor_ids' not in captured['params']
+
+
+# ---------------- 回测（run_backtest / get_backtest_status） ----------------
+
+class FakeBacktestRepo:
+    """替换 BacktestRepository：类级共享状态，工具实例化前后都可编程。"""
+
+    created = []
+    summaries = {}
+    results = {}
+
+    def __init__(self, store=None):
+        pass
+
+    @classmethod
+    def reset(cls):
+        cls.created = []
+        cls.summaries = {}
+        cls.results = {}
+
+    def create_run(self, strategy_config, start_date, end_date,
+                   initial_capital, rebalance_frequency):
+        FakeBacktestRepo.created.append({
+            'strategy_config': strategy_config,
+            'start_date': start_date,
+            'end_date': end_date,
+            'initial_capital': initial_capital,
+            'rebalance_frequency': rebalance_frequency,
+        })
+        return {'id': 42}
+
+    @classmethod
+    def update_summary(cls, run_id, summary):
+        cls.summaries.setdefault(run_id, {}).update(summary)
+
+    @classmethod
+    def get_run(cls, run_id):
+        # 与真实仓储一致：不存在的 run 返回 None
+        if run_id not in cls.summaries:
+            return None
+        return {
+            'id': run_id,
+            'summary': dict(cls.summaries.get(run_id, {})),
+            'start_date': '2026-01-01',
+            'end_date': '2026-09-30',
+        }
+
+    @classmethod
+    def get_result(cls, run_id):
+        return cls.results.get(run_id)
+
+
+def _patch_backtest_stack(monkeypatch, repo_cls=FakeBacktestRepo):
+    repo_cls.reset()
+    FakeBacktestRepo.results[42] = {
+        'initial_capital': 1000000.0,
+        'final_value': 1120000.0,
+        'total_return': 0.12,
+        'strategy_config': {'benchmark_index': '399300.SZ'},
+        'performance_metrics': {
+            'annualized_return': 0.15, 'sharpe_ratio': 1.2,
+            'max_drawdown': -0.08, 'win_rate': 0.55,
+        },
+        'failed_signal_dates': ['2026-02-02'],
+    }
+    monkeypatch.setattr('app.services.parquet_state_store.BacktestRepository', repo_cls)
+    monkeypatch.setattr('app.services.parquet_state_store.ParquetStateStore', lambda: None)
+    monkeypatch.setattr('app.tasks.backtest_tasks.reap_orphans_once', lambda: [])
+    monkeypatch.setattr('app.tasks.backtest_tasks.mark_run_active', lambda run_id: None)
+    started = []
+    monkeypatch.setattr(
+        'app.tasks.backtest_tasks.run_backtest_task',
+        lambda *args, **kwargs: started.append(args),
+    )
+    return started
+
+
+def test_run_backtest_submits_async_run(app, monkeypatch):
+    started = _patch_backtest_stack(monkeypatch)
+
+    outcome = execute_tool(
+        'run_backtest',
+        {'factor_ids': ['alpha_001'], 'start_date': '20260101',
+         'end_date': '20260930', 'benchmark_index': '399300.SZ', 'top_n': 10},
+    )
+    assert outcome['ok'] is True
+    assert outcome['result']['run_id'] == 42
+    assert outcome['result']['status'] == 'queued'
+
+    created = FakeBacktestRepo.created[0]
+    assert created['strategy_config'] == {
+        'selection_method': 'factor_based',
+        'factor_list': ['alpha_001'],
+        'top_n': 10,
+        'benchmark_index': '399300.SZ',
+    }
+    assert created['rebalance_frequency'] == 'monthly'
+    assert FakeBacktestRepo.summaries[42] == {'status': 'queued'}
+    # 后台线程拿到的参数与提交一致
+    assert started[0][0] == 42
+    assert started[0][1]['factor_list'] == ['alpha_001']
+
+
+def test_run_backtest_validates_params(app, monkeypatch):
+    _patch_backtest_stack(monkeypatch)
+
+    missing = execute_tool(
+        'run_backtest', {'start_date': '20260101', 'end_date': '20260930'}
+    )
+    assert missing['ok'] is False
+    assert 'factor_ids' in missing['error']
+
+    bad_freq = execute_tool(
+        'run_backtest',
+        {'factor_ids': ['alpha_001'], 'start_date': '20260101',
+         'end_date': '20260930', 'rebalance_frequency': 'yearly'},
+    )
+    assert bad_freq['ok'] is False
+    assert 'rebalance_frequency' in bad_freq['error']
+
+    bad_topn = execute_tool(
+        'run_backtest',
+        {'factor_ids': ['alpha_001'], 'start_date': '20260101',
+         'end_date': '20260930', 'top_n': 0},
+    )
+    assert bad_topn['ok'] is False
+    assert 'top_n' in bad_topn['error']
+
+
+def test_get_backtest_status_returns_metrics_when_succeeded(app, monkeypatch):
+    _patch_backtest_stack(monkeypatch)
+    monkeypatch.setattr(ai_tools.time, 'sleep', lambda s: None)
+
+    FakeBacktestRepo.update_summary(42, {'status': 'succeeded'})
+
+    outcome = execute_tool('get_backtest_status', {'run_id': 42})
+    assert outcome['ok'] is True
+    metrics = outcome['result']['metrics']
+    assert outcome['result']['status'] == 'succeeded'
+    assert metrics['total_return'] == 0.12
+    assert metrics['annualized_return'] == 0.15
+    assert metrics['max_drawdown'] == -0.08
+    assert metrics['benchmark_index'] == '399300.SZ'
+    assert outcome['result']['failed_signal_dates_count'] == 1
+
+
+def test_get_backtest_status_waits_until_finished(app, monkeypatch):
+    _patch_backtest_stack(monkeypatch)
+    monkeypatch.setattr(ai_tools.time, 'sleep', lambda s: None)
+
+    FakeBacktestRepo.update_summary(42, {'status': 'queued'})
+    # 第一次查询仍 queued，第二次起标记完成：wait 轮询应取到最终状态
+    original_get_run = FakeBacktestRepo.get_run
+    calls = {'n': 0}
+
+    def flip_after_first(self, run_id):
+        calls['n'] += 1
+        if calls['n'] > 1:
+            FakeBacktestRepo.update_summary(run_id, {'status': 'succeeded'})
+        return original_get_run(run_id)
+
+    monkeypatch.setattr(FakeBacktestRepo, 'get_run', flip_after_first)
+
+    outcome = execute_tool('get_backtest_status', {'run_id': 42, 'wait_seconds': 30})
+    assert outcome['ok'] is True
+    assert outcome['result']['status'] == 'succeeded'
+    assert calls['n'] >= 2
+
+
+def test_get_backtest_status_running_reports_note(app, monkeypatch):
+    _patch_backtest_stack(monkeypatch)
+    monkeypatch.setattr(ai_tools.time, 'sleep', lambda s: None)
+
+    FakeBacktestRepo.update_summary(42, {'status': 'running'})
+
+    outcome = execute_tool('get_backtest_status', {'run_id': 42, 'wait_seconds': 0})
+    assert outcome['ok'] is True
+    assert outcome['result']['status'] == 'running'
+    assert 'wait_seconds' in outcome['result']['note']
+
+    missing = execute_tool('get_backtest_status', {'run_id': 999})
+    assert missing['ok'] is False
+    assert '未找到回测记录' in missing['error']
