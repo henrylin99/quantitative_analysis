@@ -31,8 +31,8 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 
 
-def test_get_return_prices_prefers_hfq_close(monkeypatch):
-    """有后复权数据时，close 应替换为 close_hfq（除权缺口不再进入收益率）。"""
+def test_get_return_prices_applies_adj_factor(monkeypatch):
+    """有复权因子时，close 应乘以 adj_factor（除权缺口不再进入收益率）。"""
     reader = ParquetDataReader()
     daily = pd.DataFrame(
         {
@@ -41,18 +41,48 @@ def test_get_return_prices_prefers_hfq_close(monkeypatch):
             "close": [10.0, 5.0, 5.1],  # 01-03 除权造成 -50% 假缺口
         }
     )
-    sf = pd.DataFrame(
+    af = pd.DataFrame(
         {
             "ts_code": ["A.SZ"] * 3,
             "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
-            "close_hfq": [1000.0, 1005.0, 1010.0],
+            "adj_factor": [1.0, 2.0, 2.0],  # 1 拆 2，复权后序列连续
         }
     )
     monkeypatch.setattr(reader, "get_daily", lambda **kw: daily)
-    monkeypatch.setattr(reader, "get_stk_factor", lambda **kw: sf)
+    monkeypatch.setattr(reader, "get_adj_factor", lambda **kw: af)
 
-    out = reader.get_return_prices()
-    assert sorted(out["close"].tolist()) == [1000.0, 1005.0, 1010.0]
+    out = reader.get_return_prices().set_index("trade_date")
+    assert out["close"].tolist() == [10.0, 10.0, 10.2]
+    # 复权后逐日收益不含拆股假缺口
+    assert out["close"].pct_change().dropna().tolist() == pytest.approx([0.0, 0.02])
+
+
+def test_get_return_prices_multi_field_same_factor(monkeypatch):
+    """多价格列必须乘同一个复权因子，保证 OHLC 口径一致。"""
+    reader = ParquetDataReader()
+    daily = pd.DataFrame(
+        {
+            "ts_code": ["A.SZ"] * 2,
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [9.0, 9.5],
+            "close": [10.0, 5.0],
+        }
+    )
+    af = pd.DataFrame(
+        {
+            "ts_code": ["A.SZ"] * 2,
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "adj_factor": [1.0, 2.0],
+        }
+    )
+    monkeypatch.setattr(reader, "get_daily", lambda **kw: daily)
+    monkeypatch.setattr(reader, "get_adj_factor", lambda **kw: af)
+
+    out = reader.get_return_prices(price_fields=["open", "close"])
+    assert out["close"].tolist() == [10.0, 10.0]
+    assert out["open"].tolist() == [9.0, 19.0]
+    # 复权后 open/close 比价关系保持（9.5/5 == 19/10）
+    assert (out["open"] / out["close"]).tolist() == pytest.approx([0.9, 1.9])
 
 
 def test_get_return_prices_falls_back_per_stock(monkeypatch):
@@ -65,19 +95,43 @@ def test_get_return_prices_falls_back_per_stock(monkeypatch):
             "close": [10.0, 20.0],
         }
     )
-    sf = pd.DataFrame(
+    af = pd.DataFrame(
         {
             "ts_code": ["B.SZ"],
             "trade_date": pd.to_datetime(["2024-01-02"]),
-            "close_hfq": [2000.0],
+            "adj_factor": [100.0],
         }
     )
     monkeypatch.setattr(reader, "get_daily", lambda **kw: daily)
-    monkeypatch.setattr(reader, "get_stk_factor", lambda **kw: sf)
+    monkeypatch.setattr(reader, "get_adj_factor", lambda **kw: af)
 
     out = reader.get_return_prices().set_index("ts_code")
     assert out.loc["A.SZ", "close"] == 10.0, "无复权数据的股票保持不复权价"
-    assert out.loc["B.SZ", "close"] == 2000.0, "有复权数据的股票使用后复权价"
+    assert out.loc["B.SZ", "close"] == 2000.0, "有复权数据的股票使用复权价"
+
+
+def test_get_return_prices_low_coverage_stock_fully_unadjusted(monkeypatch):
+    """复权覆盖率不足 50% 的股票整体退回不复权，不产生混拼序列。"""
+    reader = ParquetDataReader()
+    daily = pd.DataFrame(
+        {
+            "ts_code": ["A.SZ"] * 3,
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+            "close": [10.0, 11.0, 12.0],
+        }
+    )
+    af = pd.DataFrame(  # 仅 1/3 天有因子 → coverage 0.33 < 0.5
+        {
+            "ts_code": ["A.SZ"],
+            "trade_date": pd.to_datetime(["2024-01-03"]),
+            "adj_factor": [2.0],
+        }
+    )
+    monkeypatch.setattr(reader, "get_daily", lambda **kw: daily)
+    monkeypatch.setattr(reader, "get_adj_factor", lambda **kw: af)
+
+    out = reader.get_return_prices()
+    assert out["close"].tolist() == [10.0, 11.0, 12.0], "低覆盖率股票应整体保持不复权价"
 
 
 # ---------------------------------------------------------------------------

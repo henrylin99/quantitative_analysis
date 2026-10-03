@@ -29,6 +29,7 @@ class ParquetDataReader:
         "daily": "daily_history/daily",
         "daily_basic": "daily_basic/daily",
         "stk_factor": "stk_factor/daily",
+        "adj_factor": "adj_factor/daily",
         "moneyflow": "moneyflow/daily",
         "cyq_perf": "cyq_perf/daily",
         "income_statement": "income_statement",
@@ -60,6 +61,7 @@ class ParquetDataReader:
             "boll_upper", "boll_mid", "boll_lower", "cci",
         ],
         "moneyflow": None,
+        "adj_factor": ["ts_code", "trade_date", "adj_factor"],
         "cyq_perf": None,
         "income_statement": None,
         "balance_sheet": None,
@@ -130,6 +132,15 @@ class ParquetDataReader:
         """读取技术因子数据（MACD/KDJ/RSI/布林带/CCI 等）。"""
         return self._read_table("stk_factor", ts_codes, start_date, end_date)
 
+    def get_adj_factor(
+        self,
+        ts_codes: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """读取复权因子数据（data/adj_factor，2019 年起全历史）。"""
+        return self._read_table("adj_factor", ts_codes, start_date, end_date)
+
     def get_return_prices(
         self,
         ts_codes: Optional[List[str]] = None,
@@ -140,14 +151,15 @@ class ParquetDataReader:
         """读取用于收益率/动量计算的价格序列（后复权优先）。
 
         不复权 close 在除权除息日存在人为缺口（10送10 会被算成 -50% 收益），
-        直接做 pct_change 会污染动量因子与 ML 标签。这里优先使用 stk_factor
-        表的后复权收盘价；单只股票的复权覆盖率不足时整体退回不复权价，
-        避免同一条序列混用两种口径。
+        直接做 pct_change 会污染动量因子与 ML 标签。这里优先用 adj_factor
+        表的复权因子（覆盖 2019 年起全历史，不受 stk_factor 同步滞后影响），
+        复权价 = 真实价 × 复权因子；单只股票的复权覆盖率不足时整体退回
+        不复权价，避免同一条序列混用两种口径。
 
         price_fields: 需要复权的价格列，默认 ["close"]。其他价格列按当日
-        复权因子（close_hfq/close）换算，保证 open/high/low/close 口径一致——
-        表达式因子同时用到多个价格列时应全部传入，否则复权 close 与
-        不复权 open 在同一表达式里混算会失真。
+        复权因子换算，保证 open/high/low/close 口径一致——表达式因子同时
+        用到多个价格列时应全部传入，否则复权 close 与不复权 open 在同一
+        表达式里混算会失真。
         """
         daily = self.get_daily(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
         if daily.empty:
@@ -158,38 +170,47 @@ class ParquetDataReader:
             return daily
 
         try:
-            sf = self.get_stk_factor(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
+            af = self.get_adj_factor(ts_codes=ts_codes, start_date=start_date, end_date=end_date)
         except Exception as e:
-            logger.warning(f"读取 stk_factor 失败，退回不复权价: {e}")
+            logger.warning(f"读取复权因子失败，退回不复权价: {e}")
             return daily
 
-        if sf.empty or "close_hfq" not in sf.columns:
+        if af.empty or "adj_factor" not in af.columns:
             return daily
 
-        hfq = sf[["ts_code", "trade_date", "close_hfq"]].dropna(subset=["close_hfq"])
-        if hfq.empty:
+        adj = af[["ts_code", "trade_date", "adj_factor"]].dropna(subset=["adj_factor"])
+        adj = adj[adj["adj_factor"] > 0]
+        if adj.empty:
+            return daily
+
+        # 两侧 trade_date 统一为 datetime 再 merge：daily 可能来自测试桩或
+        # 历史增量文件（YYYYMMDD / YYYY-MM-DD 字符串混存），dtype 不一致
+        # 会让 merge 直接抛错；copy 避免原地改写调用方（测试桩共享帧）的数据
+        daily = daily.copy()
+        daily["trade_date"] = pd.to_datetime(daily["trade_date"], errors="coerce", format="mixed")
+        adj["trade_date"] = pd.to_datetime(adj["trade_date"], errors="coerce", format="mixed")
+        daily = daily.dropna(subset=["trade_date"])
+        adj = adj.dropna(subset=["trade_date"])
+        if daily.empty or adj.empty:
             return daily
 
         merged = daily.merge(
-            hfq.rename(columns={"close_hfq": "_close_adj"}),
+            adj.rename(columns={"adj_factor": "_adj_factor"}),
             on=["ts_code", "trade_date"],
             how="left",
         )
-        has_adj = merged["_close_adj"].notna()
-        coverage = merged.groupby("ts_code")["_close_adj"].transform(lambda s: s.notna().mean())
-        use_hfq = coverage >= 0.5
+        has_adj = merged["_adj_factor"].notna()
+        coverage = merged.groupby("ts_code")["_adj_factor"].transform(lambda s: s.notna().mean())
+        use_adj = coverage >= 0.5
 
-        # 采用复权口径的股票：直接用复权价并丢弃缺失复权价的行，
-        # 否则序列两端会拼接两种口径产生假跳变
-        selected = merged[use_hfq & has_adj].copy()
-        adjust_factor = selected["_close_adj"] / selected["close"].where(selected["close"] > 0)
+        # 采用复权口径的股票：价格统一乘以复权因子并丢弃缺失复权价的行，
+        # 否则序列两端会拼接两种口径产生假跳变。复权因子乘的是一个每股
+        # 常数比例，pct_change 与旧口径（close_hfq/close）完全一致
+        selected = merged[use_adj & has_adj].copy()
         for field in fields:
-            if field == "close":
-                selected["close"] = selected["_close_adj"]
-            else:
-                selected[field] = selected[field] * adjust_factor
-        selected = selected.drop(columns=["_close_adj"])
-        fallback = merged[~use_hfq].copy().drop(columns=["_close_adj"])
+            selected[field] = selected[field] * selected["_adj_factor"]
+        selected = selected.drop(columns=["_adj_factor"])
+        fallback = merged[~use_adj].copy().drop(columns=["_adj_factor"])
         result = pd.concat([selected, fallback], ignore_index=True)
         return result
 

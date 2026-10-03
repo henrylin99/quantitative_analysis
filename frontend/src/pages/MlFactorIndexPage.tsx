@@ -11,10 +11,13 @@ import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { toLocalDate } from '../utils/format'
 
 const TYPE_BADGE: Record<string, string> = {
+  alpha: 'text-bg-dark',
   technical: 'text-bg-primary',
   fundamental: 'text-bg-success',
   money_flow: 'text-bg-warning',
   chip: 'text-bg-info',
+  volatility: 'text-bg-danger',
+  volume: 'text-bg-light',
   other: 'text-bg-secondary',
 }
 
@@ -143,7 +146,7 @@ export default function MlFactorIndexPage() {
             <div className="col-lg-2 col-md-3 col-6">
               <select className="form-select" value={fType} onChange={(e) => setFType(e.target.value)}>
                 <option value="">全部类型</option>
-                {['technical', 'fundamental', 'money_flow', 'chip', 'other'].map((t) => (
+                {['alpha', 'technical', 'fundamental', 'money_flow', 'chip', 'volatility', 'volume', 'other'].map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
