@@ -44,21 +44,25 @@ def _make_reader(dates, price_map, pct_map, hfq_map=None):
             df = df[df["trade_date"] <= end_date]
         return df
 
-    def get_stk_factor(ts_codes=None, start_date=None, end_date=None):
+    def get_adj_factor(ts_codes=None, start_date=None, end_date=None):
         if not hfq_map:
             return pd.DataFrame()
-        return pd.DataFrame(
-            [
-                {"ts_code": code, "trade_date": d, "close_hfq": hfq_map[code][i]}
-                for i, d in enumerate(dates)
-                for code in hfq_map
-            ]
-        )
+        # hfq_map 传的是后复权价；换算成复权因子（hfq/close，close 缺失时按 1）
+        rows = []
+        for i, d in enumerate(dates):
+            for code, prices in price_map.items():
+                if code not in hfq_map:
+                    continue
+                close = prices[i] if prices[i] is not None else None
+                hfq = hfq_map[code][i]
+                factor = (hfq / close) if (close is not None and close > 0) else None
+                rows.append({"ts_code": code, "trade_date": d, "adj_factor": factor})
+        return pd.DataFrame(rows)
 
     reader = MagicMock()
     reader.get_trade_dates.return_value = dates
     reader.get_daily.side_effect = get_daily
-    reader.get_stk_factor.side_effect = get_stk_factor
+    reader.get_adj_factor.side_effect = get_adj_factor
     reader.get_stock_basic.return_value = pd.DataFrame(
         [{"ts_code": c, "name": c, "industry": "X"} for c in price_map]
     )

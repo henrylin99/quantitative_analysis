@@ -66,16 +66,16 @@ def test_window_rebuild_merges_into_existing_stock_partition(tmp_path):
     assert by_date["2026-01-03"] == 12.0
 
 
-def test_adj_factor_alias_resolves_to_stk_factor(tmp_path):
-    _write_daily(tmp_path, "stk_factor", [
+def test_adj_factor_rebuilds_as_independent_table(tmp_path):
+    _write_daily(tmp_path, "adj_factor", [
         {"ts_code": "000001.SZ", "trade_date": "2026-01-01", "adj_factor": 12.3},
     ])
 
     stats = rebuild_stock_partition("adj_factor", data_dir=str(tmp_path))
 
-    assert stats["table"] == "stk_factor"
-    assert resolve_table_name("adj_factor") == "stk_factor"
-    stock = _read_stock(tmp_path, "stk_factor", "000001.SZ")
+    assert stats["table"] == "adj_factor"
+    assert resolve_table_name("adj_factor") == "adj_factor"
+    stock = _read_stock(tmp_path, "adj_factor", "000001.SZ")
     assert stock.iloc[0]["adj_factor"] == 12.3
 
 
@@ -205,7 +205,7 @@ def test_rebuild_all_tables_skips_failed_tables(tmp_path, capsys):
 
     results = rebuild_all_tables(data_dir=str(tmp_path))
 
-    assert len(results) == 5
+    assert len(results) == 6
     failed = {r["table"] for r in results if r.get("mode") == "failed"}
     skipped = {r["table"] for r in results if r.get("mode") == "skipped"}
     assert "cyq_perf" not in failed   # 有数据的表成功
