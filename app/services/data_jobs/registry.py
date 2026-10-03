@@ -165,14 +165,14 @@ class JobRegistry:
                 "app/utils/stock_partition_rebuild.py",
                 display_name="股票分区重建",
                 description=(
-                    "从日期分区重建 daily_history/daily_basic/stk_factor/moneyflow/cyq_perf "
+                    "从日期分区重建 daily_history/daily_basic/stk_factor/moneyflow/cyq_perf/adj_factor "
                     "的按股票分区（stock/ts_code=XXX/data.parquet），个股查询优先走股票分区提速；"
                     "请在日频下载作业之后运行保持分区新鲜。"
                 ),
                 recommended_order=10,
                 source_name="derived",
                 source_mode="derived",
-                dependencies=["daily_history_by_date", "daily_basic", "stk_factor", "moneyflow", "cyq_perf"],
+                dependencies=["daily_history_by_date", "daily_basic", "stk_factor", "moneyflow", "cyq_perf", "adj_factor"],
             ),
             "factor_compute": JobDefinition(
                 "factor_compute",

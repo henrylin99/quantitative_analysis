@@ -488,28 +488,28 @@ class BacktestEngine:
 
         adj_close = real_close.copy()
         try:
-            sf = self.data_reader.get_stk_factor(
+            af = self.data_reader.get_adj_factor(
                 ts_codes=all_codes, start_date=start_date, end_date=end_date
             )
         except Exception as e:
-            logger.warning(f"读取 stk_factor 失败，持仓估值退回不复权口径: {e}")
-            sf = pd.DataFrame()
-        if isinstance(sf, pd.DataFrame) and not sf.empty and 'close_hfq' in sf.columns:
-            hfq = sf.dropna(subset=['close_hfq'])
-            if not hfq.empty:
-                hfq_pivot = hfq.pivot_table(
-                    index='trade_date', columns='ts_code', values='close_hfq', aggfunc='first'
+            logger.warning(f"读取复权因子失败，持仓估值退回不复权口径: {e}")
+            af = pd.DataFrame()
+        if isinstance(af, pd.DataFrame) and not af.empty and 'adj_factor' in af.columns:
+            adj = af.dropna(subset=['adj_factor'])
+            adj = adj[adj['adj_factor'] > 0]
+            if not adj.empty:
+                af_pivot = adj.pivot_table(
+                    index='trade_date', columns='ts_code', values='adj_factor', aggfunc='first'
                 ).sort_index()
-                hfq_pivot.index = pd.to_datetime(hfq_pivot.index)
-                hfq_pivot = hfq_pivot.reindex(adj_close.index)
-                coverage = hfq_pivot.notna().mean()
+                af_pivot.index = pd.to_datetime(af_pivot.index)
+                af_pivot = af_pivot.reindex(adj_close.index)
+                coverage = af_pivot.notna().mean()
                 for ts_code in coverage[coverage >= 0.5].index:
-                    series = hfq_pivot[ts_code].ffill()
-                    # 头部缺失（hfq 数据晚于行情起始日）用真实价兜底，等价于
-                    # 该窗口按不复权口径（k=1）估值；直接留 NaN 会让这些日期
-                    # 的持仓在 _build_daily_nav 里取不到价、被按 0 估值
-                    series = series.fillna(real_close[ts_code])
-                    adj_close[ts_code] = series
+                    # 复权价 = 真实价 × 复权因子；因子缺失日先 ffill、头部缺失
+                    # 按 1（等价于该窗口按不复权口径 k=1 估值）——直接留 NaN
+                    # 会让持仓在 _build_daily_nav 里取不到价、被按 0 估值
+                    af_filled = af_pivot[ts_code].ffill().fillna(1.0)
+                    adj_close[ts_code] = (real_close[ts_code] * af_filled).ffill()
 
         # 换算比例 k = 真实价 / 复权价（即复权因子的倒数）；
         # 无价格的日期按不调整（k=1）处理

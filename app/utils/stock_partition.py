@@ -40,12 +40,12 @@ STOCK_PARTITION_TABLES: Dict[str, str] = {
     "moneyflow": "moneyflow/daily",
     "cyq_perf": "cyq_perf/daily",
     "stk_factor": "stk_factor/daily",
+    "adj_factor": "adj_factor/daily",
 }
 
-# 兼容 20260213 项目习惯：adj_factor 是 stk_factor 的字段而非独立表
-TABLE_ALIASES: Dict[str, str] = {
-    "adj_factor": "stk_factor",
-}
+# 兼容别名；adj_factor 已是独立表（data/adj_factor，2019 年起全历史），
+# 不再是 stk_factor 的字段别名
+TABLE_ALIASES: Dict[str, str] = {}
 
 _PRIMARY_KEYS = ["ts_code", "trade_date"]
 _TS_CODE_RE = re.compile(r"^[0-9A-Za-z_]+\.[0-9A-Za-z_]+$")

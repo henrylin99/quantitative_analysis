@@ -6,12 +6,13 @@
     python rebuild_stock_partitions.py daily_basic --workers 32
     python rebuild_stock_partitions.py moneyflow --workers 32
     python rebuild_stock_partitions.py cyq_perf --workers 32
-    python rebuild_stock_partitions.py adj_factor --workers 32   # 即 stk_factor
+    python rebuild_stock_partitions.py stk_factor --workers 32
+    python rebuild_stock_partitions.py adj_factor --workers 32   # 独立复权因子表（2019 年起）
     python rebuild_stock_partitions.py            # 重建全部表
     python rebuild_stock_partitions.py stk_factor --start-date 2026-09-01 --end-date 2026-09-22
 
 说明：
-- adj_factor 在本项目不是独立表，而是 stk_factor 表的字段，别名自动解析。
+- adj_factor 是独立表（data/adj_factor），不再解析为 stk_factor 的别名。
 - 不给日期窗口时走全量重建（stock_staging 换名替换，失败自动恢复）；
   给定窗口时走增量合并，只刷新窗口内的交易日。
 - 重建后按 ts_code 的个股查询会优先命中 stock/ts_code=XXX/data.parquet。
