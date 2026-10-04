@@ -208,3 +208,45 @@ def test_factor_values_replace_semantics_updates_factor_and_keeps_others(tmp_pat
     dup_day = repo.get_values(trade_date="2024-06-06")
     assert len(dup_day) == 1
     assert dup_day["factor_value"].iloc[0] == pytest.approx(2.0)
+
+
+def test_factor_coverage_filters_non_trading_day_partitions(tmp_path):
+    """非交易日分区（杂散写入）不计入覆盖、也不算缺口；日历缺失时退化为全量统计。"""
+    import pandas as pd
+
+    store = ParquetStateStore(base_dir=str(tmp_path / "state"))
+    repo = FactorRepository(store)
+
+    def write(factor_id, date):
+        repo.save_values(
+            pd.DataFrame([
+                {"ts_code": "000001.SZ", "trade_date": date, "factor_id": factor_id, "factor_value": 1.0},
+            ])
+        )
+
+    write("momentum_5d", "2024-06-04")   # 开市日，有值
+    write("momentum_5d", "2024-06-06")   # 开市日，有值
+    write("other_factor", "2024-06-06")  # 开市日，有值
+    write("momentum_5d", "2024-06-05")   # 非交易日杂散写入
+
+    # 交易日历放在 base_dir 同级（与生产 data/ 布局一致）
+    pd.DataFrame({
+        "exchange": ["SSE"] * 3,
+        "cal_date": ["20240604", "20240605", "20240606"],
+        "is_open": [1, 0, 1],
+        "pretrade_date": ["20240603", "20240604", "20240604"],
+    }).to_parquet(tmp_path / "stock_trade_calendar.parquet", index=False)
+
+    cov = repo.get_factor_coverage(["momentum_5d", "other_factor"], "2024-06-01", "2024-06-30")
+    momentum = cov["momentum_5d"]
+    assert momentum["dates"] == 2
+    assert momentum["missing_dates"] == []
+    other = cov["other_factor"]
+    assert other["dates"] == 1
+    # 2024-06-04 开市但 other_factor 无值 → 缺口；2024-06-05 非交易日 → 不算缺口
+    assert other["missing_dates"] == ["2024-06-04"]
+
+    # 日历缺失：退化为全部分区参与统计（杂散分区重新计入，不算缺口但计入 dates）
+    (tmp_path / "stock_trade_calendar.parquet").unlink()
+    cov_fallback = repo.get_factor_coverage(["momentum_5d"], "2024-06-01", "2024-06-30")
+    assert cov_fallback["momentum_5d"]["dates"] == 3

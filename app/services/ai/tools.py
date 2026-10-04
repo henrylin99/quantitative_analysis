@@ -343,9 +343,21 @@ def _tool_get_data_job_status(args: Dict[str, Any]) -> Dict[str, Any]:
     except (TypeError, ValueError):
         raise ToolError('run_id 必须是整数')
 
-    run = _get_data_job_service().get_run(run_id)
-    if run is None:
-        raise ToolError(f'未找到任务运行记录 run_id={run_id}')
+    try:
+        wait_seconds = min(max(int(args.get('wait_seconds') or 0), 0), 300)
+    except (TypeError, ValueError):
+        raise ToolError('wait_seconds 必须是 0~300 的整数')
+
+    service = _get_data_job_service()
+    deadline = time.time() + wait_seconds
+    while True:
+        run = service.get_run(run_id)
+        if run is None:
+            raise ToolError(f'未找到任务运行记录 run_id={run_id}')
+        # 终态：success / failed；pending / running 继续等待
+        if run.status not in ('pending', 'running') or time.time() >= deadline:
+            break
+        time.sleep(2)
     return run.to_dict()
 
 
@@ -603,7 +615,8 @@ def _tool_calculate_factors_range(args: Dict[str, Any]) -> Dict[str, Any]:
         'factor_ids': factor_ids if factor_ids else '全部因子（含 alpha191 全套）',
         'note': (
             '批量计算在后台执行：全市场 alpha191 全套约需数分钟到十几分钟。'
-            '可用 get_data_job_status(run_id=...) 轮询进度，完成后因子值落库即可用于回测'
+            '可用 get_data_job_status(run_id=..., wait_seconds=300) 阻塞等待，'
+            '完成后因子值落库即可用于回测'
         ),
     }
 
@@ -658,6 +671,17 @@ def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
         run_backtest_task,
     )
 
+    # 提交前核验因子值覆盖：覆盖不足才提示补算，避免固定提示语误导
+    factor_coverage = None
+    try:
+        from app.services.parquet_state_store import FactorRepository, ParquetStateStore
+
+        factor_coverage = FactorRepository(ParquetStateStore()).get_factor_coverage(
+            factor_ids, start_date, end_date
+        )
+    except Exception:  # noqa: BLE001 - 核验失败不阻断回测提交
+        logger.warning('回测提交前因子覆盖率核验失败', exc_info=True)
+
     try:
         reap_orphans_once()
     except Exception:  # noqa: BLE001 - 孤儿清理失败不阻断提交
@@ -682,6 +706,40 @@ def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
         daemon=True,
     ).start()
 
+    note_parts = [
+        '回测在后台线程执行（分钟级）。可用 get_backtest_status(run_id=..., wait_seconds=300) 阻塞等待结果'
+    ]
+    coverage_view = None
+    if factor_coverage:
+        coverage_view = {
+            fid: {
+                'first_date': c['first_date'],
+                'last_date': c['last_date'],
+                'dates': c['dates'],
+                # missing_dates 全量可能数百天，回传只留计数与样例
+                'missing_count': len(c['missing_dates']),
+                'missing_sample': c['missing_dates'][:5],
+            }
+            for fid, c in sorted(factor_coverage.items())
+        }
+        gaps = {fid: c for fid, c in factor_coverage.items() if c['missing_dates']}
+        if gaps:
+            gap_desc = '；'.join(
+                f"{fid} 缺 {len(c['missing_dates'])} 天"
+                f"（如 {', '.join(c['missing_dates'][:3])}，有效区间 {c['first_date']}~{c['last_date']}）"
+                for fid, c in sorted(gaps.items())
+            )
+            note_parts.append(
+                f'因子值覆盖不足：{gap_desc}。缺口会降低对应日期的信号质量，'
+                '如需补齐请先用 calculate_factors_range 补算后重新提交'
+            )
+        else:
+            summary = '、'.join(
+                f"{fid}（{c['first_date']}~{c['last_date']}，{c['dates']} 个交易日）"
+                for fid, c in sorted(factor_coverage.items())
+            )
+            note_parts.append(f'已核验因子值覆盖完整：{summary}')
+
     return {
         'run_id': run_id,
         'status': 'queued',
@@ -690,11 +748,8 @@ def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
         'end_date': end_date,
         'initial_capital': initial_capital,
         'rebalance_frequency': rebalance_frequency,
-        'note': (
-            '回测在后台线程执行（分钟级）。可用 get_backtest_status(run_id=...) '
-            '查询进度与结果指标。若回测因因子值覆盖率不足失败，'
-            '请先用 calculate_factors_range 补算区间因子值'
-        ),
+        'factor_coverage': coverage_view,
+        'note': '。'.join(note_parts),
     }
 
 
@@ -705,9 +760,9 @@ def _tool_get_backtest_status(args: Dict[str, Any]) -> Dict[str, Any]:
         raise ToolError('run_id 必须是整数')
 
     try:
-        wait_seconds = min(max(int(args.get('wait_seconds') or 0), 0), 120)
+        wait_seconds = min(max(int(args.get('wait_seconds') or 0), 0), 300)
     except (TypeError, ValueError):
-        raise ToolError('wait_seconds 必须是 0~120 的整数')
+        raise ToolError('wait_seconds 必须是 0~300 的整数')
 
     from app.services.parquet_state_store import BacktestRepository, ParquetStateStore
 
@@ -753,7 +808,7 @@ def _tool_get_backtest_status(args: Dict[str, Any]) -> Dict[str, Any]:
         if failed_dates:
             payload['failed_signal_dates_count'] = len(failed_dates)
     elif status in ('queued', 'running'):
-        payload['note'] = '回测仍在进行，可稍后再次查询（可传 wait_seconds 最多等待 120 秒）'
+        payload['note'] = '回测仍在进行，可稍后再次查询（可传 wait_seconds 最多等待 300 秒）'
     return payload
 
 
@@ -986,10 +1041,14 @@ AI_TOOLS: List[AiTool] = [
     ),
     AiTool(
         'get_data_job_status',
-        '查询数据任务的执行状态与进度（run_id 来自 run_data_job / build_wide_table 的返回）。',
+        '查询数据任务的执行状态与进度（run_id 来自 run_data_job / calculate_factors_range 的返回）。'
+        '可传 wait_seconds（0~300）阻塞等待任务完成再返回，避免反复轮询。',
         {
             'type': 'object',
-            'properties': {'run_id': {'type': 'integer'}},
+            'properties': {
+                'run_id': {'type': 'integer'},
+                'wait_seconds': {'type': 'integer', 'description': '可选，最多等待任务完成的秒数（0~300）'},
+            },
             'required': ['run_id'],
         },
         'read',
@@ -1146,13 +1205,13 @@ AI_TOOLS: List[AiTool] = [
     AiTool(
         'get_backtest_status',
         '查询回测任务的进度与结果指标（run_id 来自 run_backtest）。'
-        '可传 wait_seconds（0~120）阻塞等待任务完成；完成后返回总收益、年化收益、'
+        '可传 wait_seconds（0~300）阻塞等待任务完成；完成后返回总收益、年化收益、'
         '最大回撤、夏普比率、胜率及相对基准的 alpha/beta 等关键指标。',
         {
             'type': 'object',
             'properties': {
                 'run_id': {'type': 'integer'},
-                'wait_seconds': {'type': 'integer', 'description': '可选，最多等待任务完成的秒数（0~120）'},
+                'wait_seconds': {'type': 'integer', 'description': '可选，最多等待任务完成的秒数（0~300）'},
             },
             'required': ['run_id'],
         },

@@ -45,7 +45,7 @@ class AssistantService:
     def __init__(self, client: Optional[LLMClient] = None):
         self.config: Dict[str, Any] = dict(current_app.config.get('AI_ASSISTANT_CONFIG') or {})
         self.client = client or LLMClient(self.config)
-        self.max_iterations = max(1, int(self.config.get('max_tool_iterations') or 10))
+        self.max_iterations = max(1, int(self.config.get('max_tool_iterations') or 30))
 
     # ------------------------------------------------------------------
     # 状态与会话管理（供 API 层调用）

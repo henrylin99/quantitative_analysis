@@ -101,7 +101,8 @@ class Config:
         'timeout': int(os.getenv('LLM_TIMEOUT', '120')),
         'temperature': float(os.getenv('LLM_TEMPERATURE', '0.3')),
         'max_tokens': int(os.getenv('LLM_MAX_TOKENS', '4096')),
-        'max_tool_iterations': int(os.getenv('AI_MAX_TOOL_ITERATIONS', '10')),
+        # 因子计算 + 回测是「提交后台任务 → 多次轮询」的长链路，10 轮不够走完
+        'max_tool_iterations': int(os.getenv('AI_MAX_TOOL_ITERATIONS', '30')),
     }
 
 class DevelopmentConfig(Config):
