@@ -259,7 +259,16 @@ class FactorRepository:
             self.store.write_frame(self.TABLE_DEFINITIONS, df)
         return True
 
-    def save_values(self, frame: pd.DataFrame) -> int:
+    def save_values(self, frame: pd.DataFrame,
+                    replace_factor_ids: Optional[Sequence[str]] = None) -> int:
+        """写入因子值（按交易日分区，读-改-写去重）。
+
+        replace_factor_ids 非空时启用「同因子整体替换」合并：分区内这些
+        factor_id 的旧值整组让位给本次入参，用哈希去重代替全分区排序去重。
+        调用方必须保证入参覆盖了这些因子在每个涉及日期的全部标的
+        （全市场口径）——factor_compute 的批量回填在 ts_codes 为空时才启用，
+        部分股票清单的增量写入绝不能走替换路径（会删掉未入参股票的旧值）。
+        """
         if frame is None or frame.empty:
             return 0
         required = {"ts_code", "trade_date", "factor_id", "factor_value"}
@@ -287,6 +296,9 @@ class FactorRepository:
         # 落入一个分区，跨分区不会产生重复；每次只读-改-写涉及的分区，
         # 而不是整表重写
         written = 0
+        replace_ids = (
+            set(replace_factor_ids) if replace_factor_ids is not None else None
+        )
         for date_value, partition_frame in df.groupby(df["trade_date"].dt.normalize()):
             partition_key = pd.Timestamp(date_value).strftime("%Y-%m-%d")
             with self.store.locked(self.TABLE_VALUES):
@@ -295,9 +307,26 @@ class FactorRepository:
                 )
                 if existing.empty:
                     combined = partition_frame
+                elif replace_ids:
+                    # 整体替换路径：被替换因子的旧值直接让位，不做全分区
+                    # 排序去重（百万行分区上排序是读改写的主要开销）
+                    keep = ~existing["factor_id"].isin(replace_ids)
+                    combined = pd.concat(
+                        [existing[keep], partition_frame], ignore_index=True
+                    )
                 else:
                     combined = pd.concat([existing, partition_frame], ignore_index=True)
-                combined = self._dedupe_values(combined)
+                if not replace_ids:
+                    combined = self._dedupe_values(combined)
+                else:
+                    # 入参自身兜底去重（哈希，免排序）：正常批量回填中每个
+                    # factor_id 只计算一次，这里只是防御同缓冲组重复行
+                    key_cols = [c for c in ("ts_code", "trade_date", "factor_id")
+                                if c in combined.columns]
+                    if key_cols:
+                        combined = combined.drop_duplicates(
+                            subset=key_cols, keep="last"
+                        )
                 self.store.write_partition(
                     self.TABLE_VALUES, "trade_date", partition_key, combined
                 )

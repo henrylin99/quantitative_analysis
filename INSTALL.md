@@ -283,6 +283,88 @@ npm run dev
 
 > 💡 未配置 `TUSHARE_TOKEN` 时系统用 Baostock 免费源，基础日线够用；配置后可解锁资金流等更多数据集。数据保存在本地 `data/` 目录（Parquet 格式），首次下载后自动生成。
 
+### 8.1 计算因子
+
+数据下载完成后，还需要一步「因子计算」把原始行情加工成因子值（动量、估值分位、Alpha191 等）——因子打分、选股和回测读取的都是这些因子值。因子计算依赖已下载的行情/资金流/筹码/财务数据，缺哪类数据就少对应类别的因子。
+
+**方式一：网页界面（推荐新手）**
+
+左侧 **数据管理 / 日频数据中心** → 提交「因子计算」任务；或在 **AI 智能工作台**用自然语言操作，例如"构建 alpha191 从 2026 年 1 月至今的数据"。
+
+**方式二：命令行脚本**
+
+脚本为 `app/utils/factor_compute.py`，在**项目根目录（已激活虚拟环境）**执行：
+
+```bash
+# 1) 默认：计算最新交易日的全部因子
+python app/utils/factor_compute.py
+
+# 2) 指定区间计算全部因子（回填历史）
+DATA_JOB_START_DATE=2024-01-01 DATA_JOB_END_DATE=2026-09-30 python app/utils/factor_compute.py
+
+# 3) 只算某一个因子，从 2024 年至今（macOS / Linux 写法）
+DATA_JOB_START_DATE=2024-01-01 DATA_JOB_END_DATE=2026-10-02 \
+DATA_JOB_PARAM_FACTOR_IDS=alpha_001 python app/utils/factor_compute.py
+```
+
+Windows PowerShell 下环境变量要分开设置（对应第 3 个例子）：
+
+```powershell
+$env:DATA_JOB_START_DATE = "2024-01-01"
+$env:DATA_JOB_END_DATE = "2026-10-02"
+$env:DATA_JOB_PARAM_FACTOR_IDS = "alpha_001"
+python app/utils/factor_compute.py
+```
+
+环境变量说明：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `DATA_JOB_TRADE_DATE` | 单日模式：只计算这一个交易日 |
+| `DATA_JOB_START_DATE` / `DATA_JOB_END_DATE` | 区间模式：一次算完整个区间（回填历史用） |
+| `DATA_JOB_PARAM_FACTOR_IDS` | 逗号分隔的因子 ID 列表，如 `alpha_001,momentum_20d`；不传则计算全部因子 |
+| `DATA_JOB_PARAM_TS_CODES` | 逗号分隔的股票代码列表；不传则全市场 |
+
+> 💡 **因子 ID 从哪来？** 内置因子（`momentum_20d`、`pe_percentile` 等）和 Alpha191（`alpha_001` ~ `alpha_191`）在前端「ML 因子」页面的因子列表可查；自己创建的自定义表达式因子用创建时填写的因子 ID。
+>
+> ⚠️ **两个易踩的坑：**
+> - 日期格式必须是 `YYYY-MM-DD`（如 `2024-01-01`），写成 `20240101` 会报错。
+> - Alpha191 因子按区间整段批量计算（全市场宽面板只加载一次）：成本主要在面板加载与 189 个公式，与输出区间长度基本无关。单个因子回填 2024 年至今约 1 分钟；**首次**全量回填 alpha191 约需 1 小时上下，建议让它在后台慢慢跑（网页界面提交即是后台任务）。
+> - 重复跑全区间回填是安全的，且很快：已回填过的 alpha191 因子按「已有覆盖天数」自动跳过重算（显式点名 `DATA_JOB_PARAM_FACTOR_IDS` 的因子不跳过）；内置/自定义因子走逐因子整段向量化 + 跨因子缓冲合并落盘，每张数据表全区间只读一次、每个交易日分区每缓冲组只重写一次。全部因子重跑 2024 年至今约 40–60 分钟（其中约 15 分钟是 roe/roa/growth 等基本面因子的全表财务数据读取，若财务数据未覆盖目标区间则该段时间产出为 0）。
+
+计算结果保存在本地 `data/ml_factor_state/`（按交易日分区的 Parquet 文件），前端「ML 因子」页面可查看覆盖天数，回测时自动读取。
+
+### 8.2 重建股票分区
+
+`data/` 下的日频数据表同时保存两种布局：**按日期分区**（下载作业写入）和**按股票分区**（每只股票一个文件）。个股查询优先走股票分区——单只股票的历史只读一个文件，速度快。
+
+每次日频下载后，股票分区可能落后于最新数据。落后时系统**不会报错**：查询自动回退扫描日期分区，结果完全一样，只是明显变慢（后端日志会出现「股票分区落后于日期分区，回退扫描 XXXXXX.SZ」的提示）。跑大批量因子计算、回测之前，建议先重建一次股票分区。
+
+重建脚本是 `app/utils/stock_partition_rebuild.py`，覆盖 6 张日频表（`daily_history` 日线行情、`daily_basic` 每日指标、`moneyflow` 资金流、`cyq_perf` 筹码分布、`stk_factor`、`adj_factor` 复权因子），在**项目根目录（已激活虚拟环境）**执行：
+
+```bash
+# 全量重建（推荐日常使用，几分钟）
+python app/utils/stock_partition_rebuild.py
+
+# 只增量合并某个日期窗口（与下载作业传同一窗口即可）
+DATA_JOB_START_DATE=2026-09-01 DATA_JOB_END_DATE=2026-09-30 python app/utils/stock_partition_rebuild.py
+
+# 强制全量重建（忽略窗口参数）
+DATA_JOB_FULL_REFRESH=1 python app/utils/stock_partition_rebuild.py
+```
+
+Windows PowerShell 下环境变量分开设置（对应第 2 个例子）：
+
+```powershell
+$env:DATA_JOB_START_DATE = "2026-09-01"
+$env:DATA_JOB_END_DATE = "2026-09-30"
+python app/utils/stock_partition_rebuild.py
+```
+
+> 💡 也可以不动命令行：**数据管理 / 日频数据中心**页面提交「股票分区重建」任务，或在 **AI 智能工作台**直接说"重建股票分区"。默认 16 线程并行，可用环境变量 `STOCK_REBUILD_WORKERS` 调整。
+>
+> ⚠️ 两个参数的区别：窗口模式只合并窗口内的交易日（快，适合每天下载后同步增量）；股票分区还不存在时会自动转为全量重建。想让所有股票从头重建一遍，用 `DATA_JOB_FULL_REFRESH=1`。
+
 ---
 
 ## 9. 常用命令速查
@@ -291,6 +373,8 @@ npm run dev
 | --- | --- | --- |
 | 启动后端 | `python run.py` | 项目根目录（先激活虚拟环境） |
 | 启动前端 | `npm run dev` | `frontend/` |
+| 计算因子 | `python app/utils/factor_compute.py`（环境变量用法见[第 8.1 节](#81-计算因子)） | 项目根目录 |
+| 重建股票分区 | `python app/utils/stock_partition_rebuild.py`（用法见[第 8.2 节](#82-重建股票分区)） | 项目根目录 |
 | 初始化/体检 | `python run_system.py` | 项目根目录 |
 | 停止服务 | `Ctrl + C` | 对应的终端窗口 |
 | 运行测试 | `pytest tests/ -q` | 项目根目录 |

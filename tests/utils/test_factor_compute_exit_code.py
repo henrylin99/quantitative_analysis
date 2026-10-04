@@ -10,15 +10,18 @@ class _FakeEngine:
         self._behaviors = behaviors
         self.saved = []
 
-    def calculate_factor(self, factor_id, ts_codes, start_date, end_date):
+    def calculate_factor(self, factor_id, ts_codes, start_date, end_date, data_cache=None):
         behavior = self._behaviors[factor_id]
         if isinstance(behavior, Exception):
             raise behavior
         return behavior
 
-    def save_factor_values(self, result):
+    def save_factor_values(self, result, replace_factor_ids=None):
         self.saved.append(result)
-        return len(result)
+        return True
+
+    def saved_rows(self):
+        return sum(len(frame) for frame in self.saved)
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +31,7 @@ def _single_trade_date(monkeypatch):
     monkeypatch.delenv("DATA_JOB_END_DATE", raising=False)
     monkeypatch.delenv("DATA_JOB_PARAM_FACTOR_IDS", raising=False)
     monkeypatch.delenv("DATA_JOB_PARAM_TS_CODES", raising=False)
+    monkeypatch.delenv("DATA_JOB_FLUSH_ROWS", raising=False)
 
 
 def test_all_factors_fail_exits_nonzero(monkeypatch):
@@ -62,16 +66,18 @@ def test_partial_failure_still_succeeds(monkeypatch):
 
     factor_compute.main()  # 不抛 SystemExit
 
-    assert len(engine.saved) == 1
+    assert engine.saved_rows() == 1
 
 
 def test_full_success_saves_everything(monkeypatch):
-    good_a = pd.DataFrame([{"ts_code": "000001.SZ", "factor_id": "a", "factor_value": 1.0}])
-    good_b = pd.DataFrame([{"ts_code": "000001.SZ", "factor_id": "b", "factor_value": 2.0}])
+    good_a = pd.DataFrame([{"ts_code": "000001.SZ", "trade_date": "2026-06-01", "factor_id": "a", "factor_value": 1.0}])
+    good_b = pd.DataFrame([{"ts_code": "000002.SZ", "trade_date": "2026-06-01", "factor_id": "b", "factor_value": 2.0}])
     monkeypatch.setenv("DATA_JOB_PARAM_FACTOR_IDS", "a,b")
     engine = _FakeEngine({"a": good_a, "b": good_b})
     monkeypatch.setattr(factor_compute, "FactorEngine", lambda: engine)
 
     factor_compute.main()
 
-    assert len(engine.saved) == 2
+    # 跨因子缓冲：两个因子合并成一次落盘调用
+    assert len(engine.saved) == 1
+    assert engine.saved_rows() == 2
