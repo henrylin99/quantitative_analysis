@@ -64,6 +64,19 @@ export function streamAiChat(
 ): (reason?: string) => void {
   const controller = new AbortController()
   ;(async () => {
+    // done / error 只结算一次：后端发 done 事件后流还会正常关闭，
+    // 两处都触发 onDone 会把助手回复重复追加到消息列表
+    let settled = false
+    const finishDone = () => {
+      if (settled) return
+      settled = true
+      handlers.onDone?.()
+    }
+    const finishError = (message: string) => {
+      if (settled) return
+      settled = true
+      handlers.onError?.(message)
+    }
     try {
       const resp = await fetch('/api/ai-assistant/chat', {
         method: 'POST',
@@ -73,7 +86,7 @@ export function streamAiChat(
       })
       if (!resp.ok || !resp.body) {
         const text = await resp.text().catch(() => '')
-        handlers.onError?.(`请求失败（HTTP ${resp.status}）${text ? `: ${text.slice(0, 200)}` : ''}`)
+        finishError(`请求失败（HTTP ${resp.status}）${text ? `: ${text.slice(0, 200)}` : ''}`)
         return
       }
       const reader = resp.body.getReader()
@@ -107,17 +120,17 @@ export function streamAiChat(
               else if (evt.type === 'token') handlers.onToken?.(evt.content ?? '')
               else if (evt.type === 'tool_call') handlers.onToolCall?.(evt.name ?? '', evt.arguments ?? {}, evt.call_id ?? '')
               else if (evt.type === 'tool_result') handlers.onToolResult?.(evt.call_id ?? '', !!evt.ok, evt.result, evt.duration_ms, evt.name)
-              else if (evt.type === 'done') handlers.onDone?.()
-              else if (evt.type === 'error') handlers.onError?.(evt.message ?? 'AI 服务错误')
+              else if (evt.type === 'done') finishDone()
+              else if (evt.type === 'error') finishError(evt.message ?? 'AI 服务错误')
             } catch {
               // 忽略无法解析的心跳/杂散帧
             }
           }
         }
       }
-      handlers.onDone?.()
+      finishDone()
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') handlers.onError?.(e instanceof Error ? e.message : '连接中断')
+      if ((e as Error).name !== 'AbortError') finishError(e instanceof Error ? e.message : '连接中断')
     }
   })()
   return (reason?: string) => controller.abort(reason)
