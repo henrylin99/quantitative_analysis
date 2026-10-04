@@ -160,3 +160,51 @@ def test_backtest_repository_allocates_ids_and_round_trips_summary(tmp_path):
     updated = repo.update_summary(1, {"annual_return": 0.12, "sharpe": 1.3})
     assert updated["summary"] == {"annual_return": 0.12, "sharpe": 1.3}
     assert repo.list_runs()[0]["id"] == 1
+
+
+def test_factor_values_replace_semantics_updates_factor_and_keeps_others(tmp_path):
+    """整体替换合并：被替换因子旧值整组让位，其他因子与其他日期不动。"""
+    import pandas as pd
+
+    store = ParquetStateStore(base_dir=str(tmp_path / "state"))
+    repo = FactorRepository(store)
+
+    repo.save_values(pd.DataFrame([
+        {"ts_code": "000001.SZ", "trade_date": "2024-06-04", "factor_id": "f1", "factor_value": 1.0},
+        {"ts_code": "000002.SZ", "trade_date": "2024-06-04", "factor_id": "f1", "factor_value": 2.0},
+        {"ts_code": "000001.SZ", "trade_date": "2024-06-04", "factor_id": "f2", "factor_value": 7.0},
+        {"ts_code": "000001.SZ", "trade_date": "2024-06-05", "factor_id": "f1", "factor_value": 3.0},
+    ]))
+
+    # 只带一只股票的 f1 新值：替换语义下另一只股票的 f1 旧值必须消失
+    repo.save_values(
+        pd.DataFrame([
+            {"ts_code": "000001.SZ", "trade_date": "2024-06-04", "factor_id": "f1", "factor_value": 9.9},
+        ]),
+        replace_factor_ids=["f1"],
+    )
+
+    frame = repo.get_values(trade_date="2024-06-04")
+    f1 = frame[frame["factor_id"] == "f1"]
+    assert f1["ts_code"].tolist() == ["000001.SZ"]
+    assert f1["factor_value"].iloc[0] == pytest.approx(9.9)
+    f2 = frame[frame["factor_id"] == "f2"]
+    assert len(f2) == 1
+    assert f2["factor_value"].iloc[0] == pytest.approx(7.0)
+
+    # 未涉及的日期不受影响
+    other_day = repo.get_values(trade_date="2024-06-05")
+    assert len(other_day) == 1
+    assert other_day["factor_value"].iloc[0] == pytest.approx(3.0)
+
+    # 同一批入参内部重复键（防御路径）：保留最后一条
+    repo.save_values(
+        pd.DataFrame([
+            {"ts_code": "000001.SZ", "trade_date": "2024-06-06", "factor_id": "f3", "factor_value": 1.0},
+            {"ts_code": "000001.SZ", "trade_date": "2024-06-06", "factor_id": "f3", "factor_value": 2.0},
+        ]),
+        replace_factor_ids=["f3"],
+    )
+    dup_day = repo.get_values(trade_date="2024-06-06")
+    assert len(dup_day) == 1
+    assert dup_day["factor_value"].iloc[0] == pytest.approx(2.0)

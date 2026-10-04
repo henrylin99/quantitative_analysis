@@ -185,15 +185,25 @@ class FactorEngine:
         except Exception as e:
             return {"valid": False, "error": str(e)}
     
-    def calculate_factor(self, factor_id: str, ts_codes: List[str], 
-                        start_date: str, end_date: str) -> pd.DataFrame:
-        """计算指定因子值"""
+    def calculate_factor(self, factor_id: str, ts_codes: List[str],
+                        start_date: str, end_date: str,
+                        data_cache: Dict[str, pd.DataFrame] = None) -> pd.DataFrame:
+        """计算指定因子值
+
+        data_cache: 跨因子共享的数据缓存（同一批 ts_codes/区间下多个
+        内置因子共用一次数据读取）；仅对内置因子生效——自定义因子的
+        return_prices 带 5 列价格字段，与内置因子（仅 close）口径不同，
+        不能共用同一缓存键。
+        """
         try:
             result = pd.DataFrame()
-            
+
             # 检查是否为内置因子
             if factor_id in self.builtin_factors:
-                result = self._calculate_builtin_factor(factor_id, ts_codes, start_date, end_date)
+                result = self._calculate_builtin_factor(
+                    factor_id, ts_codes, start_date, end_date,
+                    data_cache=data_cache,
+                )
             
             # 检查是否为自定义因子
             elif factor_id in self.factor_definitions:
@@ -868,15 +878,22 @@ class FactorEngine:
             logger.error(f"计算因子统计量失败: {e}")
             return df
     
-    def save_factor_values(self, df: pd.DataFrame) -> bool:
-        """保存因子值到数据库"""
+    def save_factor_values(self, df: pd.DataFrame,
+                           replace_factor_ids=None) -> bool:
+        """保存因子值到数据库。
+
+        replace_factor_ids 透传给存储层的整体替换合并路径，仅限批量回填
+        且入参覆盖这些因子全部标的时使用（见 ParquetStateStore.save_values）。
+        """
         try:
             if df.empty:
                 return True
-            written = self.factor_repo.save_values(df)
+            written = self.factor_repo.save_values(
+                df, replace_factor_ids=replace_factor_ids
+            )
             logger.info(f"成功保存 {written} 条因子值记录")
             return True
-            
+
         except Exception as e:
             logger.error(f"保存因子值失败: {e}")
             return False
@@ -899,9 +916,10 @@ class FactorEngine:
         try:
             if factor_id not in self.factor_definitions:
                 return pd.DataFrame()
-            if not ts_codes:
-                return pd.DataFrame()
 
+            # ts_codes=None 表示全市场：get_return_prices 返回全部股票，
+            # 下方 groupby 天然按股票分组。此前 None 直接返回空表，
+            # 区间批量回填时自定义因子会静默零产出
             definition = self.factor_definitions[factor_id]
             formula = (definition.get("factor_formula") or "").strip()
             if not formula:
