@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
+import pyarrow.parquet as pq
 from loguru import logger
 
 
@@ -433,6 +434,81 @@ class FactorRepository:
         if sort_cols:
             df = df.sort_values(sort_cols).reset_index(drop=True)
         return df
+
+    def _open_trade_dates(self) -> Optional[set]:
+        """交易日历中的开市日（YYYY-MM-DD 集合）；日历缺失/损坏时返回 None。
+
+        返回 None 表示无法过滤（调用方应把所有分区都当作有效处理），
+        数据目录下 stock_trade_calendar.parquet 与 base_dir 同级。
+        """
+        path = self.store.base_dir.parent / "stock_trade_calendar.parquet"
+        try:
+            calendar = pd.read_parquet(path)
+            if calendar.empty or not {"cal_date", "is_open"}.issubset(calendar.columns):
+                return None
+            open_mask = pd.to_numeric(calendar["is_open"], errors="coerce").fillna(0).astype(int) == 1
+            dates = pd.to_datetime(calendar.loc[open_mask, "cal_date"], errors="coerce").dropna()
+            if dates.empty:
+                return None
+            return set(dates.dt.strftime("%Y-%m-%d"))
+        except Exception as exc:  # noqa: BLE001 - 日历读取失败不阻断核验
+            logger.warning(f"读取交易日历失败，覆盖率核验不按开市日过滤: {exc}")
+            return None
+
+    def get_factor_coverage(
+        self,
+        factor_ids: Sequence[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """统计因子值在分区库中的覆盖情况（回测提交前的覆盖率核验）。
+
+        返回 {factor_id: {first_date, last_date, dates, missing_dates}}。
+        missing_dates 为 [start_date, end_date] 内存在分区但该因子完全无值的
+        日期（分区只在有因子写入时创建，因此以「分区内无此因子」为缺口口径）；
+        start_date/end_date 缺省时不计算缺口。
+        非交易日的分区（杂散写入）不计入交易日数、也不算缺口；交易日历不可用时
+        退化为全部分区参与统计。任一分区读取失败按无覆盖处理，不阻断核验。
+        """
+        wanted_ids = list(dict.fromkeys(str(f).strip() for f in factor_ids if str(f).strip()))
+        coverage: Dict[str, Dict[str, Any]] = {
+            fid: {"first_date": None, "last_date": None, "dates": 0, "missing_dates": []}
+            for fid in wanted_ids
+        }
+        if not wanted_ids:
+            return coverage
+
+        open_dates = self._open_trade_dates()
+        partitions = self.store.list_partitions(self.TABLE_VALUES)
+        wanted = self._select_partitions(partitions, None, start_date, end_date)
+        for partition in wanted:
+            if open_dates is not None:
+                # 分区名存在 YYYYMMDD 历史口径，统一归一后再比对日历
+                normalized = pd.to_datetime(partition, errors="coerce")
+                if not pd.isna(normalized) and normalized.strftime("%Y-%m-%d") not in open_dates:
+                    continue
+            present: set = set()
+            try:
+                path = self.store._partition_path(self.TABLE_VALUES, "trade_date", partition)
+                # 分区含 alpha191 全套时可达百万行，全列读取太重；
+                # 覆盖核验只需要因子名集合，只读 factor_id 列并直接去重
+                table = pq.ParquetFile(path).read(columns=["factor_id"])
+                present = {str(v) for v in table.column("factor_id").unique().to_pylist()
+                           if v is not None}
+            except Exception as exc:  # noqa: BLE001 - 单分区损坏不阻断整体核验
+                logger.warning(f"覆盖率核验读取分区 {partition} 失败: {exc}")
+
+            for fid in wanted_ids:
+                info = coverage[fid]
+                if fid in present:
+                    info["dates"] += 1
+                    if info["first_date"] is None or partition < info["first_date"]:
+                        info["first_date"] = partition
+                    if info["last_date"] is None or partition > info["last_date"]:
+                        info["last_date"] = partition
+                elif start_date is not None and end_date is not None:
+                    info["missing_dates"].append(partition)
+        return coverage
 
     @staticmethod
     def _select_partitions(partitions: List[str], trade_date: Optional[str],

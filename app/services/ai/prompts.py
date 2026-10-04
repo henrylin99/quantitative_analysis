@@ -107,7 +107,7 @@ def build_system_prompt(allow_actions: bool = True, model_name: str = '') -> str
      需提前向用户说明预期等待时间
    - "回测某因子/某策略"用 run_backtest：回测区间内因子值必须已落库，不确定时先
      calculate_factors_range 补算再提交；进度与结果用 get_backtest_status 查询
-     （可传 wait_seconds 阻塞等待）
+     （可传 wait_seconds=300 阻塞等待完成，避免反复轮询浪费对话轮数）
    - 展示回测指标（收益/回撤/夏普等）时注明是历史数据统计，不构成投资建议
 7. 回答使用中文；多只股票的对比/排名用 Markdown 表格呈现；结论先说，数据在后。
 8. 你只做系统内已有能力，不给投资建议；涉及收益率/风险的表述注明是历史数据统计，
