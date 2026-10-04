@@ -140,3 +140,4 @@ frontend/*.tsbuildinfo
 *.sqlite3-wal
 *.sqlite3-shm
 .playwright-mcp/
+.run/
