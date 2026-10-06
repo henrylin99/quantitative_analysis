@@ -219,21 +219,11 @@ class FactorAnalyzer:
         cost_bps = max(0.0, float(cost_bps))
         min_stocks = max(2 * n_quantiles, int(min_stocks))
 
-        # 未指定区间时默认最近两年：get_values 按分区整读后过滤，
-        # 不设边界会拼接全历史分区（数百个 × 百万行/分区）打爆内存
-        if not start_date or not end_date:
-            store = getattr(self.factor_repo, 'store', None)
-            list_partitions = getattr(store, 'list_partitions', None)
-            if list_partitions is not None:
-                partitions = sorted(list_partitions(
-                    self.factor_repo.TABLE_VALUES, "trade_date"))
-                if not partitions:
-                    return {'error': '因子库为空', 'factor_id': factor_id}
-                end_date = end_date or partitions[-1]
-                if not start_date:
-                    start_date = (
-                        pd.Timestamp(end_date) - pd.DateOffset(years=2)
-                    ).strftime('%Y-%m-%d')
+        # 未指定区间时默认最近两年（防全库扫描 OOM，见 _bounded_date_range）
+        bounds = self._bounded_date_range(start_date, end_date)
+        if bounds is None:
+            return {'error': '因子库为空', 'factor_id': factor_id}
+        start_date, end_date = bounds
 
         factor_df = self.factor_repo.get_values(
             factor_ids=[factor_id], start_date=start_date, end_date=end_date,
@@ -443,6 +433,12 @@ class FactorAnalyzer:
         if len(factor_ids) < 2:
             return {'error': '相关性分析至少需要两个因子'}
 
+        if trade_date is None:
+            # 未指定区间时默认最近两年（防全库扫描 OOM）
+            bounds = self._bounded_date_range(start_date, end_date)
+            if bounds is None:
+                return {'error': '因子库为空', 'factor_ids': factor_ids}
+            start_date, end_date = bounds
         df = self.factor_repo.get_values(
             factor_ids=factor_ids, start_date=start_date,
             end_date=end_date, trade_date=trade_date,
@@ -506,6 +502,31 @@ class FactorAnalyzer:
     # 内部工具
     # ------------------------------------------------------------------
 
+    def _bounded_date_range(self, start_date: Optional[str],
+                            end_date: Optional[str]) -> Optional[tuple]:
+        """未指定区间时默认最近两年。
+
+        get_values 按分区整读后过滤，不设边界会拼接全历史分区
+        （数百个 × 百万行/分区）打爆内存。因子库为空时返回 None。
+        """
+        if start_date and end_date:
+            return start_date, end_date
+        store = getattr(self.factor_repo, 'store', None)
+        list_partitions = getattr(store, 'list_partitions', None)
+        if list_partitions is None:
+            # 测试替身等无 store 的仓库：无法推断边界，维持原语义
+            return start_date, end_date
+        partitions = sorted(
+            list_partitions(self.factor_repo.TABLE_VALUES, "trade_date"))
+        if not partitions:
+            return None
+        end_date = end_date or partitions[-1]
+        if not start_date:
+            start_date = (
+                pd.Timestamp(end_date) - pd.DateOffset(years=2)
+            ).strftime('%Y-%m-%d')
+        return start_date, end_date
+
     def _merge_factor_with_forward_return(self, factor_ids: List[str],
                                           start_date: Optional[str],
                                           end_date: Optional[str],
@@ -515,6 +536,11 @@ class FactorAnalyzer:
         行情终点向后外推足够多的自然日，保证区间尾部的因子值也能取到
         完整的未来收益；取不到未来收益的日期在后续统计中被剔除。
         """
+        # 未指定区间时默认最近两年（防全库扫描 OOM，见 _bounded_date_range）
+        bounds = self._bounded_date_range(start_date, end_date)
+        if bounds is None:
+            return pd.DataFrame()
+        start_date, end_date = bounds
         factor_df = self.factor_repo.get_values(
             factor_ids=factor_ids, start_date=start_date, end_date=end_date,
         )

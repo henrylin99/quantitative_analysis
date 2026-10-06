@@ -197,3 +197,82 @@ def test_quantile_portfolio_backtest_too_short_range():
         holding_days=20, n_quantiles=2, min_stocks=4,
     )
     assert "error" in result
+
+
+class _FakeStore:
+    """带分区目录的假存储：验证无日期请求被限定到最近两年。"""
+
+    def __init__(self, partitions):
+        self.partitions = partitions
+
+    def list_partitions(self, table, by):
+        return list(self.partitions)
+
+
+def _make_analyzer_with_store(partitions):
+    analyzer = _make_analyzer()
+    analyzer.factor_repo.store = _FakeStore(partitions)
+    analyzer.factor_repo.TABLE_VALUES = "factor_values"
+    return analyzer
+
+
+def test_bounded_date_range_defaults_to_last_two_years():
+    analyzer = _make_analyzer_with_store(
+        ["2024-01-02", "2025-06-30", "2026-09-30"])
+    bounds = analyzer._bounded_date_range(None, None)
+    assert bounds == ("2024-09-30", "2026-09-30")
+
+    # 显式传入区间原样透传
+    assert analyzer._bounded_date_range("2025-01-01", "2025-06-30") == (
+        "2025-01-01", "2025-06-30"
+    )
+    # 只传 start 时 end 补齐为最新分区
+    assert analyzer._bounded_date_range("2025-01-01", None) == (
+        "2025-01-01", "2026-09-30"
+    )
+
+
+def test_bounded_date_range_empty_library():
+    analyzer = _make_analyzer_with_store([])
+    assert analyzer._bounded_date_range(None, None) is None
+
+
+def test_ic_analysis_without_dates_applies_default_bounds():
+    """无日期 IC 请求也必须带边界进 get_values（防全库扫描 OOM）。"""
+    analyzer = _make_analyzer_with_store(
+        [d.strftime("%Y-%m-%d") for d in DATES])
+    calls = {}
+    original = analyzer.factor_repo.get_values
+
+    def spy(**kwargs):
+        calls.update(kwargs)
+        return original(**kwargs)
+
+    analyzer.factor_repo.get_values = spy
+    result = analyzer.ic_analysis("perfect", forward_period=1, min_stocks=3)
+    assert calls["start_date"] is not None
+    assert calls["end_date"] is not None
+    assert "error" not in result
+
+
+def test_correlation_without_dates_applies_default_bounds():
+    analyzer = _make_analyzer_with_store(
+        [d.strftime("%Y-%m-%d") for d in DATES])
+    calls = {}
+    original = analyzer.factor_repo.get_values
+
+    def spy(**kwargs):
+        calls.update(kwargs)
+        return original(**kwargs)
+
+    analyzer.factor_repo.get_values = spy
+    result = analyzer.correlation_matrix(["perfect", "reversed"], min_stocks=3)
+    assert calls["start_date"] is not None
+    assert calls["end_date"] is not None
+    assert "error" not in result
+
+    # 单日口径（trade_date）不走默认边界
+    calls.clear()
+    analyzer.correlation_matrix(["perfect", "reversed"],
+                                trade_date="2026-01-06", min_stocks=3)
+    assert calls.get("start_date") is None
