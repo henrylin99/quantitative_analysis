@@ -879,6 +879,13 @@ class MLModelManager:
             actual_returns = self._get_actual_returns(pred_data, model_def["target_type"])
             
             # 合并预测和实际数据
+            # 预测库 trade_date 是字符串、行情侧是 datetime——直接 merge
+            # 会因 dtype 不一致抛异常，评估永远失败；统一成 datetime 再合
+            if not actual_returns.empty:
+                pred_data = pred_data.copy()
+                pred_data["trade_date"] = pd.to_datetime(pred_data["trade_date"], errors="coerce", format="mixed")
+                actual_returns = actual_returns.copy()
+                actual_returns["trade_date"] = pd.to_datetime(actual_returns["trade_date"], errors="coerce", format="mixed")
             merged_data = pd.merge(
                 pred_data, actual_returns,
                 on=['ts_code', 'trade_date'],

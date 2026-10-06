@@ -11,6 +11,7 @@
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 from app.services.factor_engine import FactorEngine
 from app.services.ml_models import MLModelManager
@@ -44,6 +45,17 @@ def get_portfolio_repo():
     return _portfolio_repo
 
 
+def _latest_snapshot(model_id):
+    """模型最新训练快照；无快照（未训练过）返回 None。"""
+    try:
+        from app.services.model_experiments import TrainingSnapshotRepository
+        for snap in TrainingSnapshotRepository().list_snapshots(model_id=model_id):
+            return snap
+    except Exception as exc:
+        logger.warning(f"读取训练快照失败: {model_id}, {exc}")
+    return None
+
+
 def build_model_performance_summary():
     manager = get_ml_manager()
     models = manager.get_model_list()
@@ -53,17 +65,18 @@ def build_model_performance_summary():
 
     for model in models:
         model_id = model.get("model_id")
-        metrics = manager.evaluate_model(model_id, model.get("created_at", "1970-01-01")[:10], now_local().strftime("%Y-%m-%d"))
-        if "error" in metrics:
+        # 指标直接取最新训练快照（test_r2/mae，秒级）：实时 evaluate 要为
+        # 全部预测股拉全市场行情，模型一多仪表盘就是分钟级；深度评估走
+        # POST /models/evaluate
+        snap = _latest_snapshot(model_id)
+        if not snap:
             continue
-
-        r2_score = float(metrics.get("r2") or 0.0)
-        mae_score = float(metrics.get("mae") or 0.0)
+        snap_metrics = snap.get("metrics") or {}
+        r2_score = float(snap_metrics.get("test_r2") or 0.0)
+        mae_score = float(snap_metrics.get("test_mae") or 0.0)
         best_r2 = max(best_r2, r2_score)
-        # evaluate_model 只产出一个全样本 R²，没有独立的训练/测试划分，
-        # test_r2 置空而不是复制 train_r2 冒充分割评估
         performance_data.append({
-            "date": model.get("created_at", now_local_iso())[:10],
+            "date": (snap.get("created_at") or model.get("created_at", now_local_iso()))[:10],
             "train_r2": r2_score,
             "test_r2": None,
             "mae": mae_score,

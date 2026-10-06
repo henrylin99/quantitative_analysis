@@ -111,11 +111,16 @@ def get_factor_analyzer():
 def _get_latest_scoring_trade_date():
     """获取评分模块可用的最新交易日期。"""
     try:
-        factor_df = get_scoring_engine().factor_repo.get_values()
-        if not factor_df.empty and "trade_date" in factor_df.columns:
-            latest_trade_date = pd.to_datetime(factor_df["trade_date"], errors="coerce").dropna().max()
-            if pd.notna(latest_trade_date):
-                return latest_trade_date.strftime("%Y-%m-%d")
+        # 只读最后一个分区取最大日期：无参 get_values() 会整读全部
+        # 666 个日分区（6.5 亿行）直接 OOM
+        repo = get_scoring_engine().factor_repo
+        partitions = repo.store.list_partitions(repo.TABLE_VALUES)
+        if partitions:
+            last_df = repo.store.read_partition(repo.TABLE_VALUES, "trade_date", partitions[-1])
+            if not last_df.empty and "trade_date" in last_df.columns:
+                latest_trade_date = pd.to_datetime(last_df["trade_date"], errors="coerce", format="mixed").dropna().max()
+                if pd.notna(latest_trade_date):
+                    return latest_trade_date.strftime("%Y-%m-%d")
     except Exception as e:
         logger.warning(f"读取因子最新交易日期失败: {e}")
 
@@ -593,8 +598,27 @@ def evaluate_model():
 def get_model_list():
     """获取模型列表"""
     try:
-        models = get_ml_manager().get_model_list()
-        
+        manager = get_ml_manager()
+        models = manager.get_model_list()
+
+        # 前端按 status='trained' 统计已训练数、accuracy 展示准确率：
+        # 训练只写 pkl 与快照、不回写定义表，这里按模型文件 + 最新快照补齐
+        import os as _os
+        try:
+            from app.services.model_experiments import TrainingSnapshotRepository
+            snapshots_by_model: dict = {}
+            for snap in TrainingSnapshotRepository().list_snapshots():
+                snapshots_by_model.setdefault(snap.get('model_id'), snap)
+        except Exception:
+            snapshots_by_model = {}
+        for model in models:
+            model_id = model.get('model_id')
+            has_model_file = _os.path.isfile(_os.path.join(manager.model_dir, f"{model_id}.pkl"))
+            model['status'] = 'trained' if has_model_file else 'draft'
+            snap_metrics = (snapshots_by_model.get(model_id) or {}).get('metrics') or {}
+            test_r2 = snap_metrics.get('test_r2')
+            model['accuracy'] = float(test_r2) if isinstance(test_r2, (int, float)) else None
+
         return jsonify({
             'success': True,
             'models': models,
