@@ -84,36 +84,42 @@ def build_model_performance_summary():
 
 def build_factor_effectiveness_summary():
     engine = get_factor_engine()
-    definitions = engine.get_factor_list(is_active=True)
+    definitions = [f for f in engine.get_factor_list(is_active=True) if f.get("is_active", True)]
+    active_factors = len(definitions)
     importance_data = []
     factor_stats = []
-    active_factors = 0
+
+    # 逐因子调 get_factor_exposure 会把同一份最新日分区重复整读 N 次
+    # （215 因子 ≈ 30s+）；这里一次读取后按 factor_id 分组计算
+    latest_date = engine.data_reader.get_stock_business_latest_date() or now_local().strftime("%Y-%m-%d")
+    exposure_all = engine.factor_repo.get_values(trade_date=latest_date)
+    if not exposure_all.empty:
+        value_col = "z_score" if "z_score" in exposure_all.columns else "factor_value"
+        exposure_all[value_col] = pd.to_numeric(exposure_all[value_col], errors="coerce")
+
+    stats_by_factor = {}
+    if not exposure_all.empty:
+        for factor_id, group in exposure_all.groupby("factor_id"):
+            # 与原 get_factor_exposure 口径一致：整列降序（NaN 沉底）、保留
+            # NaN 参与位次，corr 自动跳过 NaN 行——位次含 NaN 空位是原口径
+            series = group[value_col].sort_values(ascending=False, na_position="last").reset_index(drop=True)
+            if series.dropna().empty:
+                continue
+            stats_by_factor[factor_id] = {
+                "importance": float(series.abs().mean()),
+                "correlation": float(series.corr(pd.Series(range(len(series))))) if len(series) > 1 else 0.0,
+            }
 
     for factor in definitions:
-        if not factor.get("is_active", True):
-            continue
-        active_factors += 1
         factor_id = factor["factor_id"]
-        exposure = engine.get_factor_exposure(
-            factor_id, engine.data_reader.get_stock_business_latest_date() or now_local().strftime("%Y-%m-%d")
-        )
-        if exposure.empty:
-            importance = 0.0
-            correlation = 0.0
-        else:
-            series = pd.to_numeric(exposure.get("z_score", exposure.get("factor_value")), errors="coerce")
-            importance = float(series.abs().mean()) if not series.empty else 0.0
-            correlation = float(series.corr(pd.Series(range(len(series))))) if len(series) > 1 else 0.0
-
+        stats = stats_by_factor.get(factor_id, {"importance": 0.0, "correlation": 0.0})
         importance_data.append({
             "factor_name": factor.get("factor_name", factor_id),
-            "importance": importance,
-            "correlation": correlation,
+            **stats,
         })
         factor_stats.append({
             "factor_name": factor.get("factor_name", factor_id),
-            "importance": importance,
-            "correlation": correlation,
+            **stats,
         })
 
     importance_data.sort(key=lambda item: item["importance"], reverse=True)
