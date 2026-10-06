@@ -1,0 +1,660 @@
+import { useEffect, useMemo, useState } from 'react'
+import EChart from '../charts/EChart'
+import { useTheme } from '../theme/ThemeContext'
+import {
+  compareModels,
+  fetchModelSnapshots,
+  fetchModels,
+  fetchPortfolios,
+  fetchScreeningList,
+  runPortfolioAttribution,
+  runPredictionTracking,
+  type AttributionResult,
+  type ModelCompareRow,
+  type ModelSnapshot,
+  type PredictionTrackResult,
+} from '../api/mlFactor'
+import { ErrorState, Loading } from '../components/StateViews'
+import { formatNumber, formatPercent, pctClass } from '../utils/format'
+
+type Status = 'idle' | 'running' | 'done' | 'failed'
+type TabKey = 'predictions' | 'attribution' | 'models'
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'predictions', label: '预测跟踪' },
+  { key: 'attribution', label: '组合归因' },
+  { key: 'models', label: '模型对比' },
+]
+
+const fmtPct = (v: number | null | undefined) => formatPercent(v == null ? v : v * 100)
+
+export default function MlSignalLabPage() {
+  const { palette } = useTheme()
+  const [activeTab, setActiveTab] = useState<TabKey>('predictions')
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>信号实验室</h2>
+          <p className="desc">预测信号滚动跟踪 · 组合因子暴露归因 · 模型训练快照对比</p>
+        </div>
+      </div>
+      <div className="seg mb-3" role="group" style={{ flexWrap: 'wrap' }}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`seg-item ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'predictions' && <PredictionsTab palette={palette} />}
+      {activeTab === 'attribution' && <AttributionTab palette={palette} />}
+      {activeTab === 'models' && <ModelsTab />}
+    </div>
+  )
+}
+
+type Palette = ReturnType<typeof useTheme>['palette']
+
+// ================= 预测跟踪 =================
+
+function PredictionsTab({ palette }: { palette: Palette }) {
+  const [status, setStatus] = useState<Status>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<PredictionTrackResult | null>(null)
+  const [selected, setSelected] = useState<string>('')
+
+  const submit = async () => {
+    setStatus('running')
+    setError(null)
+    try {
+      const r = await runPredictionTracking({ horizons: [1, 5, 10], top_n: 50 })
+      setResult(r)
+      setSelected(r.model_ids[0] ?? '')
+      setStatus('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '预测跟踪失败')
+      setStatus('failed')
+    }
+  }
+
+  const model = result?.models[selected]
+  const icSeries = useMemo(() => model?.ic_series ?? [], [model])
+
+  const icOption = useMemo(() => {
+    if (icSeries.length === 0) return null
+    return {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 60, right: 20, top: 20, bottom: 28 },
+      xAxis: { type: 'category', data: icSeries.map((p) => p.date), boundaryGap: false },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          type: 'bar',
+          data: icSeries.map((p) => ({
+            value: p.ic,
+            itemStyle: { color: p.ic >= 0 ? palette.teal : '#e8684a' },
+          })),
+          name: '日 IC',
+        },
+      ],
+    }
+  }, [icSeries, palette])
+
+  const topOption = useMemo(() => {
+    const s = model?.top_n_series ?? []
+    if (s.length === 0) return null
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtPct(v) },
+      legend: { top: 0 },
+      grid: { left: 60, right: 20, top: 34, bottom: 28 },
+      xAxis: { type: 'category', data: s.map((p) => p.date), boundaryGap: false },
+      yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(1)}%` } },
+      series: [
+        {
+          name: 'top-N 收益',
+          type: 'line',
+          showSymbol: false,
+          data: s.map((p) => p.top_return),
+          itemStyle: { color: palette.accent },
+        },
+        {
+          name: '基准（全截面）',
+          type: 'line',
+          showSymbol: false,
+          data: s.map((p) => p.universe_return),
+          itemStyle: { color: '#999' },
+        },
+      ],
+    }
+  }, [model, palette])
+
+  const consistencyOption = useMemo(() => {
+    const s = result?.model_consistency.series ?? []
+    if (s.length === 0) return null
+    return {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 60, right: 20, top: 20, bottom: 28 },
+      xAxis: { type: 'category', data: s.map((p) => p.date), boundaryGap: false },
+      yAxis: { type: 'value', min: -1, max: 1 },
+      series: [
+        {
+          type: 'line',
+          showSymbol: false,
+          data: s.map((p) => p.mean_corr),
+          itemStyle: { color: palette.violet },
+        },
+      ],
+    }
+  }, [result, palette])
+
+  return (
+    <div>
+      <div className="panel mb-3">
+        <div className="panel-body d-flex gap-2 align-items-center">
+          <div className="flex-fill text-faint" style={{ fontSize: 12 }}>
+            全部模型的沉淀预测：逐日预测 IC、top-N 前向实现收益、信号 horizon 衰减、多模型一致性（无日期时后端自动取全部预测）。
+          </div>
+          <button type="button" className="btn btn-primary" disabled={status === 'running'} onClick={submit}>
+            {status === 'running' ? '跟踪中…' : '运行预测跟踪'}
+          </button>
+        </div>
+      </div>
+
+      {error && <ErrorState message={error} />}
+      {status === 'running' && <Loading text="预测跟踪运行中..." />}
+
+      {result && status === 'done' && (
+        <div className="row g-3">
+          <div className="col-12 d-flex gap-2 flex-wrap">
+            {result.model_ids.map((mid) => (
+              <button
+                key={mid}
+                type="button"
+                className={`btn btn-sm ${selected === mid ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setSelected(mid)}
+              >
+                {mid}
+              </button>
+            ))}
+          </div>
+
+          {model && !model.error && (
+            <>
+              <div className="col-12">
+                <div className="stat-grid">
+                  <div className="stat">
+                    <div className="stat-value">{model.summary.n_dates}</div>
+                    <div className="stat-label">预测交易日</div>
+                  </div>
+                  <div className="stat">
+                    <div className="stat-value">
+                      {model.summary.spread_mean != null ? fmtPct(model.summary.spread_mean) : '--'}
+                    </div>
+                    <div className="stat-label">top−bottom 日均价差</div>
+                  </div>
+                  <div className="stat">
+                    <div className="stat-value">
+                      {model.summary.spread_win_rate != null ? fmtPct(model.summary.spread_win_rate) : '--'}
+                    </div>
+                    <div className="stat-label">价差胜率</div>
+                  </div>
+                  <div className="stat">
+                    <div className="stat-value">
+                      {model.summary.top_excess_ir != null ? formatNumber(model.summary.top_excess_ir, 2) : '--'}
+                    </div>
+                    <div className="stat-label">超额信息比</div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-xl-6">
+                <div className="panel h-100">
+                  <div className="panel-head">
+                    <h6 className="panel-title">
+                      <span className="kicker" />
+                      {selected} 逐日预测 IC
+                    </h6>
+                  </div>
+                  <div className="panel-body">{icOption ? <EChart option={icOption} height={300} /> : null}</div>
+                </div>
+              </div>
+              <div className="col-xl-6">
+                <div className="panel h-100">
+                  <div className="panel-head">
+                    <h6 className="panel-title">
+                      <span className="kicker" />
+                      top-N 实现收益 vs 基准（{model.summary.base_horizon}d 前向）
+                    </h6>
+                  </div>
+                  <div className="panel-body">{topOption ? <EChart option={topOption} height={300} /> : null}</div>
+                </div>
+              </div>
+              <div className="col-xl-5">
+                <div className="panel h-100">
+                  <div className="panel-head">
+                    <h6 className="panel-title">
+                      <span className="kicker" />
+                      IC 衰减（horizon）
+                    </h6>
+                  </div>
+                  <div className="panel-body tight table-container" style={{ maxHeight: 240 }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Horizon</th>
+                          <th className="num">IC</th>
+                          <th className="num">ICIR</th>
+                          <th className="num">正率</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(model.ic_by_horizon).map(([h, v]) => (
+                          <tr key={h}>
+                            <td>
+                              <code>{h}d</code>
+                            </td>
+                            <td className={`num ${v.ic_mean != null ? pctClass(v.ic_mean) : ''}`}>
+                              {v.ic_mean != null ? formatNumber(v.ic_mean, 4) : '--'}
+                            </td>
+                            <td className="num">{v.ic_ir != null ? formatNumber(v.ic_ir, 2) : '--'}</td>
+                            <td className="num">{v.ic_positive_ratio != null ? fmtPct(v.ic_positive_ratio) : '--'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div className="col-xl-7">
+                <div className="panel h-100">
+                  <div className="panel-head">
+                    <h6 className="panel-title">
+                      <span className="kicker" />
+                      多模型一致性（同日预测截面秩相关）
+                    </h6>
+                  </div>
+                  <div className="panel-body">{consistencyOption ? <EChart option={consistencyOption} height={280} /> : <div className="text-faint">仅一个模型，无一致性曲线</div>}</div>
+                </div>
+              </div>
+            </>
+          )}
+          {model?.error && <div className="col-12 text-faint">{model.error}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ================= 组合归因 =================
+
+function AttributionTab({ palette }: { palette: Palette }) {
+  const [portfolios, setPortfolios] = useState<Array<{ portfolio_id: string; name?: string }>>([])
+  const [portfolioId, setPortfolioId] = useState('')
+  const [status, setStatus] = useState<Status>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<AttributionResult | null>(null)
+
+  useEffect(() => {
+    fetchPortfolios()
+      .then((r) => {
+        const list = (r.portfolios ?? []) as Array<{ portfolio_id: string; name?: string }>
+        setPortfolios(list)
+        if (list.length > 0) setPortfolioId(list[0].portfolio_id)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const submit = async () => {
+    if (!portfolioId) {
+      setError('请选择组合')
+      return
+    }
+    setStatus('running')
+    setError(null)
+    try {
+      // 默认用体检 accepted 白名单（后端在无指定时自动回退到高覆盖因子）
+      const accepted = await fetchScreeningList({ status: 'accepted' })
+        .then((r) => (r.records ?? []).map((x) => x.factor_id))
+        .catch(() => [] as string[])
+      const r = await runPortfolioAttribution(portfolioId, {
+        factor_ids: accepted.length >= 2 ? accepted : undefined,
+      })
+      setResult(r)
+      setStatus('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '组合归因失败')
+      setStatus('failed')
+    }
+  }
+
+  const contribOption = useMemo(() => {
+    if (!result) return null
+    const entries = Object.entries(result.attribution).sort(
+      (a, b) => Math.abs(b[1].contribution_annualized) - Math.abs(a[1].contribution_annualized),
+    )
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtPct(v) },
+      grid: { left: 120, right: 24, top: 12, bottom: 28 },
+      xAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
+      yAxis: { type: 'category', data: entries.map((e) => e[0]).reverse() },
+      series: [
+        {
+          type: 'bar',
+          data: entries.map(([, v]) => ({
+            value: v.contribution_annualized,
+            itemStyle: { color: v.contribution_annualized >= 0 ? palette.teal : '#e8684a' },
+          })),
+        },
+      ],
+    }
+  }, [result, palette])
+
+  return (
+    <div>
+      <div className="panel mb-3">
+        <div className="panel-body">
+          <div className="row g-2 align-items-end">
+            <div className="col-md-4">
+              <label className="form-label">组合</label>
+              <select className="form-select" value={portfolioId} onChange={(e) => setPortfolioId(e.target.value)}>
+                {portfolios.length === 0 && <option value="">（无组合）</option>}
+                {portfolios.map((p) => (
+                  <option key={p.portfolio_id} value={p.portfolio_id}>
+                    {p.portfolio_id}
+                    {p.name ? ` · ${p.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <button type="button" className="btn btn-primary w-100" disabled={status === 'running'} onClick={submit}>
+                {status === 'running' ? '归因中…' : '运行风格归因'}
+              </button>
+            </div>
+            <div className="col-12 text-faint" style={{ fontSize: 12 }}>
+              组合日收益对因子收益率（逐日截面 Fama-MacBeth 回归）做多元回归：风格画像 + 各因子贡献的年化收益；因子集默认取体检 accepted 白名单。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {error && <ErrorState message={error} />}
+      {status === 'running' && <Loading text="组合归因运行中..." />}
+
+      {result && status === 'done' && (
+        <div className="row g-3">
+          <div className="col-12">
+            <div className="stat-grid">
+              <div className="stat">
+                <div className="stat-value">{fmtPct(result.portfolio_summary.annualized_return)}</div>
+                <div className="stat-label">组合年化收益</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">{fmtPct(result.alpha_annualized)}</div>
+                <div className="stat-label">年化 Alpha（残差）</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">
+                  {result.r_squared != null ? formatNumber(result.r_squared, 3) : '--'}
+                </div>
+                <div className="stat-label">R²（因子解释度）</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">{result.n_positions}</div>
+                <div className="stat-label">持仓数</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-xl-7">
+            <div className="panel h-100">
+              <div className="panel-head">
+                <h6 className="panel-title">
+                  <span className="kicker" />
+                  风格贡献（年化）
+                </h6>
+              </div>
+              <div className="panel-body">{contribOption ? <EChart option={contribOption} height={320} /> : null}</div>
+            </div>
+          </div>
+          <div className="col-xl-5">
+            <div className="panel h-100">
+              <div className="panel-head">
+                <h6 className="panel-title">
+                  <span className="kicker" />
+                  因子暴露明细
+                </h6>
+              </div>
+              <div className="panel-body tight table-container" style={{ maxHeight: 340 }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>因子</th>
+                      <th className="num">beta</th>
+                      <th className="num">t 值</th>
+                      <th className="num">年化贡献</th>
+                      <th className="num">当前暴露(z)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(result.attribution)
+                      .sort((a, b) => Math.abs(b[1].contribution_annualized) - Math.abs(a[1].contribution_annualized))
+                      .map(([f, v]) => (
+                        <tr key={f}>
+                          <td>
+                            <code>{f}</code>
+                          </td>
+                          <td className="num">{formatNumber(v.beta, 2)}</td>
+                          <td className="num">{v.t_stat != null ? formatNumber(v.t_stat, 1) : '--'}</td>
+                          <td className={`num ${pctClass(v.contribution_annualized)}`}>
+                            {fmtPct(v.contribution_annualized)}
+                          </td>
+                          <td className="num">
+                            {result.current_exposure[f] != null ? formatNumber(result.current_exposure[f], 2) : '--'}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ================= 模型对比 =================
+
+function ModelsTab() {
+  const [models, setModels] = useState<Array<{ model_id: string; model_name?: string }>>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [snapshots, setSnapshots] = useState<ModelSnapshot[]>([])
+  const [compareRows, setCompareRows] = useState<ModelCompareRow[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    fetchModels()
+      .then((r) => {
+        const list = (r.models ?? []) as Array<{ model_id: string; model_name?: string }>
+        setModels(list)
+        if (list.length > 0) {
+          setSelectedIds([list[0].model_id])
+          loadSnapshots(list[0].model_id)
+        }
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const loadSnapshots = (modelId: string) => {
+    fetchModelSnapshots(modelId)
+      .then((r) => setSnapshots(r.records ?? []))
+      .catch(() => setSnapshots([]))
+  }
+
+  const toggle = (mid: string) => {
+    setSelectedIds((prev) => (prev.includes(mid) ? prev.filter((x) => x !== mid) : [...prev, mid]))
+  }
+
+  const runCompare = async () => {
+    if (selectedIds.length === 0) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await compareModels(selectedIds)
+      setCompareRows(r.models ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '模型对比失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const metricKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const row of compareRows) {
+      if (row.metrics) Object.keys(row.metrics).forEach((k) => keys.add(k))
+    }
+    return [...keys]
+  }, [compareRows])
+
+  const metricVal = (v: unknown) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? formatNumber(n, 4) : String(v ?? '--')
+  }
+
+  return (
+    <div>
+      <div className="panel mb-3">
+        <div className="panel-body">
+          <div className="d-flex gap-3 flex-wrap align-items-center">
+            {models.map((m) => (
+              <label key={m.model_id} className="d-flex gap-1 align-items-center" style={{ fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(m.model_id)}
+                  onChange={() => toggle(m.model_id)}
+                />
+                <code>{m.model_id}</code>
+                {m.model_name ? <span className="text-faint">{m.model_name}</span> : null}
+              </label>
+            ))}
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || selectedIds.length === 0} onClick={runCompare}>
+              {busy ? '对比中…' : '对比最新训练快照'}
+            </button>
+          </div>
+          <div className="text-faint mt-2" style={{ fontSize: 12 }}>
+            每次训练成功后自动保存快照（超参 + 因子集 + 数据窗口 + 指标）；勾选模型后按各自最新快照并排对比。
+            下方为当前选中首个模型的快照轨迹（点击其它模型名称切换查看）。
+          </div>
+        </div>
+      </div>
+
+      {error && <ErrorState message={error} />}
+
+      {compareRows.length > 0 && (
+        <div className="panel mb-3">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              A/B 对比（最新快照）
+            </h6>
+          </div>
+          <div className="panel-body tight table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>类型</th>
+                  <th>训练时间</th>
+                  <th>训练窗口</th>
+                  <th className="num">特征数</th>
+                  {metricKeys.map((k) => (
+                    <th key={k} className="num">
+                      {k}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {compareRows.map((row) => (
+                  <tr key={row.model_id}>
+                    <td>
+                      <code>{row.model_id}</code>
+                      {row.error ? <span className="text-faint">（{row.error}）</span> : null}
+                    </td>
+                    <td>{row.model_type ?? '--'}</td>
+                    <td className="text-faint">{row.trained_at ?? '--'}</td>
+                    <td className="text-faint" style={{ fontSize: 12 }}>
+                      {row.train_window?.[0] ?? '?'} ~ {row.train_window?.[1] ?? '?'}
+                    </td>
+                    <td className="num">{row.n_factors}</td>
+                    {metricKeys.map((k) => (
+                      <td key={k} className="num">
+                        {row.metrics ? metricVal(row.metrics[k]) : '--'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {snapshots.length > 0 && (
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              {snapshots[0].model_id} 训练快照轨迹（{snapshots.length} 次）
+            </h6>
+          </div>
+          <div className="panel-body tight table-container" style={{ maxHeight: 420 }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>训练时间</th>
+                  <th>数据窗口</th>
+                  <th className="num">特征数</th>
+                  <th>因子集</th>
+                  <th>超参</th>
+                  <th>指标</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshots.map((s) => (
+                  <tr key={s.snapshot_id}>
+                    <td>
+                      <code>{s.snapshot_id}</code>
+                    </td>
+                    <td className="text-faint">{s.created_at}</td>
+                    <td className="text-faint" style={{ fontSize: 12 }}>
+                      {s.train_start_date ?? '?'} ~ {s.train_end_date ?? '?'}
+                    </td>
+                    <td className="num">{(s.factor_list ?? []).length}</td>
+                    <td className="text-faint" style={{ fontSize: 11, maxWidth: 220 }}>
+                      {(s.factor_list ?? []).join(', ')}
+                    </td>
+                    <td className="text-faint" style={{ fontSize: 11, maxWidth: 200 }}>
+                      {JSON.stringify(s.model_params ?? {})}
+                    </td>
+                    <td className="text-faint" style={{ fontSize: 11, maxWidth: 200 }}>
+                      {JSON.stringify(s.metrics ?? {})}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

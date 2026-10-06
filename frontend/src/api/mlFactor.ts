@@ -543,6 +543,8 @@ export interface QuantilePortfolioResult {
   groups_summary: Record<string, QuantilePerfSummary>
   long_short_summary: QuantilePerfSummary
   avg_turnover: Record<string, number | null>
+  cost_sensitivity?: Record<string, QuantilePerfSummary>
+  yearly_breakdown?: Record<string, { n_periods: number; long_short: QuantilePerfSummary }>
 }
 
 export const runQuantilePortfolioBacktest = async (body: {
@@ -553,6 +555,7 @@ export const runQuantilePortfolioBacktest = async (body: {
   n_quantiles: number
   cost_bps: number
   min_stocks?: number
+  cost_bps_list?: number[]
 }): Promise<QuantilePortfolioResult> => {
   try {
     return await rawPost<QuantilePortfolioResult>(
@@ -564,3 +567,246 @@ export const runQuantilePortfolioBacktest = async (body: {
     throw new Error(extractApiError(e, '分位组合回测失败'))
   }
 }
+
+// ================= IC 衰减分析 =================
+export interface IcHorizonSummary {
+  ic_mean: number
+  ic_std: number
+  ic_ir: number
+  ic_positive_ratio: number
+  t_stat: number
+  n_dates: number
+  error?: string
+}
+
+export interface IcDecayResult {
+  factor_id: string
+  forward_periods: number[]
+  rolling_window: number
+  ic_by_horizon: Record<string, IcHorizonSummary>
+  ic_half_life_days: number | null
+  rolling_ic: Array<{ date: string; rolling_ic: number }>
+  yearly_ic: Record<string, Record<string, number | null>>
+}
+
+export const runIcDecayAnalysis = async (body: {
+  factor_id: string
+  start_date?: string
+  end_date?: string
+  forward_periods?: number[]
+  rolling_window?: number
+  min_stocks?: number
+}): Promise<IcDecayResult> => {
+  try {
+    return await rawPost<IcDecayResult>('/ml-factor/factor/analysis/ic-decay', body, 300_000)
+  } catch (e) {
+    throw new Error(extractApiError(e, 'IC 衰减分析失败'))
+  }
+}
+
+// ================= 因子体检与生命周期 =================
+export interface ScreeningMetrics {
+  ic_mean?: number
+  ic_ir?: number
+  ic_positive_ratio?: number
+  t_stat?: number
+  monotonicity?: number | null
+  rank_autocorr?: number | null
+  avg_coverage?: number
+  n_sections?: number
+  max_abs_corr?: number | null
+  most_correlated?: string | null
+  error?: string
+}
+
+export interface ScreeningReport {
+  screened_at: string
+  start_date: string
+  end_date: string
+  forward_period: number
+  n_factors: number
+  factors: Record<string, ScreeningMetrics>
+}
+
+export interface ScreeningRecord {
+  factor_id: string
+  screened_at: string
+  status: string
+  note: string
+  metrics: ScreeningMetrics
+}
+
+export const runFactorScreening = async (body: {
+  factor_ids?: string[]
+  start_date?: string
+  end_date?: string
+  forward_period?: number
+  sample_stride?: number
+  save?: boolean
+}): Promise<ScreeningReport> => {
+  try {
+    return await rawPost<ScreeningReport>('/ml-factor/factor/screening/run', body, 600_000)
+  } catch (e) {
+    throw new Error(extractApiError(e, '因子体检失败'))
+  }
+}
+
+export const fetchScreeningList = (params?: { status?: string }) =>
+  rawGet<{ records: ScreeningRecord[]; count: number }>('/ml-factor/factor/screening/list', params)
+
+export const setScreeningStatus = (body: { factor_id: string; status: string; note?: string }) =>
+  rawPost<{ factor_id: string; status: string }>('/ml-factor/factor/screening/status', body)
+
+export const fetchAcceptedFactors = () =>
+  rawGet<{ factor_ids: string[] }>('/ml-factor/factor/screening/accepted')
+
+export const decorrelateFactors = (body: {
+  factor_ids: string[]
+  threshold?: number
+  start_date?: string
+  end_date?: string
+}) =>
+  rawPost<{ kept: string[]; dropped: Array<{ factor_id: string; correlated_with?: string }>; threshold: number }>(
+    '/ml-factor/factor/screening/decorrelate',
+    body,
+    300_000,
+  )
+
+// ================= 因子数据质量监控 =================
+export interface QualityAlert {
+  type: string
+  factor_id?: string
+  partition: string
+  detail: string
+}
+
+export interface QualityReport {
+  scanned_partitions: number
+  first_partition: string
+  last_partition: string
+  coverage_trend: { partitions: string[]; n_factors: number; coverage_median: number[] }
+  alerts: QualityAlert[]
+  n_alerts: number
+  partition_gaps: Array<{ type: string; detail: string; dates?: string[] }>
+}
+
+export const fetchQualityReport = (lastN = 60) =>
+  rawGet<QualityReport>('/ml-factor/factor/quality-report', { last_n_partitions: lastN })
+
+// ================= 预测信号跟踪 =================
+export interface PredictionTrackModel {
+  ic_series: Array<{ date: string; ic: number }>
+  top_n_series: Array<{
+    date: string
+    top_return: number
+    bottom_return: number
+    universe_return: number
+    spread: number
+  }>
+  ic_by_horizon: Record<string, { ic_mean: number | null; ic_ir: number | null; ic_positive_ratio: number | null; n_dates: number }>
+  summary: {
+    base_horizon: number
+    n_dates: number
+    spread_mean: number | null
+    spread_win_rate: number | null
+    top_excess_mean: number | null
+    top_excess_ir: number | null
+  }
+  error?: string
+}
+
+export interface PredictionTrackResult {
+  model_ids: string[]
+  start_date: string
+  end_date: string
+  horizons: number[]
+  models: Record<string, PredictionTrackModel>
+  model_consistency: {
+    series: Array<{ date: string; mean_corr: number }>
+    by_pair: Record<string, { mean: number; n_dates: number }>
+  }
+}
+
+export const runPredictionTracking = async (body: {
+  model_ids?: string[]
+  start_date?: string
+  end_date?: string
+  horizons?: number[]
+  top_n?: number
+}): Promise<PredictionTrackResult> => {
+  try {
+    return await rawPost<PredictionTrackResult>('/ml-factor/predictions/track', body, 300_000)
+  } catch (e) {
+    throw new Error(extractApiError(e, '预测跟踪失败'))
+  }
+}
+
+// ================= 组合因子暴露归因 =================
+export interface AttributionResult {
+  portfolio_id: string
+  n_positions: number
+  start_date: string
+  end_date: string
+  factor_ids: string[]
+  portfolio_summary: { n_days: number; total_return: number; annualized_return: number; annualized_vol: number }
+  alpha_annualized: number
+  r_squared: number | null
+  attribution: Record<string, {
+    beta: number
+    t_stat: number | null
+    factor_return_annualized: number
+    contribution_annualized: number
+  }>
+  current_exposure: Record<string, number>
+}
+
+export const runPortfolioAttribution = async (portfolioId: string, body: {
+  factor_ids?: string[]
+  start_date?: string
+  end_date?: string
+}): Promise<AttributionResult> => {
+  try {
+    return await rawPost<AttributionResult>(
+      `/ml-factor/portfolio/${encodeURIComponent(portfolioId)}/attribution`,
+      body,
+      300_000,
+    )
+  } catch (e) {
+    throw new Error(extractApiError(e, '组合归因失败'))
+  }
+}
+
+// ================= 模型训练快照与对比 =================
+export interface ModelSnapshot {
+  snapshot_id: number
+  model_id: string
+  model_name: string | null
+  model_type: string | null
+  factor_list: string[]
+  model_params: Record<string, unknown>
+  training_config: Record<string, unknown>
+  train_start_date: string | null
+  train_end_date: string | null
+  metrics: Record<string, unknown>
+  created_at: string
+}
+
+export const fetchModelSnapshots = (modelId: string) =>
+  rawGet<{ records: ModelSnapshot[]; count: number }>(
+    `/ml-factor/models/${encodeURIComponent(modelId)}/snapshots`,
+  )
+
+export interface ModelCompareRow {
+  model_id: string
+  model_name: string | null
+  model_type: string | null
+  snapshot_id: number
+  trained_at: string
+  train_window: Array<string | null>
+  n_factors: number
+  metrics: Record<string, unknown>
+  error?: string
+}
+
+export const compareModels = (modelIds: string[]) =>
+  rawPost<{ models: ModelCompareRow[] }>('/ml-factor/models/compare', { model_ids: modelIds })
