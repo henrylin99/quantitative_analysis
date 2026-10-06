@@ -403,11 +403,29 @@ class Alpha191FactorService:
     @staticmethod
     def _to_long(wide: pd.DataFrame, factor_id: str) -> pd.DataFrame:
         """宽面板 → 标准长表。落库前统一清洗 ±inf（零方差滚动窗会产出
-        inf，入库会污染下游 z_score 统计），与参考实现的源头清洗同口径。"""
+        inf，入库会污染下游 z_score 统计），与参考实现的源头清洗同口径。
+
+        同时计算截面 percentile_rank / z_score（按 trade_date 分组，与
+        FactorEngine._calculate_factor_stats 同口径）：打分链
+        （stock_scoring）优先消费 z_score，缺失标准化列的因子实际进
+        不了打分体系，这里源头补齐而不是靠事后回填。"""
         wide = wide.replace([np.inf, -np.inf], np.nan)
         long_df = wide.stack().rename("factor_value").reset_index()
         long_df.columns = ["trade_date", "ts_code", "factor_value"]
-        long_df["trade_date"] = long_df["trade_date"].dt.strftime("%Y-%m-%d")
         long_df["factor_id"] = factor_id
         long_df = long_df.dropna(subset=["factor_value"])
-        return long_df[["ts_code", "trade_date", "factor_id", "factor_value"]]
+        # 按 trade_date 分组的截面统计（单因子场景无需再按 factor_id 分）
+        grouped = long_df.groupby("trade_date")["factor_value"]
+        long_df["percentile_rank"] = grouped.rank(pct=True) * 100
+        std = grouped.transform("std")
+        mean = grouped.transform("mean")
+        long_df["z_score"] = np.where(
+            std.fillna(0) > 0,
+            (long_df["factor_value"] - mean) / std.replace(0, np.nan),
+            0.0,
+        )
+        long_df["trade_date"] = long_df["trade_date"].dt.strftime("%Y-%m-%d")
+        return long_df[
+            ["ts_code", "trade_date", "factor_id", "factor_value",
+             "percentile_rank", "z_score"]
+        ]

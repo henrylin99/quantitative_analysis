@@ -32,6 +32,7 @@ const MlScoringPage = lazy(() => import('./pages/MlScoringPage'))
 const MlPortfolioPage = lazy(() => import('./pages/MlPortfolioPage'))
 const MlAnalysisPage = lazy(() => import('./pages/MlAnalysisPage'))
 const MlBacktestPage = lazy(() => import('./pages/MlBacktestPage'))
+const MlFactorLabPage = lazy(() => import('./pages/MlFactorLabPage'))
 const RtIndicatorsPage = lazy(() => import('./pages/RtIndicatorsPage'))
 const RtSignalsPage = lazy(() => import('./pages/RtSignalsPage'))
 const RtMonitorPage = lazy(() => import('./pages/RtMonitorPage'))
@@ -91,6 +92,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/ml-factor/portfolio', label: '投资组合', icon: Briefcase },
       { to: '/ml-factor/analysis', label: '分析报告', icon: PieChart },
       { to: '/ml-factor/backtest', label: '组合回测', icon: Flag },
+      { to: '/ml-factor/factor-lab', label: '因子实验室', icon: FlaskConical },
     ],
   },
   {
@@ -360,6 +362,7 @@ function Shell() {
             <Route path="/ml-factor/portfolio" element={<LazyRoute><MlPortfolioPage /></LazyRoute>} />
             <Route path="/ml-factor/analysis" element={<LazyRoute><MlAnalysisPage /></LazyRoute>} />
             <Route path="/ml-factor/backtest" element={<LazyRoute><MlBacktestPage /></LazyRoute>} />
+            <Route path="/ml-factor/factor-lab" element={<LazyRoute><MlFactorLabPage /></LazyRoute>} />
             <Route path="/realtime-analysis/indicators" element={<LazyRoute><RtIndicatorsPage /></LazyRoute>} />
             <Route path="/realtime-analysis/signals" element={<LazyRoute><RtSignalsPage /></LazyRoute>} />
             <Route path="/realtime-analysis/monitor" element={<LazyRoute><RtMonitorPage /></LazyRoute>} />

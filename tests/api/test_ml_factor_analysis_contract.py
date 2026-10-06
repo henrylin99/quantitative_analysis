@@ -88,3 +88,41 @@ def test_analysis_endpoints_return_page_aligned_payloads(app):
         assert response.status_code == 200
         assert "attachment; filename=ml_factor_analysis_report_" in response.headers["Content-Disposition"]
         assert b'"generated_at": "2024-06-04T00:00:00"' in response.data
+
+
+def test_quantile_portfolio_endpoint_returns_payload(app):
+    client = app.test_client()
+
+    fake = type(
+        "FakeAnalyzer",
+        (),
+        {"quantile_portfolio_backtest": staticmethod(
+            lambda **kwargs: {
+                "factor_id": kwargs["factor_id"],
+                "n_periods": 3,
+                "nav_long_short": [1.0, 1.01, 1.02],
+            }
+        )},
+    )
+
+    with patch(
+        "app.api.ml_factor_api.get_factor_analyzer", return_value=fake,
+    ):
+        response = client.post(
+            "/api/ml-factor/factor/analysis/quantile-portfolio",
+            json={"factor_id": "momentum_20d", "holding_days": 20,
+                  "n_quantiles": 5, "cost_bps": 10},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["factor_id"] == "momentum_20d"
+        assert data["n_periods"] == 3
+
+
+def test_quantile_portfolio_endpoint_requires_factor(app):
+    client = app.test_client()
+    response = client.post(
+        "/api/ml-factor/factor/analysis/quantile-portfolio", json={},
+    )
+    assert response.status_code == 400
+    assert "factor_id" in response.get_json()["error"]

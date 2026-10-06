@@ -139,3 +139,61 @@ def test_insufficient_stocks_reports_empty_summary():
     assert result["summary"]["ic_mean"] is None
     assert result["ic_series"] == []
     assert "message" in result
+
+
+# ----------------------------------------------------------------------
+# 分位组合净值回测
+# ----------------------------------------------------------------------
+
+def test_quantile_portfolio_backtest_monotone_groups():
+    """完美因子：高分组净值 > 低分组，多空净值逐期上行。
+
+    4 只股票分 2 组：G1={C(-1%), D(0.05%)}、G2={A(1%), B(2%)}，
+    持有 2 天非重叠调仓。10 个因子日 → 信号日 5 个 → 完整期 4 个。
+    """
+    result = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4,
+    )
+
+    assert result["n_periods"] == 4
+    g2 = result["groups_summary"]["g2"]
+    g1 = result["groups_summary"]["g1"]
+    assert g2["total_return"] > 0
+    assert g1["total_return"] < g2["total_return"], "完美因子高分组必须跑赢低分组"
+    # 每期多空收益均为正 → 净值单调上行、胜率 1.0
+    assert result["nav_long_short"] == sorted(result["nav_long_short"])
+    assert result["long_short_summary"]["win_rate"] == 1.0
+    # T+1 成交：首个执行日 = 首个信号日的下一交易日
+    assert result["periods"][0]["signal_date"] == "2026-01-05"
+    assert result["periods"][0]["exec_date"] == "2026-01-06"
+    assert result["periods"][0]["next_exec_date"] == "2026-01-08"
+
+
+def test_quantile_portfolio_backtest_cost_deducted_on_turnover():
+    """成本只按换手扣：成员不变时首期建仓全额扣费，此后零换手零费用。"""
+    no_cost = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4, cost_bps=0.0,
+    )
+    with_cost = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4, cost_bps=10.0,
+    )
+
+    first_free = no_cost["periods"][0]["g2_return"]
+    first_cost = with_cost["periods"][0]["g2_return"]
+    # 首期换手 1.0 → 双边费用 2 × 10bps
+    assert first_cost == pytest.approx(first_free - 2 * 10 * 1e-4)
+    # 成员恒定：后续期换手 0、收益与零费口径一致
+    assert with_cost["periods"][1]["g2_turnover"] == 0.0
+    assert with_cost["periods"][1]["g2_return"] == pytest.approx(
+        no_cost["periods"][1]["g2_return"]
+    )
+    # 平均换手 = (1 + 0 + 0 + 0) / 4
+    assert with_cost["avg_turnover"]["g2"] == pytest.approx(0.25)
+
+
+def test_quantile_portfolio_backtest_too_short_range():
+    result = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", start_date="2026-01-05", end_date="2026-01-06",
+        holding_days=20, n_quantiles=2, min_stocks=4,
+    )
+    assert "error" in result

@@ -94,7 +94,36 @@ class TestAlpha001:
         wide = Alpha191Calculator().alpha_001(panel).replace(0.0, np.inf)
         long_df = service._to_long(wide, "alpha_001")
         assert not np.isinf(long_df["factor_value"]).any()
-        assert list(long_df.columns) == ["ts_code", "trade_date", "factor_id", "factor_value"]
+        assert list(long_df.columns) == [
+            "ts_code", "trade_date", "factor_id", "factor_value",
+            "percentile_rank", "z_score",
+        ]
+
+    def test_to_long_contains_cross_sectional_stats(self):
+        """_to_long 须输出截面 percentile_rank / z_score（打分链依赖）。"""
+        service = Alpha191FactorService()
+        dates = pd.date_range("2026-01-05", periods=3, freq="D")
+        wide = pd.DataFrame(
+            {"A.SZ": [1.0, 2.0, 3.0], "B.SZ": [3.0, 2.0, 1.0],
+             "C.SZ": [2.0, 4.0, 2.0]},
+            index=dates,
+        )
+        long_df = service._to_long(wide, "alpha_001")
+
+        # rank：值越大百分位越高；同一截面 rank 均匀铺开
+        day0 = long_df[long_df["trade_date"] == "2026-01-05"]
+        assert day0.set_index("ts_code")["percentile_rank"].to_dict() == pytest.approx(
+            {"A.SZ": 100 / 3, "B.SZ": 100.0, "C.SZ": 200 / 3}
+        )
+        # z_score：截面均值 0、标准差 1
+        assert day0["z_score"].mean() == pytest.approx(0.0, abs=1e-9)
+        assert day0["z_score"].std(ddof=1) == pytest.approx(1.0, abs=1e-9)
+
+        # 常数截面（无波动）→ z_score 守卫为 0 而非 NaN/inf
+        const_wide = pd.DataFrame({"A.SZ": [1.0], "B.SZ": [1.0]}, index=dates[:1])
+        const_long = service._to_long(const_wide, "alpha_002")
+        assert (const_long["z_score"] == 0.0).all()
+        assert const_long["percentile_rank"].notna().all()
 
 
 class TestFactorRegistry:

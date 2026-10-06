@@ -192,6 +192,243 @@ class FactorAnalyzer:
         }
 
     # ------------------------------------------------------------------
+    # 分位组合净值回测
+    # ------------------------------------------------------------------
+
+    def quantile_portfolio_backtest(self, factor_id: str, start_date: str = None,
+                                    end_date: str = None, holding_days: int = 20,
+                                    n_quantiles: int = 5, cost_bps: float = 0.0,
+                                    min_stocks: int = 50) -> Dict[str, Any]:
+        """分位组合净值回测：非重叠调仓的分组净值 + 多空（GN−G1）曲线。
+
+        与 quantile_analysis（单日截面均值统计）互补，这里回答组合层问题：
+        因子分组收益按真实调仓流程复利后净值如何、换手多高、扣费后还剩多少。
+
+        口径：
+        - 调仓：信号日 t 收盘取因子截面分桶（第 1 组因子值最低），
+          t+1 收盘成交，持有 holding_days 个交易日至下一个执行日；
+        - 无前视：因子值在 t 收盘后可得，成交在 t+1；
+        - 非重叠：信号日按 holding_days 间隔取，末个信号日因无完整
+          持有期而剔除（n_periods 为完整期数）；
+        - 成本：cost_bps 为单边费率，每次调仓按单边换手率扣双边费用
+          （全换手 = 2×cost_bps）；
+        - 换手率 = 1 − 与上期成员交集占比（等权满员口径）。
+        """
+        n_quantiles = max(2, int(n_quantiles))
+        holding_days = max(1, int(holding_days))
+        cost_bps = max(0.0, float(cost_bps))
+        min_stocks = max(2 * n_quantiles, int(min_stocks))
+
+        # 未指定区间时默认最近两年：get_values 按分区整读后过滤，
+        # 不设边界会拼接全历史分区（数百个 × 百万行/分区）打爆内存
+        if not start_date or not end_date:
+            store = getattr(self.factor_repo, 'store', None)
+            list_partitions = getattr(store, 'list_partitions', None)
+            if list_partitions is not None:
+                partitions = sorted(list_partitions(
+                    self.factor_repo.TABLE_VALUES, "trade_date"))
+                if not partitions:
+                    return {'error': '因子库为空', 'factor_id': factor_id}
+                end_date = end_date or partitions[-1]
+                if not start_date:
+                    start_date = (
+                        pd.Timestamp(end_date) - pd.DateOffset(years=2)
+                    ).strftime('%Y-%m-%d')
+
+        factor_df = self.factor_repo.get_values(
+            factor_ids=[factor_id], start_date=start_date, end_date=end_date,
+        )
+        if factor_df.empty:
+            return {'error': '未找到因子值', 'factor_id': factor_id}
+        factor_df = factor_df[['ts_code', 'trade_date', 'factor_value']].dropna(
+            subset=['factor_value']
+        ).copy()
+        factor_df['trade_date'] = pd.to_datetime(
+            factor_df['trade_date'], errors='coerce', format='mixed'
+        ).dropna()
+        if factor_df.empty:
+            return {'error': '因子值日期无效', 'factor_id': factor_id}
+
+        factor_wide = factor_df.pivot_table(
+            index='trade_date', columns='ts_code', values='factor_value',
+            aggfunc='first',
+        ).sort_index()
+
+        # 行情面板：从首个信号日到区间末 + 持有期缓冲，只需 close
+        all_dates = factor_wide.index
+        price_start = all_dates[0].strftime('%Y-%m-%d')
+        price_end = (all_dates[-1] + pd.Timedelta(
+            days=holding_days * 3 + 10
+        )).strftime('%Y-%m-%d')
+        try:
+            prices = self.data_reader.get_return_prices(
+                start_date=price_start, end_date=price_end,
+            )
+        except Exception as e:
+            logger.error(f"分位组合回测读取行情失败: {e}")
+            return {'error': f'读取行情失败: {e}', 'factor_id': factor_id}
+        if prices.empty:
+            return {'error': '未找到行情数据', 'factor_id': factor_id}
+        close_wide = prices.pivot_table(
+            index=pd.to_datetime(prices['trade_date'], format='mixed'),
+            columns='ts_code', values='close', aggfunc='first',
+        ).sort_index()
+        if close_wide.empty:
+            return {'error': '行情面板为空', 'factor_id': factor_id}
+
+        # 信号日 = 因子面板交易日按 holding_days 等间隔抽取
+        signal_dates = list(all_dates[::holding_days])
+
+        # 执行日 = 信号日的下一个交易日（行情面板口径）
+        price_dates = close_wide.index
+        exec_of = {}
+        for t in signal_dates:
+            later = price_dates[price_dates > t]
+            if len(later) == 0:
+                continue
+            exec_of[t] = later[0]
+
+        # 末个信号日无完整持有期，剔除：需要存在下一个信号日的执行日
+        usable = [t for t in signal_dates if t in exec_of]
+        periods = []
+        for i, t in enumerate(usable):
+            if i + 1 >= len(usable) or usable[i + 1] not in exec_of:
+                continue
+            periods.append((t, exec_of[t], exec_of[usable[i + 1]]))
+
+        if not periods:
+            return {'error': '区间内无完整持有期，请扩大日期范围或缩短持有期',
+                    'factor_id': factor_id}
+
+        period_records: List[Dict[str, Any]] = []
+        prev_members: Dict[int, set] = {}
+        group_returns: Dict[int, List[float]] = {q: [] for q in range(1, n_quantiles + 1)}
+        ls_returns: List[float] = []
+
+        for t, exec_d, next_exec in periods:
+            cross = factor_wide.loc[t].dropna()
+            if len(cross) < min_stocks:
+                continue
+            pct_rank = cross.rank(pct=True, method='average')
+            bucket = np.minimum(
+                (pct_rank * n_quantiles).apply(np.ceil).astype(int), n_quantiles,
+            )
+            members = {
+                q: set(bucket.index[bucket == q]) for q in range(1, n_quantiles + 1)
+            }
+
+            # 个股期间收益：执行日收盘 → 下个执行日收盘；两端缺价则剔除
+            entry = close_wide.loc[exec_d]
+            exit_ = close_wide.loc[next_exec]
+            period_ret: Dict[str, float] = {}
+            for code in cross.index:
+                p0, p1 = entry.get(code), exit_.get(code)
+                if pd.notna(p0) and pd.notna(p1) and p0 > 0:
+                    period_ret[code] = float(p1) / float(p0) - 1.0
+
+            row: Dict[str, Any] = {
+                'signal_date': t.strftime('%Y-%m-%d'),
+                'exec_date': exec_d.strftime('%Y-%m-%d'),
+                'next_exec_date': next_exec.strftime('%Y-%m-%d'),
+            }
+            costs = {}
+            for q in range(1, n_quantiles + 1):
+                codes = [c for c in members[q] if c in period_ret]
+                if not codes:
+                    row[f'g{q}_return'] = None
+                    costs[q] = 0.0
+                    continue
+                gross = float(np.mean([period_ret[c] for c in codes]))
+                if q in prev_members and prev_members[q]:
+                    overlap = len(prev_members[q] & set(codes)) / len(codes)
+                    turnover = 1.0 - overlap
+                else:
+                    turnover = 1.0  # 建仓满换手
+                cost = turnover * 2.0 * cost_bps * 1e-4
+                row[f'g{q}_return'] = gross - cost
+                row[f'g{q}_turnover'] = turnover
+                costs[q] = cost
+                group_returns[q].append(gross - cost)
+            prev_members = members
+
+            r_hi, r_lo = row.get(f'g{n_quantiles}_return'), row.get('g1_return')
+            if r_hi is not None and r_lo is not None:
+                row['long_short_return'] = r_hi - r_lo
+                ls_returns.append(r_hi - r_lo)
+            period_records.append(row)
+
+        if not period_records or not ls_returns:
+            return {'error': '有效调仓期不足（截面股票数过少）', 'factor_id': factor_id,
+                    'min_stocks': min_stocks}
+
+        def _nav_series(returns: List[float]) -> List[float]:
+            nav, cur = [], 1.0
+            for r in returns:
+                cur *= 1.0 + r
+                nav.append(round(cur, 6))
+            return nav
+
+        periods_per_year = TRADING_DAYS_PER_YEAR / holding_days
+        groups_summary = {}
+        for q in range(1, n_quantiles + 1):
+            groups_summary[f'g{q}'] = self._period_perf_summary(
+                group_returns[q], periods_per_year,
+            )
+        ls_summary = self._period_perf_summary(ls_returns, periods_per_year)
+
+        return {
+            'factor_id': factor_id,
+            'holding_days': holding_days,
+            'n_quantiles': n_quantiles,
+            'cost_bps': cost_bps,
+            'n_periods': len(period_records),
+            'first_signal_date': period_records[0]['signal_date'],
+            'last_signal_date': period_records[-1]['signal_date'],
+            'periods': period_records,
+            'nav': {
+                f'g{q}': _nav_series(group_returns[q])
+                for q in range(1, n_quantiles + 1)
+            },
+            'nav_long_short': _nav_series(ls_returns),
+            'groups_summary': groups_summary,
+            'long_short_summary': ls_summary,
+            'avg_turnover': {
+                f'g{q}': float(np.mean([
+                    p[f'g{q}_turnover'] for p in period_records
+                    if p.get(f'g{q}_turnover') is not None
+                ])) if any(p.get(f'g{q}_turnover') is not None
+                           for p in period_records) else None
+                for q in range(1, n_quantiles + 1)
+            },
+        }
+
+    @staticmethod
+    def _period_perf_summary(period_returns: List[float],
+                             periods_per_year: float) -> Dict[str, Any]:
+        """按期收益序列的常用绩效指标（净值口径，非截面均值口径）。"""
+        rets = np.array(period_returns, dtype=float)
+        nav = np.cumprod(1.0 + rets)
+        total_return = float(nav[-1] - 1.0) if len(nav) else 0.0
+        n = len(rets)
+        mean, std = float(rets.mean()), float(rets.std(ddof=1)) if n > 1 else 0.0
+        annualized_return = float(np.expm1(mean * periods_per_year)) if n else 0.0
+        annualized_vol = std * np.sqrt(periods_per_year) if n > 1 else 0.0
+        sharpe = mean / std * np.sqrt(periods_per_year) if std > 0 else 0.0
+        t_stat = mean / std * np.sqrt(n) if std > 0 and n > 1 else 0.0
+        peak = np.maximum.accumulate(nav)
+        drawdown = nav / peak - 1.0
+        return {
+            'total_return': total_return,
+            'annualized_return': annualized_return,
+            'annualized_vol': float(annualized_vol),
+            'sharpe': float(sharpe),
+            't_stat': float(t_stat),
+            'max_drawdown': float(drawdown.min()) if n else 0.0,
+            'win_rate': float((rets > 0).mean()) if n else 0.0,
+            'n_periods': int(n),
+        }
+
+    # ------------------------------------------------------------------
     # 因子相关性
     # ------------------------------------------------------------------
 

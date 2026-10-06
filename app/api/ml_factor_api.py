@@ -896,6 +896,32 @@ def factor_quantile_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/factor/analysis/quantile-portfolio', methods=['POST'])
+def factor_quantile_portfolio_backtest():
+    """分位组合净值回测：非重叠调仓分组净值 + 多空曲线 + 换手/成本"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_id = data.get('factor_id')
+        if not factor_id:
+            return jsonify({'error': '缺少必需参数: factor_id'}), 400
+
+        result = get_factor_analyzer().quantile_portfolio_backtest(
+            factor_id=factor_id,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            holding_days=int(data.get('holding_days', 20)),
+            n_quantiles=int(data.get('n_quantiles', 5)),
+            cost_bps=float(data.get('cost_bps', 0.0)),
+            min_stocks=int(data.get('min_stocks', 50)),
+        )
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"分位组合净值回测失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/factor/analysis/correlation', methods=['POST'])
 def factor_correlation_analysis():
     """因子间截面秩相关矩阵（识别冗余因子）"""
