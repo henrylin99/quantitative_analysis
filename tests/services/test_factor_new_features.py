@@ -235,7 +235,8 @@ def test_portfolio_attribution(tmp_path):
     assert attr['contribution_annualized'] > 0
     assert result['current_exposure']['perfect'] > 1.0
     assert result['portfolio_summary']['n_days'] >= 20
-    assert result['r_squared'] == pytest.approx(1.0, abs=1e-6)
+    # 完美因子 + 微岭正则（共线稳定用）：R² 无限接近 1 但有轻微收缩
+    assert result['r_squared'] == pytest.approx(1.0, abs=1e-3)
 
 
 # ---------------------------------------------------------------------------
