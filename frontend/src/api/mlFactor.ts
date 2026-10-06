@@ -510,3 +510,57 @@ export const fetchBacktestRunResult = async (runId: string): Promise<MlBacktestR
   if (!r.ready || !r.result) throw new Error(r.message || `回测未完成（${r.status ?? 'unknown'}）`)
   return r.result
 }
+
+// ================= 因子实验室：分位组合净值回测 =================
+export interface QuantilePerfSummary {
+  total_return: number
+  annualized_return: number
+  annualized_vol: number
+  sharpe: number
+  t_stat: number
+  max_drawdown: number
+  win_rate: number
+  n_periods: number
+}
+
+export interface QuantilePortfolioResult {
+  factor_id: string
+  holding_days: number
+  n_quantiles: number
+  cost_bps: number
+  n_periods: number
+  first_signal_date: string
+  last_signal_date: string
+  periods: Array<{
+    signal_date: string
+    exec_date: string
+    next_exec_date: string
+    long_short_return?: number | null
+    [key: string]: unknown
+  }>
+  nav: Record<string, number[]>
+  nav_long_short: number[]
+  groups_summary: Record<string, QuantilePerfSummary>
+  long_short_summary: QuantilePerfSummary
+  avg_turnover: Record<string, number | null>
+}
+
+export const runQuantilePortfolioBacktest = async (body: {
+  factor_id: string
+  start_date?: string
+  end_date?: string
+  holding_days: number
+  n_quantiles: number
+  cost_bps: number
+  min_stocks?: number
+}): Promise<QuantilePortfolioResult> => {
+  try {
+    return await rawPost<QuantilePortfolioResult>(
+      '/ml-factor/factor/analysis/quantile-portfolio',
+      body,
+      300_000,
+    )
+  } catch (e) {
+    throw new Error(extractApiError(e, '分位组合回测失败'))
+  }
+}
