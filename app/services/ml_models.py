@@ -340,7 +340,25 @@ class MLModelManager:
             merged_df = merged_df.sort_values(['trade_date', 'ts_code']).reset_index(drop=True)
 
             # 分离特征和目标变量
-            feature_columns = model_def["factor_list"]
+            feature_columns = list(model_def["factor_list"])
+            config = model_def.get("training_config") or {}
+            if config.get("decorrelate_features") and len(feature_columns) > 1:
+                # 训练前共线性去冗余：|ρ|≥0.7 的因子只留一个（默认关闭）
+                from app.services.factor_screening import FactorScreeningService
+                selection = FactorScreeningService().select_low_collinearity(
+                    feature_columns,
+                    threshold=float(config.get("decorrelate_threshold", 0.7)),
+                    start_date=start_date, end_date=end_date,
+                )
+                if selection.get("kept") and len(selection["kept"]) < len(feature_columns):
+                    logger.info(
+                        f"特征去冗余: {len(feature_columns)} → "
+                        f"{len(selection['kept'])}，剔除 "
+                        f"{[d['factor_id'] for d in selection.get('dropped', [])]}"
+                    )
+                    feature_columns = selection["kept"]
+                    merged_df = merged_df.dropna(subset=[
+                        c for c in feature_columns if c in merged_df.columns])
             X = merged_df[feature_columns]
             y = merged_df['target']
             
@@ -585,6 +603,22 @@ class MLModelManager:
                 logger.warning(f"写入训练窗口元数据失败: {meta_error}")
 
             logger.info(f"模型训练完成: {model_id}, 测试R²: {test_score:.4f}")
+            # 训练快照：超参/特征/数据窗口/指标留痕，供 A/B 对比与回溯
+            try:
+                from app.services.model_experiments import TrainingSnapshotRepository
+                TrainingSnapshotRepository().save_snapshot(
+                    model_id=model_id,
+                    model_name=model_def.get("model_name"),
+                    model_type=model_def.get("model_type"),
+                    factor_list=model_def.get("factor_list") or [],
+                    model_params=model_def.get("model_params") or {},
+                    training_config=model_def.get("training_config") or {},
+                    train_start_date=str(start_date),
+                    train_end_date=str(end_date),
+                    metrics=metrics,
+                )
+            except Exception as snap_error:
+                logger.warning(f"保存训练快照失败: {snap_error}")
             report(100.0, "训练完成", "训练任务已完成")
             return {
                 'success': True,

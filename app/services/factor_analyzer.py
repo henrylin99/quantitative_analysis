@@ -198,7 +198,9 @@ class FactorAnalyzer:
     def quantile_portfolio_backtest(self, factor_id: str, start_date: str = None,
                                     end_date: str = None, holding_days: int = 20,
                                     n_quantiles: int = 5, cost_bps: float = 0.0,
-                                    min_stocks: int = 50) -> Dict[str, Any]:
+                                    min_stocks: int = 50,
+                                    cost_bps_list: List[float] = None
+                                    ) -> Dict[str, Any]:
         """分位组合净值回测：非重叠调仓的分组净值 + 多空（GN−G1）曲线。
 
         与 quantile_analysis（单日截面均值统计）互补，这里回答组合层问题：
@@ -293,7 +295,13 @@ class FactorAnalyzer:
         period_records: List[Dict[str, Any]] = []
         prev_members: Dict[int, set] = {}
         group_returns: Dict[int, List[float]] = {q: [] for q in range(1, n_quantiles + 1)}
+        # 毛收益与换手按腿分开记录，成本敏感性与分年拆解在此之上重算
+        gross_returns: Dict[int, List[float]] = {q: [] for q in range(1, n_quantiles + 1)}
+        turnover_records: Dict[int, List[float]] = {q: [] for q in range(1, n_quantiles + 1)}
+        exec_years: List[int] = []
         ls_returns: List[float] = []
+        ls_gross: List[float] = []
+        ls_turnover: List[float] = []
 
         for t, exec_d, next_exec in periods:
             cross = factor_wide.loc[t].dropna()
@@ -327,6 +335,8 @@ class FactorAnalyzer:
                 if not codes:
                     row[f'g{q}_return'] = None
                     costs[q] = 0.0
+                    gross_returns[q].append(np.nan)
+                    turnover_records[q].append(np.nan)
                     continue
                 gross = float(np.mean([period_ret[c] for c in codes]))
                 if q in prev_members and prev_members[q]:
@@ -339,13 +349,21 @@ class FactorAnalyzer:
                 row[f'g{q}_turnover'] = turnover
                 costs[q] = cost
                 group_returns[q].append(gross - cost)
+                gross_returns[q].append(gross)
+                turnover_records[q].append(turnover)
             prev_members = members
 
             r_hi, r_lo = row.get(f'g{n_quantiles}_return'), row.get('g1_return')
             if r_hi is not None and r_lo is not None:
                 row['long_short_return'] = r_hi - r_lo
                 ls_returns.append(r_hi - r_lo)
+                ls_gross.append(
+                    gross_returns[n_quantiles][-1] - gross_returns[1][-1])
+                ls_turnover.append(
+                    turnover_records[n_quantiles][-1]
+                    + turnover_records[1][-1])
             period_records.append(row)
+            exec_years.append(exec_d.year)
 
         if not period_records or not ls_returns:
             return {'error': '有效调仓期不足（截面股票数过少）', 'factor_id': factor_id,
@@ -366,6 +384,30 @@ class FactorAnalyzer:
             )
         ls_summary = self._period_perf_summary(ls_returns, periods_per_year)
 
+        # 成本敏感性：净多空 = 毛多空 − 2×cost×(高组换手 + 低组换手)，逐期重算
+        cost_grid = [c for c in (cost_bps_list or [])]
+        if cost_bps not in cost_grid:
+            cost_grid.append(cost_bps)
+        ls_gross_arr = np.array(ls_gross, dtype=float)
+        ls_turn_arr = np.array(ls_turnover, dtype=float)
+        cost_sensitivity = {}
+        for cost in sorted(set(float(c) for c in cost_grid)):
+            if cost < 0:
+                continue
+            net = ls_gross_arr - 2.0 * cost * 1e-4 * ls_turn_arr
+            summary = self._period_perf_summary(list(net), periods_per_year)
+            cost_sensitivity[f'{float(cost):g}'] = summary
+
+        # 分年拆解：按执行日年份分组统计多空（基准费率口径）
+        yearly_breakdown = {}
+        for year in sorted(set(exec_years)):
+            idx = [i for i, y in enumerate(exec_years) if y == year]
+            yearly_breakdown[str(year)] = {
+                'long_short': self._period_perf_summary(
+                    [ls_returns[i] for i in idx], periods_per_year),
+                'n_periods': len(idx),
+            }
+
         return {
             'factor_id': factor_id,
             'holding_days': holding_days,
@@ -382,6 +424,8 @@ class FactorAnalyzer:
             'nav_long_short': _nav_series(ls_returns),
             'groups_summary': groups_summary,
             'long_short_summary': ls_summary,
+            'cost_sensitivity': cost_sensitivity,
+            'yearly_breakdown': yearly_breakdown,
             'avg_turnover': {
                 f'g{q}': float(np.mean([
                     p[f'g{q}_turnover'] for p in period_records
@@ -416,6 +460,153 @@ class FactorAnalyzer:
             'max_drawdown': float(drawdown.min()) if n else 0.0,
             'win_rate': float((rets > 0).mean()) if n else 0.0,
             'n_periods': int(n),
+        }
+
+    # ------------------------------------------------------------------
+    # IC 衰减 / 滚动 IC / 分年稳定性
+    # ------------------------------------------------------------------
+
+    def ic_decay_analysis(self, factor_id: str, start_date: str = None,
+                          end_date: str = None,
+                          forward_periods: List[int] = None,
+                          rolling_window: int = 20,
+                          min_stocks: int = 10) -> Dict[str, Any]:
+        """IC vs 前向天数衰减曲线 + 滚动 IC 时序 + 分年稳定性。
+
+        - ic_by_horizon: 每个前向期的逐日 IC 汇总（均值/ICIR/t 值/正率），
+          半衰期按 ic(h) = ic0·exp(−k·h) 拟合，直接决定合理持有期；
+        - rolling_ic: 基准前向期（列表首个）的滚动窗口均值 IC 序列；
+        - yearly_ic: 年份 × 前向期的平均 IC 矩阵，看稳定性。
+        """
+        forward_periods = sorted({max(1, int(p)) for p in
+                                  (forward_periods or [1, 5, 10, 20])})
+        rolling_window = max(2, int(rolling_window))
+
+        bounds = self._bounded_date_range(start_date, end_date)
+        if bounds is None:
+            return {'error': '因子库为空', 'factor_id': factor_id}
+        start_date, end_date = bounds
+
+        factor_df = self.factor_repo.get_values(
+            factor_ids=[factor_id], start_date=start_date, end_date=end_date,
+        )
+        if factor_df.empty:
+            return {'error': '未找到因子值', 'factor_id': factor_id}
+        factor_df = factor_df[['ts_code', 'trade_date', 'factor_value']].dropna(
+            subset=['factor_value']
+        )
+        factor_df['trade_date'] = pd.to_datetime(
+            factor_df['trade_date'], errors='coerce', format='mixed')
+        factor_df = factor_df.dropna(subset=['trade_date'])
+        if factor_df.empty:
+            return {'error': '因子值日期无效', 'factor_id': factor_id}
+        factor_wide = factor_df.pivot_table(
+            index='trade_date', columns='ts_code', values='factor_value',
+            aggfunc='first',
+        ).sort_index()
+
+        max_h = max(forward_periods)
+        price_end = (factor_wide.index[-1]
+                     + pd.Timedelta(days=max_h * 3 + 7)).strftime('%Y-%m-%d')
+        try:
+            prices = self.data_reader.get_return_prices(
+                start_date=factor_wide.index[0].strftime('%Y-%m-%d'),
+                end_date=price_end,
+            )
+        except Exception as e:
+            logger.error(f"IC 衰减分析读取行情失败: {e}")
+            return {'error': f'读取行情失败: {e}', 'factor_id': factor_id}
+        if prices.empty:
+            return {'error': '未找到行情数据', 'factor_id': factor_id}
+        close_wide = prices.pivot_table(
+            index=pd.to_datetime(prices['trade_date'], format='mixed'),
+            columns='ts_code', values='close', aggfunc='first',
+        ).sort_index()
+
+        # 按行情交易日对齐因子截面，避免停牌导致的错位
+        factor_wide = factor_wide.reindex(close_wide.index)
+
+        ic_by_horizon: Dict[int, Dict[str, Any]] = {}
+        ic_series_by_horizon: Dict[int, List[Dict[str, Any]]] = {}
+        yearly_sums: Dict[int, Dict[int, List[float]]] = {
+            h: {} for h in forward_periods}
+
+        for h in forward_periods:
+            fwd = close_wide.shift(-h) / close_wide - 1.0
+            records: List[Dict[str, Any]] = []
+            for date, fac in factor_wide.iterrows():
+                valid = pd.DataFrame({
+                    'f': fac, 'r': fwd.loc[date],
+                }).dropna()
+                if len(valid) < min_stocks:
+                    continue
+                ic = float(stats.spearmanr(valid['f'], valid['r']).statistic)
+                if np.isnan(ic):
+                    continue
+                records.append({
+                    'date': date.strftime('%Y-%m-%d'), 'ic': ic,
+                })
+                yearly_sums[h].setdefault(date.year, []).append(ic)
+            if not records:
+                ic_by_horizon[h] = {'error': '有效交易日不足'}
+                ic_series_by_horizon[h] = []
+                continue
+            ics = np.array([r['ic'] for r in records], dtype=float)
+            ic_mean = float(ics.mean())
+            ic_std = float(ics.std(ddof=1)) if len(ics) > 1 else 0.0
+            ic_by_horizon[h] = {
+                'ic_mean': ic_mean,
+                'ic_std': ic_std,
+                'ic_ir': ic_mean / ic_std if ic_std > 0 else 0.0,
+                'ic_positive_ratio': float((ics > 0).mean()),
+                't_stat': (ic_mean / ic_std * np.sqrt(len(ics))
+                           if ic_std > 0 else 0.0),
+                'n_dates': int(len(ics)),
+            }
+            ic_series_by_horizon[h] = records
+
+        # 半衰期：ic(h) = ic0·exp(−k·h)，取均值序列拟合（需 ≥3 个有效点）
+        half_life = None
+        valid_points = [(h, ic_by_horizon[h]['ic_mean'])
+                        for h in forward_periods
+                        if 'ic_mean' in ic_by_horizon[h]]
+        if len(valid_points) >= 3:
+            hs = np.array([p[0] for p in valid_points], dtype=float)
+            ys = np.array([abs(p[1]) for p in valid_points], dtype=float)
+            if (ys > 0).all():
+                k, _ = np.polyfit(hs, np.log(ys), 1)
+                k = -k
+                if k > 1e-6:
+                    half_life = float(np.log(2) / k)
+
+        base_h = forward_periods[0]
+        rolling_ic = []
+        base_records = ic_series_by_horizon.get(base_h, [])
+        if len(base_records) >= rolling_window:
+            values = [r['ic'] for r in base_records]
+            rolling = pd.Series(values).rolling(rolling_window).mean()
+            for r, m in zip(base_records, rolling):
+                if pd.notna(m):
+                    rolling_ic.append({'date': r['date'], 'rolling_ic':
+                                       round(float(m), 6)})
+
+        yearly_ic = {
+            str(year): {str(h): (
+                float(np.mean(yearly_sums[h][year]))
+                if yearly_sums[h].get(year) else None)
+                for h in forward_periods}
+            for year in sorted({y for h in forward_periods
+                                for y in yearly_sums[h]})
+        }
+
+        return {
+            'factor_id': factor_id,
+            'forward_periods': forward_periods,
+            'rolling_window': rolling_window,
+            'ic_by_horizon': {str(h): v for h, v in ic_by_horizon.items()},
+            'ic_half_life_days': half_life,
+            'rolling_ic': rolling_ic,
+            'yearly_ic': yearly_ic,
         }
 
     # ------------------------------------------------------------------

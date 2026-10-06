@@ -913,6 +913,7 @@ def factor_quantile_portfolio_backtest():
             n_quantiles=int(data.get('n_quantiles', 5)),
             cost_bps=float(data.get('cost_bps', 0.0)),
             min_stocks=int(data.get('min_stocks', 50)),
+            cost_bps_list=[float(c) for c in (data.get('cost_bps_list') or [])],
         )
         if 'error' in result:
             return jsonify(result), 404
@@ -941,6 +942,212 @@ def factor_correlation_analysis():
         return jsonify(result)
     except Exception as e:
         logger.error(f"因子相关性分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/analysis/ic-decay', methods=['POST'])
+def factor_ic_decay_analysis():
+    """IC 衰减曲线：多前向期 IC / 半衰期 / 滚动 IC / 分年稳定性"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_id = data.get('factor_id')
+        if not factor_id:
+            return jsonify({'error': '缺少必需参数: factor_id'}), 400
+
+        forward_periods = data.get('forward_periods') or [1, 5, 10, 20]
+        result = get_factor_analyzer().ic_decay_analysis(
+            factor_id=factor_id,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            forward_periods=[int(p) for p in forward_periods],
+            rolling_window=int(data.get('rolling_window', 20)),
+            min_stocks=int(data.get('min_stocks', 10)),
+        )
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"IC 衰减分析失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _get_screening_service():
+    from app.services.factor_screening import FactorScreeningService
+    return FactorScreeningService()
+
+
+@ml_factor_bp.route('/factor/screening/run', methods=['POST'])
+def factor_screening_run():
+    """因子批量体检：IC/单调性/换手/覆盖率/共线性，结论入库"""
+    try:
+        data = request.get_json(silent=True) or {}
+        result = _get_screening_service().screen_factors(
+            factor_ids=data.get('factor_ids'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            forward_period=int(data.get('forward_period', 5)),
+            n_quantiles=int(data.get('n_quantiles', 5)),
+            sample_stride=int(data.get('sample_stride', 5)),
+            min_stocks=int(data.get('min_stocks', 50)),
+            save=bool(data.get('save', True)),
+        )
+        if 'error' in result:
+            return jsonify(result), 400
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"因子批量体检失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/screening/list', methods=['GET'])
+def factor_screening_list():
+    """体检结果列表（可按状态/因子过滤）"""
+    try:
+        records = _get_screening_service().list_screenings(
+            status=request.args.get('status'),
+            factor_id=request.args.get('factor_id'),
+        )
+        return jsonify({'records': records, 'count': len(records)})
+    except Exception as e:
+        logger.error(f"查询体检结果失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/screening/status', methods=['POST'])
+def factor_screening_set_status():
+    """生命周期状态更新：pending → evaluated → accepted/rejected"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_id = data.get('factor_id')
+        status = data.get('status')
+        if not factor_id or not status:
+            return jsonify({'error': '缺少必需参数: factor_id, status'}), 400
+        result = _get_screening_service().set_status(
+            factor_id=factor_id, status=status, note=data.get('note', ''))
+        if 'error' in result:
+            return jsonify(result), 400
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"更新因子状态失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/screening/accepted', methods=['GET'])
+def factor_screening_accepted():
+    """accepted 白名单（喂 ML 特征选择）"""
+    try:
+        return jsonify({'factor_ids': _get_screening_service().accepted_factors()})
+    except Exception as e:
+        logger.error(f"查询白名单失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/screening/decorrelate', methods=['POST'])
+def factor_screening_decorrelate():
+    """共线性去冗余：|ρ|≥阈值的因子贪心剔除，输出低共线特征集"""
+    try:
+        data = request.get_json(silent=True) or {}
+        factor_ids = data.get('factor_ids')
+        if not factor_ids or len(factor_ids) < 2:
+            return jsonify({'error': '缺少必需参数: factor_ids（至少两个因子）'}), 400
+        result = _get_screening_service().select_low_collinearity(
+            factor_ids=factor_ids,
+            threshold=float(data.get('threshold', 0.7)),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"共线性去冗余失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/factor/quality-report', methods=['GET'])
+def factor_quality_report():
+    """因子数据质量监控：覆盖/均值/方差时序 + 漂移报警 + 分区校验"""
+    try:
+        from app.services.factor_screening import FactorQualityMonitor
+        result = FactorQualityMonitor().quality_report(
+            last_n_partitions=int(request.args.get('last_n_partitions', 60)),
+        )
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"因子质量监控失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/predictions/track', methods=['POST'])
+def predictions_track():
+    """预测信号持续跟踪：逐日 IC / top-N 实现收益 / 衰减 / 模型一致性"""
+    try:
+        data = request.get_json(silent=True) or {}
+        from app.services.prediction_tracking import PredictionTrackingService
+        result = PredictionTrackingService().track(
+            model_ids=data.get('model_ids'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            horizons=[int(h) for h in (data.get('horizons') or [1, 5, 10])],
+            top_n=int(data.get('top_n', 50)),
+        )
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"预测跟踪失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/attribution', methods=['POST'])
+def portfolio_attribution(portfolio_id):
+    """组合因子暴露归因：组合收益回归因子收益率（风格画像）"""
+    try:
+        data = request.get_json(silent=True) or {}
+        from app.services.portfolio_attribution import (
+            PortfolioAttributionService,
+        )
+        result = PortfolioAttributionService().attribute(
+            portfolio_id=portfolio_id,
+            factor_ids=data.get('factor_ids'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            max_factors=int(data.get('max_factors', 10)),
+        )
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"组合归因失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/models/<model_id>/snapshots', methods=['GET'])
+def model_snapshots(model_id):
+    """模型训练快照列表（版本轨迹）"""
+    try:
+        from app.services.model_experiments import TrainingSnapshotRepository
+        records = TrainingSnapshotRepository().list_snapshots(model_id)
+        return jsonify({'records': records, 'count': len(records)})
+    except Exception as e:
+        logger.error(f"查询训练快照失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/models/compare', methods=['POST'])
+def model_compare():
+    """多模型最新训练快照 A/B 对比"""
+    try:
+        data = request.get_json(silent=True) or {}
+        model_ids = data.get('model_ids')
+        if not model_ids:
+            return jsonify({'error': '缺少必需参数: model_ids'}), 400
+        from app.services.model_experiments import TrainingSnapshotRepository
+        result = TrainingSnapshotRepository().compare_models(
+            [str(m) for m in model_ids])
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"模型对比失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
