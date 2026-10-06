@@ -159,13 +159,17 @@ class ParquetStateStore:
         )
 
     def read_partition(self, name: str, partition_key: str,
-                       partition_value: str) -> pd.DataFrame:
-        """读取单个分区；分区不存在返回空表，读损坏抛 StateStoreError。"""
+                       partition_value: str, filters: Optional[list] = None) -> pd.DataFrame:
+        """读取单个分区；分区不存在返回空表，读损坏抛 StateStoreError。
+
+        filters: pyarrow 数据集谓词（如 [("factor_id", "in", [...])]），
+        在扫描层下推，避免整读分区后再过滤。
+        """
         path = self._partition_path(name, partition_key, partition_value)
         if not path.is_file():
             return pd.DataFrame()
         try:
-            return pd.read_parquet(path)
+            return pd.read_parquet(path, filters=filters)
         except Exception as exc:
             raise StateStoreError(f"读取 Parquet 分区失败 {path}: {exc}") from exc
 
@@ -392,8 +396,15 @@ class FactorRepository:
         if not partitions:
             return pd.DataFrame()
         wanted = self._select_partitions(partitions, trade_date, start_date, end_date)
+        # 谓词下推：factor_id/ts_code 在 parquet 扫描层过滤——日分区含全部
+        # 因子×全市场（百万行级），先整读后过滤会在长区间训练/回测时 OOM
+        pushdown = []
+        if factor_ids is not None:
+            pushdown.append(("factor_id", "in", list(dict.fromkeys(factor_ids))))
+        if ts_codes is not None:
+            pushdown.append(("ts_code", "in", list(dict.fromkeys(ts_codes))))
         frames = [
-            self.store.read_partition(self.TABLE_VALUES, "trade_date", partition)
+            self.store.read_partition(self.TABLE_VALUES, "trade_date", partition, filters=pushdown or None)
             for partition in wanted
         ]
         df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

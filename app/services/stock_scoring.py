@@ -356,13 +356,23 @@ class StockScoringEngine:
                 return []
             
             # 获取所有模型的预测结果
+            # 预测库 trade_date 存 YYYY-MM-DD；评分页传 YYYYMMDD——两种
+            # 格式都规范化后再查，否则跨格式查询永远空结果
+            normalized_date = str(trade_date).replace("-", "")
+            candidates = [trade_date]
+            if len(normalized_date) == 8:
+                candidates.append(f"{normalized_date[:4]}-{normalized_date[4:6]}-{normalized_date[6:]}")
             all_predictions = []
-            
+
             for model_id in model_ids:
-                pred_data = self.model_repo.get_predictions(
-                    model_id=model_id,
-                    trade_date=trade_date,
-                )
+                pred_data = pd.DataFrame()
+                for date_candidate in candidates:
+                    pred_data = self.model_repo.get_predictions(
+                        model_id=model_id,
+                        trade_date=date_candidate,
+                    )
+                    if not pred_data.empty:
+                        break
                 
                 if not pred_data.empty:
                     pred_data['model_id'] = model_id

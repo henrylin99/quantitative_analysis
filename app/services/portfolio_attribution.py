@@ -91,6 +91,15 @@ class PortfolioAttributionService:
             values=value_col,
             aggfunc='first',
         )
+        # 剔除高缺失因子列：稀疏因子（如财务类仅 ~1% 覆盖）会让逐日联合
+        # dropna 后的截面只剩零星股票，其余因子的日收益系数全部退化为 0
+        if not factor_wide.empty:
+            sparse_cols = factor_wide.columns[factor_wide.isna().mean() > 0.5]
+            if len(sparse_cols):
+                logger.warning(f"归因剔除高缺失因子(>50% NaN): {list(sparse_cols)}")
+                factor_wide = factor_wide.drop(columns=sparse_cols)
+            if factor_wide.empty:
+                return {'error': '因子缺失率过高，无法归因'}
 
         try:
             # 全市场行情：组合收益与逐日因子截面回归都需要完整截面
@@ -117,9 +126,17 @@ class PortfolioAttributionService:
         # 因子收益率：逐日截面 OLS（含截距）
         factor_ret_rows = []
         exposure_rows = []
+        # 因子暴露滞后一个交易日：当日收益必须用前一日已知暴露解释。
+        # 同期回归下，当日类因子（如 momentum_1d 即当日收益）与被解释变量
+        # 相关系数恒为 1，会独占全部解释力、其余因子系数恒为 0
+        factor_dates = sorted(factor_wide.index.get_level_values('trade_date').unique())
+        prev_factor_date = {}
+        for i in range(1, len(factor_dates)):
+            prev_factor_date[factor_dates[i]] = factor_dates[i - 1]
         for date, day_ret in rets.iterrows():
-            day_factors = factor_wide.xs(date, level='trade_date', drop_level=True) \
-                if date in factor_wide.index.get_level_values('trade_date') else None
+            factor_date = prev_factor_date.get(date)
+            day_factors = factor_wide.xs(factor_date, level='trade_date', drop_level=True) \
+                if factor_date is not None else None
             if day_factors is None or day_factors.empty:
                 continue
             joined = pd.concat(
@@ -133,7 +150,12 @@ class PortfolioAttributionService:
                 X.std(axis=0) > 0, X.std(axis=0), 1.0)
             y = joined['ret'].values
             A = np.column_stack([np.ones(len(X)), X])
-            coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+            # 截面 OLS 同样加微岭：白名单因子对共线时纯 OLS 的日因子
+            # 收益是一对剧烈对消的巨值，下游组合回归无法解读
+            gram = A.T @ A
+            scale = float(np.mean(np.diag(gram))) or 1.0
+            coef = np.linalg.solve(
+                gram + np.eye(len(gram)) * (1e-6 * scale), A.T @ y)
             row = {'trade_date': date}
             row.update({f: float(c) for f, c in
                         zip(day_factors.columns, coef[1:])})
@@ -150,14 +172,23 @@ class PortfolioAttributionService:
             return {'error': '因子与持仓共同覆盖期不足'}
 
         # 组合收益对因子收益回归
+        # 微岭正则：accepted 白名单里常有高共线因子对（|ρ|>0.7），纯 OLS
+        # 会给出一对巨大反向 beta（数值上合法、解读上误导），lambda 取
+        # 因子收益方差均值的小比例只起稳定作用
         common = port_ret.reindex(factor_ret.index).fillna(0.0)
         A = np.column_stack([np.ones(len(factor_ret)),
                              factor_ret[used].values])
-        beta, *_ = np.linalg.lstsq(A, common.values, rcond=None)
-        resid = common.values - A @ beta
+        y = common.values
+        gram = A.T @ A
+        scale = float(np.mean(np.diag(gram))) or 1.0
+        ridge = gram + np.eye(len(gram)) * (1e-6 * scale)
+        beta = np.linalg.solve(ridge, A.T @ y)
+        resid = y - A @ beta
         dof = max(len(common) - len(used) - 1, 1)
         sigma2 = float(resid @ resid) / dof
-        cov = sigma2 * np.linalg.pinv(A.T @ A)
+        # 与岭解同一 Gram 矩阵求协方差；pinv(原 Gram) 在共线下给 出
+        # 病态小 se，t 值虚高
+        cov = sigma2 * np.linalg.inv(ridge)
         se = np.sqrt(np.diag(cov))
         t_stats = beta / np.where(se > 0, se, np.nan)
 

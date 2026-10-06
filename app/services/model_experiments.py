@@ -45,17 +45,25 @@ class TrainingSnapshotRepository:
                       train_end_date: str = None,
                       metrics: Dict[str, Any] = None) -> Dict[str, Any]:
         import json
+
+        def _to_jsonable(obj):
+            # metrics 里混有 numpy 标量（int32/float64），不转换会
+            # "Object of type int32 is not JSON serializable"
+            if hasattr(obj, 'item'):
+                return obj.item()
+            return str(obj)
+
         record = {
             'snapshot_id': self.store.next_integer_id(self.TABLE, 'snapshot_id'),
             'model_id': model_id,
             'model_name': model_name,
             'model_type': model_type,
-            'factor_list': json.dumps(list(factor_list or [])),
-            'model_params': json.dumps(model_params or {}),
-            'training_config': json.dumps(training_config or {}),
+            'factor_list': json.dumps(list(factor_list or []), default=_to_jsonable),
+            'model_params': json.dumps(model_params or {}, default=_to_jsonable),
+            'training_config': json.dumps(training_config or {}, default=_to_jsonable),
             'train_start_date': train_start_date,
             'train_end_date': train_end_date,
-            'metrics': json.dumps(metrics or {}),
+            'metrics': json.dumps(metrics or {}, default=_to_jsonable),
             'created_at': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         with self.store.locked(self.TABLE):
