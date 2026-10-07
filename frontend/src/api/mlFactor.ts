@@ -466,7 +466,7 @@ export interface MlBacktestResult {
   }
   execution_assumptions?: { commission_rate: number; slippage_rate: number; benchmark_index: string }
   trade_constraints?: { max_position_count: number; min_trade_weight: number; suspend_policy: string; limit_up_down_policy: string }
-  equity_curve: { date: string; portfolio: number; benchmark: number | null }[]
+  equity_curve: { date: string; portfolio: number; benchmark: number | null; excess?: number | null }[]
   drawdown_series: { date: string; drawdown: number }[]
   monthly_returns: { date: string; portfolio: number; benchmark: number | null }[]
   industry_distribution: { name: string; value: number }[]
@@ -810,3 +810,53 @@ export interface ModelCompareRow {
 
 export const compareModels = (modelIds: string[]) =>
   rawPost<{ models: ModelCompareRow[] }>('/ml-factor/models/compare', { model_ids: modelIds })
+
+// ================= 筹码信号 =================
+
+export interface ChipSignalRow {
+  ts_code: string
+  name?: string | null
+  close: number
+  pct_5d: number | null
+  winner_rate: number
+  winner_chg_5d: number | null
+  conc: number
+  cost_dev: number | null
+  main_net_5d: number | null
+  vol_ratio: number | null
+}
+
+export interface ChipSignalResult {
+  stats: {
+    scan_date: string
+    universe: number
+    conc_threshold: number
+    counts: { squeeze: number; resonance: number; divergence: number }
+  }
+  definitions: Record<string, string>
+  squeeze: ChipSignalRow[]
+  resonance: ChipSignalRow[]
+  divergence: ChipSignalRow[]
+}
+
+export const fetchChipSignals = (refresh = false) =>
+  rawGet<ChipSignalResult>('/ml-factor/chip-signals', refresh ? { refresh: '1' } : undefined)
+
+// ================= 指数 regime =================
+
+export interface IndexRegimeRow {
+  code: string
+  name: string
+  close: number
+  trade_date: string
+  ret_20d: number | null
+  ret_60d: number | null
+  vol_20d_ann: number | null
+  ma20: number
+  ma60: number
+  regime: string
+  series: { date: string; close: number }[]
+}
+
+export const fetchIndexRegime = () =>
+  rawGet<{ indexes: IndexRegimeRow[]; generated_at: string }>('/ml-factor/index-regime')

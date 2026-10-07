@@ -229,3 +229,27 @@ export interface StockPanoramaData {
 
 export const fetchStockPanorama = (tsCode: string) =>
   apiGet<StockPanoramaData>('/trial/stock-panorama', { ts_code: tsCode }, 120_000)
+
+// ================= 财务异动扫描 =================
+export interface FinancialAnomalyRow {
+  ts_code: string
+  name?: string | null
+  revenue_yoy: number | null
+  receiv_yoy: number | null
+  inventory_yoy: number | null
+  gross_margin: number | null
+  cash_to_profit: number | null
+  flags: string[]
+  n_flags: number
+}
+
+export interface FinancialAnomalyData {
+  report_year: string
+  universe: number
+  flag_labels: Record<string, string>
+  counts: Record<string, number>
+  rows: FinancialAnomalyRow[]
+  total_flagged: number
+}
+
+export const fetchFinancialAnomalies = () => apiGet<FinancialAnomalyData>('/trial/financial-anomalies', undefined, 120_000)
