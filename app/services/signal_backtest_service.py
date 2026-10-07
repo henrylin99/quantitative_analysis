@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -23,27 +24,20 @@ import pandas as pd
 from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
+from app.services.signal_defs import (
+    DEFAULT_THRESHOLDS,
+    SIGNAL_LABELS,
+    SignalThresholds,
+    divergence_mask,
+    resonance_mask,
+    signal_definitions,
+    squeeze_mask,
+)
 
 _CACHE_TTL_SECONDS = 3600.0
 _MIN_EVENTS_PER_DAY = 3  # 当日触发数低于该值的日子不纳入日均统计（样本太少）
 _HORIZONS = (5, 10, 20)
 _ANOMALY_HORIZONS = (5, 10, 20, 60)
-
-# 与 ChipSignalService 相同的信号阈值（保持两处一致：改动需同步）
-_SQUEEZE_WINNER_MIN = 60.0
-_SQUEEZE_CONC_QUANTILE = 0.20
-_SQUEEZE_VOLUME_RATIO_MAX = 0.85
-_SQUEEZE_PCT5D_MAX = 0.10
-_RESONANCE_WINNER_LO = 30.0
-_RESONANCE_WINNER_HI = 70.0
-_DIVERGENCE_PCT5D_MIN = 0.03
-_DIVERGENCE_WINNER_MIN = 70.0
-
-_SIGNAL_LABELS = {
-    "squeeze": "筹码挤压蓄势",
-    "resonance": "资金×筹码多头共振",
-    "divergence": "量价资金背离预警",
-}
 
 
 def _pivot_last(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
@@ -88,26 +82,30 @@ class ChipSignalBacktestService:
     def __init__(self, data_reader: Optional[ParquetDataReader] = None):
         self.data_reader = data_reader or ParquetDataReader()
         self._cache: Optional[Dict[str, Any]] = None
+        self._cache_key: Optional[tuple] = None
         self._cache_at: float = 0.0
 
-    def run(self, months: int = 12, force_refresh: bool = False) -> Dict[str, Any]:
+    def run(self, months: int = 12, force_refresh: bool = False,
+            thresholds: SignalThresholds = DEFAULT_THRESHOLDS) -> Dict[str, Any]:
         import time
 
         months = max(3, min(int(months or 12), 24))
+        cache_key = (months, thresholds.signature())
         if not force_refresh and self._cache is not None \
-                and self._cache.get("months") == months \
+                and self._cache_key == cache_key \
                 and time.monotonic() - self._cache_at < _CACHE_TTL_SECONDS:
             return self._cache
 
-        result = self._run(months)
+        result = self._run(months, thresholds)
         if "error" not in result:
             result["months"] = months
             self._cache = result
+            self._cache_key = cache_key
             self._cache_at = time.monotonic()
         return result
 
     # ------------------------------------------------------------------
-    def _run(self, months: int) -> Dict[str, Any]:
+    def _run(self, months: int, t: SignalThresholds) -> Dict[str, Any]:
         end = datetime.now()
         eval_start = end - timedelta(days=months * 31)
         # 预热：量能比需要 20 交易日、5日涨幅/获利盘变化需要 5 交易日
@@ -172,17 +170,13 @@ class ChipSignalBacktestService:
             net5 = align(net_w.rolling(5, min_periods=3).sum())
             net_last = align(net_w)
 
-        # ---------- 信号掩码（与 ChipSignalService 同规则） ----------
-        conc_thresh = conc.quantile(_SQUEEZE_CONC_QUANTILE, axis=1)
+        # ---------- 信号掩码（与 ChipSignalService 同一套规则/阈值，见 signal_defs） ----------
+        conc_thresh = conc.quantile(t.squeeze_conc_quantile, axis=1)
 
-        squeeze = (winner >= _SQUEEZE_WINNER_MIN) & conc.le(conc_thresh, axis=0) \
-            & (vol_ratio <= _SQUEEZE_VOLUME_RATIO_MAX) & (pct5.fillna(0) <= _SQUEEZE_PCT5D_MAX)
+        squeeze = squeeze_mask(winner, conc, conc_thresh, vol_ratio, pct5, t)
         if net5 is not None:
-            resonance = (net5 > 0) & (net_last > 0) & (winner_chg > 0) \
-                & (winner >= _RESONANCE_WINNER_LO) & (winner <= _RESONANCE_WINNER_HI) \
-                & (pct5.fillna(0) > 0)
-            divergence = (pct5.fillna(0) >= _DIVERGENCE_PCT5D_MIN) & (net5 < 0) \
-                & (winner >= _DIVERGENCE_WINNER_MIN)
+            resonance = resonance_mask(net5, net_last, winner_chg, winner, pct5, t)
+            divergence = divergence_mask(pct5, net5, winner, t)
         else:
             empty = pd.DataFrame(False, index=dates, columns=winner.columns)
             resonance = empty
@@ -222,7 +216,7 @@ class ChipSignalBacktestService:
                     "nav": [round(float(v), 4) for v in nav],
                     "uni_nav": [round(float(v), 4) for v in uni],
                 }
-            signals[name] = {"label": _SIGNAL_LABELS[name], "horizons": per_horizon}
+            signals[name] = {"label": SIGNAL_LABELS[name], "horizons": per_horizon}
             nav_series[name] = navs_out
 
         return {
@@ -237,11 +231,8 @@ class ChipSignalBacktestService:
             },
             "signals": signals,
             "nav_series": nav_series,
-            "definitions": {
-                "squeeze": f"获利盘≥{_SQUEEZE_WINNER_MIN}% 且集中度≤截面{int(_SQUEEZE_CONC_QUANTILE*100)}%分位 且量能收缩 且5日涨幅≤{_SQUEEZE_PCT5D_MAX:.0%}",
-                "resonance": "近5日主力净额>0 且最新一日仍净流入 获利盘5日抬升且处于30%~70% 5日上涨",
-                "divergence": f"5日涨幅≥{_DIVERGENCE_PCT5D_MIN:.0%} 且近5日主力净流出 获利盘≥{_DIVERGENCE_WINNER_MIN}%",
-            },
+            "thresholds": {f.name: getattr(t, f.name) for f in dataclasses.fields(t)},
+            "definitions": signal_definitions(t),
         }
 
 

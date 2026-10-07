@@ -43,8 +43,23 @@ const http = axios.create({
 })
 
 async function unwrap<T>(promise: Promise<{ data: Envelope<T> }>): Promise<T> {
-  const resp = await promise
-  const env = resp.data
+  let env: Envelope<T>
+  try {
+    const resp = await promise
+    env = resp.data
+  } catch (err) {
+    // 非 2xx 时 axios 直接 reject：后端信封里通常带业务错误 message（如
+    // "区间交易日不足"），优先透出而不是笼统的 "Request failed with status code 400"
+    const respData = (err as { response?: { data?: unknown } })?.response?.data
+    if (respData && typeof respData === 'object' && 'message' in (respData as Record<string, unknown>)) {
+      const envelope = respData as { code?: unknown; message?: unknown }
+      const message = String(envelope.message || '').trim()
+      if (message) {
+        throw new ApiError(Number(envelope.code) || 400, message)
+      }
+    }
+    throw err
+  }
   if (env.code !== 200) {
     throw new ApiError(env.code, env.message || `请求失败（code=${env.code}）`)
   }

@@ -97,7 +97,21 @@ class DailyAlertService:
                     break
             record["alerts"] = self._derive_alerts(record, prev)
             self._append(record)
+            self._push(record)
             return record
+
+    @staticmethod
+    def _push(record: Dict[str, Any]) -> None:
+        """落盘后尝试出站推送（未配置/未启用时是 no-op，异常不影响扫描）。"""
+        try:
+            from app.services.alert_push_service import AlertPushService
+
+            results = AlertPushService().push_record(record)
+            if results:
+                ok = sum(1 for r in results if r["ok"])
+                logger.info(f"每日预警推送完成：{ok}/{len(results)} 个渠道成功")
+        except Exception:
+            logger.warning("每日预警推送失败", exc_info=True)
 
     def _collect(self) -> Dict[str, Any]:
         snapshot: Dict[str, Any] = {"regime": None, "signals": None,
@@ -152,12 +166,30 @@ class DailyAlertService:
         except Exception as e:
             logger.warning(f"每日扫描-财务异动失败: {e}")
 
+        try:
+            from app.services.data_jobs.pipeline import DataFreshnessService
+
+            snapshot["data_freshness"] = DataFreshnessService().status()
+        except Exception as e:
+            logger.warning(f"每日扫描-数据新鲜度失败: {e}")
+
         return snapshot
 
     # ------------------------------------------------------------------
     @staticmethod
     def _derive_alerts(record: Dict[str, Any], prev: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         alerts: List[Dict[str, Any]] = []
+
+        # 数据新鲜度（绝对检查，不依赖上一条记录；首扫也要能暴露旧数据）
+        fr = record.get("data_freshness") or {}
+        if fr and not fr.get("all_fresh", True) and fr.get("has_calendar"):
+            lagged = fr.get("lagged_tables") or []
+            alerts.append({
+                "type": "data_lag", "level": "warn",
+                "message": f"数据滞后：{'、'.join(lagged)} 未更新到 {fr.get('expected_date')}，"
+                           "今日信号可能基于旧数据",
+            })
+
         if prev is None:
             alerts.append({"type": "init", "level": "info",
                            "message": "首次扫描，建立基线（不生成对比预警）"})
@@ -246,11 +278,39 @@ class DailyAlertScheduler:
             if self._stop.wait(wait):
                 return
             try:
+                from app.services.data_jobs.pipeline import (
+                    DataPipelineOrchestrator,
+                    DataFreshnessService,
+                )
+
+                if DataPipelineOrchestrator.enabled():
+                    pipeline = DataPipelineOrchestrator().run_chain()
+                    logger.info(f"盘后数据链路完成：ok={pipeline.get('ok')} "
+                                f"{pipeline.get('message', '')}")
+            except Exception:
+                logger.error("盘后数据链路失败", exc_info=True)
+            try:
                 record = DailyAlertService().run_scan()
                 logger.info(f"每日预警扫描完成 {record['scan_date']}："
                             f"{len(record.get('alerts', []))} 条预警")
             except Exception:
                 logger.error("每日预警扫描失败", exc_info=True)
+            try:
+                from app.services.prediction_archive_service import PredictionArchiveService
+
+                archived = PredictionArchiveService().archive_today()
+                if "error" not in archived:
+                    logger.info(f"预测跟踪归档完成 {archived['track_date']}")
+            except Exception:
+                logger.warning("预测跟踪归档失败", exc_info=True)
+            try:
+                from app.services.watchlist_service import WatchlistAlertService
+
+                checked = WatchlistAlertService().check()
+                if checked.get("triggered"):
+                    logger.info(f"自选股价格提醒触发 {len(checked['triggered'])} 条")
+            except Exception:
+                logger.warning("自选股价格提醒检查失败", exc_info=True)
 
     @staticmethod
     def _seconds_until_next_run() -> float:

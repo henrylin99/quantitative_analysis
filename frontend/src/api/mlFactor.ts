@@ -281,6 +281,54 @@ export interface IntegratedSelectionResult {
 
 export const fetchPortfolios = () => rawGet<{ success: boolean; portfolios: PortfolioListItem[] }>('/ml-factor/portfolio/list')
 
+// ================= 组合交易流水 + 市值曲线 =================
+
+export interface PortfolioTrade {
+  id: number
+  portfolio_id: string
+  ts_code: string
+  action: 'buy' | 'sell'
+  quantity: number
+  price: number
+  fee: number
+  traded_at: string
+  note: string
+  created_at: string
+}
+
+export const fetchPortfolioTrades = (portfolioId: string) =>
+  rawGet<{ success: boolean; trades: PortfolioTrade[]; count: number }>(
+    `/ml-factor/portfolio/${encodeURIComponent(portfolioId)}/trades`,
+  )
+
+export const addPortfolioTrade = (
+  portfolioId: string,
+  body: { ts_code: string; action: 'buy' | 'sell'; quantity: number; price: number; fee?: number; traded_at?: string; note?: string },
+) =>
+  rawPost<{ success: boolean; trade: PortfolioTrade }>(
+    `/ml-factor/portfolio/${encodeURIComponent(portfolioId)}/trades`,
+    body,
+  )
+
+export const deletePortfolioTrade = (portfolioId: string, tradeId: number) =>
+  rawDelete<{ success: boolean }>(
+    `/ml-factor/portfolio/${encodeURIComponent(portfolioId)}/trades/${tradeId}`,
+  )
+
+export interface PortfolioEquityCurve {
+  dates: string[]
+  values: Array<number | null>
+  cost_basis: number
+  codes: string[]
+  n_trades: number
+}
+
+export const fetchPortfolioEquityCurve = (portfolioId: string, days = 250) =>
+  rawGet<{ success: boolean } & PortfolioEquityCurve>(
+    `/ml-factor/portfolio/${encodeURIComponent(portfolioId)}/equity-curve`,
+    { days },
+  )
+
 export const fetchPortfolioDetail = async (pid: string): Promise<PortfolioSummary> => {
   try {
     return await rawGet<{ success: boolean; portfolio: PortfolioSummary }>(`/ml-factor/portfolio/${encodeURIComponent(pid)}`).then((r) => r.portfolio)
@@ -741,6 +789,27 @@ export const runPredictionTracking = async (body: {
   }
 }
 
+// ================= 预测跟踪历史归档 =================
+
+export interface PredictionHistoryRecord {
+  track_date: string
+  tracked_at: string
+  n_models: number
+  models: Record<string, { error?: string; base_horizon?: number } & Record<string, unknown>>
+  consistency_mean: number | null
+  ic_pool_mean: number | null
+  pred_start?: string
+  pred_end?: string
+  error?: string
+}
+
+export const fetchPredictionHistory = (refresh = false) =>
+  rawGet<{ records: PredictionHistoryRecord[] }>(
+    '/ml-factor/predictions/history',
+    refresh ? { refresh: '1' } : undefined,
+    300_000,
+  )
+
 // ================= 组合因子暴露归因 =================
 export interface AttributionResult {
   portfolio_id: string
@@ -879,6 +948,17 @@ export interface ChipSignalHorizonStats {
   uni_nav: number | null
 }
 
+export interface ChipSignalThresholds {
+  squeeze_winner_min?: number
+  squeeze_conc_quantile?: number
+  squeeze_volume_ratio_max?: number
+  squeeze_pct5d_max?: number
+  resonance_winner_lo?: number
+  resonance_winner_hi?: number
+  divergence_pct5d_min?: number
+  divergence_winner_min?: number
+}
+
 export interface ChipSignalBacktestResult {
   months?: number
   meta: {
@@ -892,12 +972,19 @@ export interface ChipSignalBacktestResult {
   }
   signals: Record<string, { label: string; horizons: Record<string, ChipSignalHorizonStats> }>
   nav_series: Record<string, Record<string, { dates: string[]; nav: (number | null)[]; uni_nav: number[] }>>
+  thresholds?: ChipSignalThresholds
   definitions: Record<string, string>
 }
 
-export const fetchChipSignalBacktest = (months = 12, refresh = false) =>
-  rawGet<ChipSignalBacktestResult>(
-    '/ml-factor/chip-signal-backtest',
-    refresh ? { months, refresh: '1' } : { months },
-    180_000,
-  )
+export const fetchChipSignalBacktest = (
+  months = 12,
+  refresh = false,
+  thresholds?: ChipSignalThresholds,
+) => {
+  const params: Record<string, string | number> = { months }
+  if (refresh) params.refresh = '1'
+  for (const [k, v] of Object.entries(thresholds ?? {})) {
+    if (v != null && Number.isFinite(v)) params[k] = v
+  }
+  return rawGet<ChipSignalBacktestResult>('/ml-factor/chip-signal-backtest', params, 180_000)
+}

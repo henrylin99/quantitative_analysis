@@ -30,6 +30,55 @@ def status():
         return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
 
 
+@ai_assistant_bp.route('/saved', methods=['GET'])
+def list_saved():
+    """AI 工作台沉淀：看板 + 常用查询。"""
+    try:
+        from app.services.ai.saved_items import AiSavedStore
+
+        return jsonify({'success': True, **AiSavedStore().list_all()})
+    except Exception:
+        logger.exception('读取 AI 沉淀失败')
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
+
+
+@ai_assistant_bp.route('/saved', methods=['POST'])
+def save_item():
+    """保存沉淀。body: {kind: board|query, title?, content?, prompt?}"""
+    try:
+        from app.services.ai.saved_items import AiSavedStore
+
+        payload = request.get_json(silent=True) or {}
+        store = AiSavedStore()
+        if payload.get('kind') == 'query':
+            record = store.save_query(payload.get('prompt', ''), payload.get('title'))
+        else:
+            record = store.save_board(payload.get('title', ''), payload.get('content', ''),
+                                      meta={'source': 'ui'})
+        return jsonify({'success': True, 'record': record})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        logger.exception('保存 AI 沉淀失败')
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
+
+
+@ai_assistant_bp.route('/saved/<kind>/<item_id>', methods=['DELETE'])
+def delete_saved(kind, item_id):
+    try:
+        from app.services.ai.saved_items import AiSavedStore
+
+        removed = AiSavedStore().delete(kind, item_id)
+        if not removed:
+            return jsonify({'success': False, 'error': '条目不存在'}), 404
+        return jsonify({'success': True})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        logger.exception('删除 AI 沉淀失败')
+        return jsonify({'success': False, 'error': '服务器内部错误，请查看服务日志'}), 500
+
+
 @ai_assistant_bp.route('/sessions', methods=['GET'])
 def list_sessions():
     try:

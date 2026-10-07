@@ -22,36 +22,36 @@ import pandas as pd
 from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
+from app.services.signal_defs import (
+    DEFAULT_THRESHOLDS,
+    SignalThresholds,
+    divergence_mask,
+    resonance_mask,
+    signal_definitions,
+    squeeze_mask,
+)
 from app.services.stock_name_registry import get_stock_name_registry
 
 _MAX_ROWS_PER_SIGNAL = 50
 _CACHE_TTL_SECONDS = 300.0
-
-# 信号阈值
-_SQUEEZE_WINNER_MIN = 60.0        # 获利盘下限：过半但未极端
-_SQUEEZE_CONC_QUANTILE = 0.20     # 集中度截面 20% 分位以内 = 高度集中
-_SQUEEZE_VOLUME_RATIO_MAX = 0.85  # 近5日均量 / 近20日均量，收缩阈值
-_SQUEEZE_PCT5D_MAX = 0.10         # 排除已大涨的票
-
-_RESONANCE_WINNER_LO = 30.0       # 获利盘抬升区间下限
-_RESONANCE_WINNER_HI = 70.0       # 上限（拥挤区外）
-
-_DIVERGENCE_PCT5D_MIN = 0.03
-_DIVERGENCE_WINNER_MIN = 70.0
 
 
 class ChipSignalService:
     def __init__(self, data_reader: Optional[ParquetDataReader] = None):
         self.data_reader = data_reader or ParquetDataReader()
         self._cache: Optional[Dict[str, Any]] = None
+        self._cache_key: Optional[tuple] = None
         self._cache_at: float = 0.0
 
     # ------------------------------------------------------------------
-    def scan(self, force_refresh: bool = False) -> Dict[str, Any]:
+    def scan(self, force_refresh: bool = False,
+             thresholds: SignalThresholds = DEFAULT_THRESHOLDS) -> Dict[str, Any]:
         """全市场扫描最近一个筹码交易日截面，返回三类信号。"""
         import time
 
+        cache_key = thresholds.signature()
         if not force_refresh and self._cache is not None \
+                and self._cache_key == cache_key \
                 and time.monotonic() - self._cache_at < _CACHE_TTL_SECONDS:
             return self._cache
 
@@ -81,15 +81,17 @@ class ChipSignalService:
             logger.error(f"筹码信号扫描读取行情/资金流失败: {e}")
             return {"error": f"读取行情数据失败: {e}"}
 
-        result = self._build_signals(cyq, daily, flow, scan_date)
+        result = self._build_signals(cyq, daily, flow, scan_date, thresholds)
         if "error" not in result:
             self._cache = result
+            self._cache_key = cache_key
             self._cache_at = time.monotonic()
         return result
 
     # ------------------------------------------------------------------
     def _build_signals(self, cyq: pd.DataFrame, daily: pd.DataFrame,
-                       flow: pd.DataFrame, scan_date) -> Dict[str, Any]:
+                       flow: pd.DataFrame, scan_date,
+                       t: SignalThresholds) -> Dict[str, Any]:
         # 逐票最新筹码截面 + 5 日前获利盘
         cyq = cyq.sort_values(["ts_code", "trade_date"])
         latest = cyq[cyq["trade_date"] == scan_date].set_index("ts_code")
@@ -110,7 +112,7 @@ class ChipSignalService:
             conc=(latest["cost_95pct"] - latest["cost_5pct"]) / latest["cost_50pct"],
         )
         latest = latest.replace([np.inf, -np.inf], np.nan)
-        conc_thresh = float(latest["conc"].quantile(_SQUEEZE_CONC_QUANTILE))
+        conc_thresh = float(latest["conc"].quantile(t.squeeze_conc_quantile))
 
         # 行情：5 日涨跌幅 + 量能收缩（逐票滚动均值后取每股末行，索引统一为 ts_code）
         daily = daily.copy()
@@ -157,34 +159,22 @@ class ChipSignalService:
         if panel.empty:
             return {"error": "有效截面为空"}
 
-        squeeze_mask = (
-            (panel["winner_rate"] >= _SQUEEZE_WINNER_MIN)
-            & (panel["conc"] <= conc_thresh)
-            & (panel["vol_ratio"] <= _SQUEEZE_VOLUME_RATIO_MAX)
-            & (panel["pct_5d"].fillna(0) <= _SQUEEZE_PCT5D_MAX)
-        )
-        resonance_mask = (
-            (panel["main_net_5d"] > 0)
-            & (panel["main_net_last"] > 0)
-            & (panel["winner_chg_5d"] > 0)
-            & (panel["winner_rate"] >= _RESONANCE_WINNER_LO)
-            & (panel["winner_rate"] <= _RESONANCE_WINNER_HI)
-            & (panel["pct_5d"].fillna(0) > 0)
-        )
-        divergence_mask = (
-            (panel["pct_5d"] >= _DIVERGENCE_PCT5D_MIN)
-            & (panel["main_net_5d"] < 0)
-            & (panel["winner_rate"] >= _DIVERGENCE_WINNER_MIN)
-        )
+        squeeze_m = squeeze_mask(panel["winner_rate"], panel["conc"], conc_thresh,
+                                 panel["vol_ratio"], panel["pct_5d"], t)
+        resonance_m = resonance_mask(panel["main_net_5d"], panel["main_net_last"],
+                                     panel["winner_chg_5d"], panel["winner_rate"],
+                                     panel["pct_5d"], t)
+        divergence_m = divergence_mask(panel["pct_5d"], panel["main_net_5d"],
+                                       panel["winner_rate"], t)
 
         stats = {
             "scan_date": scan_date.strftime("%Y-%m-%d"),
             "universe": int(len(panel)),
             "conc_threshold": round(conc_thresh, 4),
             "counts": {
-                "squeeze": int(squeeze_mask.sum()),
-                "resonance": int(resonance_mask.sum()),
-                "divergence": int(divergence_mask.sum()),
+                "squeeze": int(squeeze_m.sum()),
+                "resonance": int(resonance_m.sum()),
+                "divergence": int(divergence_m.sum()),
             },
         }
 
@@ -209,14 +199,10 @@ class ChipSignalService:
 
         result = {
             "stats": stats,
-            "definitions": {
-                "squeeze": f"获利盘≥{_SQUEEZE_WINNER_MIN}% 且 90%筹码区间宽度≤截面{int(_SQUEEZE_CONC_QUANTILE*100)}%分位（≤{conc_thresh:.2f}）且量能收缩（5日均量/20日均量≤{_SQUEEZE_VOLUME_RATIO_MAX}）且5日涨幅≤{_SQUEEZE_PCT5D_MAX:.0%}",
-                "resonance": "近5日主力净额>0 且最新一日仍净流入，获利盘5日抬升且处于30%~70%区间，5日上涨",
-                "divergence": f"5日涨幅≥{_DIVERGENCE_PCT5D_MIN:.0%} 且近5日主力净流出，获利盘≥{_DIVERGENCE_WINNER_MIN}%",
-            },
-            "squeeze": _rows(squeeze_mask)[:_MAX_ROWS_PER_SIGNAL],
-            "resonance": _rows(resonance_mask)[:_MAX_ROWS_PER_SIGNAL],
-            "divergence": _rows(divergence_mask)[:_MAX_ROWS_PER_SIGNAL],
+            "definitions": signal_definitions(t, conc_thresh),
+            "squeeze": _rows(squeeze_m)[:_MAX_ROWS_PER_SIGNAL],
+            "resonance": _rows(resonance_m)[:_MAX_ROWS_PER_SIGNAL],
+            "divergence": _rows(divergence_m)[:_MAX_ROWS_PER_SIGNAL],
         }
         for key in ("squeeze", "resonance", "divergence"):
             try:

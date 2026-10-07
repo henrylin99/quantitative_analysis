@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { fetchAiMessages, fetchAiSessions, fetchAiStatus, streamAiChat, deleteAiSession, type AiMessage, type AiSession, type AiStatus } from '../api/ai'
+import {
+  deleteAiSaved,
+  fetchAiMessages,
+  fetchAiSaved,
+  fetchAiSessions,
+  fetchAiStatus,
+  saveAiBoard,
+  saveAiQuery,
+  streamAiChat,
+  deleteAiSession,
+  type AiBoard,
+  type AiMessage,
+  type AiSavedQuery,
+  type AiSession,
+  type AiStatus,
+} from '../api/ai'
 import { EmptyState } from '../components/StateViews'
 import { formatDateTime } from '../utils/format'
 
@@ -96,6 +111,16 @@ export default function AiWorkbenchPage() {
   const [errorHint, setErrorHint] = useState<string | null>(null)
   const abortRef = useRef<((reason?: string) => void) | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
+  // 沉淀：看板 + 常用查询
+  const [boards, setBoards] = useState<AiBoard[]>([])
+  const [savedQueries, setSavedQueries] = useState<AiSavedQuery[]>([])
+
+  const refreshSaved = () => {
+    fetchAiSaved().then((r) => {
+      setBoards(r.boards)
+      setSavedQueries(r.queries)
+    })
+  }
 
   useEffect(() => {
     localStorage.setItem('aiAllowActions', allowActions ? '1' : '0')
@@ -104,6 +129,7 @@ export default function AiWorkbenchPage() {
   const refreshMeta = () => {
     fetchAiStatus().then(setStatus)
     fetchAiSessions().then(setSessions)
+    refreshSaved()
   }
   useEffect(refreshMeta, [])
 
@@ -227,6 +253,38 @@ export default function AiWorkbenchPage() {
     }
   }
 
+  const saveCurrentQuery = async () => {
+    const prompt = input.trim()
+    if (!prompt) return
+    try {
+      await saveAiQuery(prompt)
+      setInput('')
+      refreshSaved()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '保存失败')
+    }
+  }
+
+  const saveBoardFromAnswer = async (content: string) => {
+    const title = window.prompt('看板标题：', content.trim().slice(0, 24) || 'AI 分析')
+    if (!title) return
+    try {
+      await saveAiBoard(title, content)
+      refreshSaved()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '保存失败')
+    }
+  }
+
+  const removeSaved = async (kind: 'boards' | 'queries', id: string) => {
+    try {
+      await deleteAiSaved(kind, id)
+      refreshSaved()
+    } catch {
+      // 静默
+    }
+  }
+
   const statusChips = useMemo(
     () => [
       { label: `模型 · ${status?.llm.configured ? (status.llm.model ?? '已配置') : '未配置'}`, ok: status?.llm.configured },
@@ -238,9 +296,10 @@ export default function AiWorkbenchPage() {
 
   return (
     <div className="row g-3">
-      {/* 会话列表 */}
+      {/* 会话列表 + 看板 */}
       <div className="col-lg-3">
-        <div className="panel h-100">
+        <div className="d-flex flex-column gap-3 h-100">
+        <div className="panel">
           <div className="panel-head">
             <h6 className="panel-title">
               <span className="kicker" />
@@ -277,6 +336,42 @@ export default function AiWorkbenchPage() {
             {sessions.length === 0 && <EmptyState icon="💬" text="暂无历史会话" />}
           </div>
         </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              看板
+              <span className="chip">{boards.length}</span>
+            </h6>
+          </div>
+          <div className="panel-body d-flex flex-column gap-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {boards.length === 0 && (
+              <EmptyState icon="📄" text="点击 AI 回复下方的「存为看板」沉淀分析结论" />
+            )}
+            {boards.map((b) => (
+              <details key={b.id} className="p-2 rounded" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <summary style={{ fontSize: 12.5, cursor: 'pointer' }} className="d-flex align-items-center gap-1">
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
+                  <button
+                    type="button"
+                    className="btn p-0 border-0 text-faint"
+                    style={{ fontSize: 11 }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      removeSaved('boards', b.id)
+                    }}
+                  >
+                    ×
+                  </button>
+                </summary>
+                <div style={{ fontSize: 12.5, maxHeight: 300, overflowY: 'auto' }}>{renderMarkdown(b.content)}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>{b.created_at}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+        </div>
       </div>
 
       {/* 聊天区 */}
@@ -301,6 +396,20 @@ export default function AiWorkbenchPage() {
               {items.length === 0 && !streaming && (
                 <>
                   <EmptyState icon="🧠" text="向 AI 助手提问，支持查数据、更新数据、算因子等工具调用" />
+                  {savedQueries.length > 0 && (
+                    <div className="d-flex gap-2 flex-wrap justify-content-center mt-2">
+                      {savedQueries.slice(0, 8).map((q) => (
+                        <span key={q.id} className="chip d-flex align-items-center gap-1" style={{ cursor: 'pointer' }}>
+                          <button type="button" className="btn p-0 border-0" style={{ fontSize: 12 }} onClick={() => setInput(q.prompt)}>
+                            ⭐ {q.title}
+                          </button>
+                          <button type="button" className="btn p-0 border-0 text-faint" style={{ fontSize: 11 }} onClick={() => removeSaved('queries', q.id)}>
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="d-flex gap-2 flex-wrap justify-content-center mt-2">
                     {QUICK_QUESTIONS.map((q) => (
                       <button key={q} type="button" className="chip" style={{ cursor: 'pointer' }} onClick={() => send(q)}>
@@ -338,6 +447,18 @@ export default function AiWorkbenchPage() {
                       </div>
                     )}
                     {renderMarkdown(item.content)}
+                    {item.role === 'assistant' && item.content.trim() && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary btn-sm"
+                          style={{ fontSize: 11 }}
+                          onClick={() => saveBoardFromAnswer(item.content)}
+                        >
+                          📄 存为看板
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -363,15 +484,26 @@ export default function AiWorkbenchPage() {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') send()
                 }}
               />
-              {streaming ? (
-                <button type="button" className="btn btn-outline-danger" onClick={stop}>
-                  ⏹ 停止
+              <div className="d-flex flex-column gap-1">
+                {streaming ? (
+                  <button type="button" className="btn btn-outline-danger" onClick={stop}>
+                    ⏹ 停止
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={() => send()} disabled={!input.trim()}>
+                    发送
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  disabled={!input.trim()}
+                  title="保存当前输入为常用查询"
+                  onClick={saveCurrentQuery}
+                >
+                  ⭐ 收藏查询
                 </button>
-              ) : (
-                <button type="button" className="btn btn-primary" onClick={() => send()} disabled={!input.trim()}>
-                  发送
-                </button>
-              )}
+              </div>
             </div>
           </div>
         </div>

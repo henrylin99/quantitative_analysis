@@ -1,4 +1,4 @@
-import { apiGet } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 
 // ================= 行情与数据源 /api/market、/api/datasources（信封 {code,message,data}） =================
 
@@ -395,3 +395,44 @@ export interface IndustryRotationData {
 
 export const fetchIndustryRotation = (refresh = false) =>
   apiGet<IndustryRotationData>('/trial/industry-rotation', refresh ? { refresh: '1' } : undefined, 180_000)
+
+// ================= 自选股（服务端持久化） =================
+
+export interface WatchlistItem {
+  ts_code: string
+  group: string
+  note: string
+  alert_high: number | null
+  alert_low: number | null
+  added_at: string
+}
+
+export interface WatchlistAlert {
+  ts_code: string
+  kind: 'above' | 'below'
+  close: number
+  close_date: string
+  threshold: number
+  message: string
+  triggered_at: string
+}
+
+export const fetchWatchlist = () => apiGet<{ items: WatchlistItem[] }>('/trial/watchlist')
+
+export const replaceWatchlist = (items: Array<Partial<WatchlistItem> & { ts_code: string }>) =>
+  apiPut<{ items: WatchlistItem[] }>('/trial/watchlist', { items })
+
+export const addWatchlistItem = (ts_code: string, group = '', note = '') =>
+  apiPost<{ item: WatchlistItem }>('/trial/watchlist', { ts_code, group, note })
+
+export const updateWatchlistItem = (ts_code: string, patch: Partial<WatchlistItem>) =>
+  apiPut<{ item: WatchlistItem }>('/trial/watchlist/item', { ts_code, ...patch })
+
+export const removeWatchlistItem = (ts_code: string) =>
+  apiDelete<{ removed: boolean }>(`/trial/watchlist?ts_code=${encodeURIComponent(ts_code)}`)
+
+export const fetchWatchlistAlerts = () =>
+  apiGet<{ alerts: WatchlistAlert[] }>('/trial/watchlist/alerts')
+
+export const checkWatchlistAlerts = () =>
+  apiPost<{ checked: number; triggered: WatchlistAlert[] }>('/trial/watchlist/alerts/check', {})

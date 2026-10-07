@@ -172,7 +172,10 @@ class JobRegistry:
                 recommended_order=10,
                 source_name="derived",
                 source_mode="derived",
-                dependencies=["daily_history_by_date", "daily_basic", "stk_factor", "moneyflow", "cyq_perf", "adj_factor"],
+                # 注意：重建还覆盖 adj_factor 分区，但注册表中没有独立的
+                # adj_factor 作业（其数据由下载侧维护），勿把它列为依赖——
+                # 依赖名必须能在 _jobs 里解析，否则按依赖编排时会 KeyError。
+                dependencies=["daily_history_by_date", "daily_basic", "stk_factor", "moneyflow", "cyq_perf"],
             ),
             "factor_compute": JobDefinition(
                 "factor_compute",

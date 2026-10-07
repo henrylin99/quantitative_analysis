@@ -413,15 +413,21 @@ def get_factor_list():
 
 @ml_factor_bp.route('/chip-signals', methods=['GET'])
 def get_chip_signals():
-    """筹码信号扫描：挤压蓄势 / 资金×筹码共振 / 量价资金背离"""
+    """筹码信号扫描：挤压蓄势 / 资金×筹码共振 / 量价资金背离。
+
+    可选 query 参数覆盖信号阈值（见 SignalThresholds 字段名），如
+    ?squeeze_winner_min=55&resonance_winner_hi=75。
+    """
     try:
         from app.services.chip_signal_service import ChipSignalService
+        from app.services.signal_defs import SignalThresholds
 
         global chip_signal_service
         if chip_signal_service is None:
             chip_signal_service = ChipSignalService(_data_reader)
         force = request.args.get('refresh') == '1'
-        result = chip_signal_service.scan(force_refresh=force)
+        thresholds = SignalThresholds.from_params(request.args.to_dict())
+        result = chip_signal_service.scan(force_refresh=force, thresholds=thresholds)
         if 'error' in result:
             return jsonify(result), 500
         return jsonify(result)
@@ -432,13 +438,19 @@ def get_chip_signals():
 
 @ml_factor_bp.route('/chip-signal-backtest', methods=['GET'])
 def get_chip_signal_backtest():
-    """筹码信号历史有效性回测：三类信号触发后 5/10/20 日前向收益与超额。"""
+    """筹码信号历史有效性回测：三类信号触发后 5/10/20 日前向收益与超额。
+
+    可选 query 参数：months + 信号阈值覆盖（同 /chip-signals）。
+    """
     try:
         from app.services.signal_backtest_service import ChipSignalBacktestService
+        from app.services.signal_defs import SignalThresholds
 
         months = request.args.get('months', type=int) or 12
         force = request.args.get('refresh') == '1'
-        result = ChipSignalBacktestService(_data_reader).run(months=months, force_refresh=force)
+        thresholds = SignalThresholds.from_params(request.args.to_dict())
+        result = ChipSignalBacktestService(_data_reader).run(
+            months=months, force_refresh=force, thresholds=thresholds)
         if 'error' in result:
             return jsonify(result), 500
         return jsonify(result)
@@ -1175,6 +1187,21 @@ def predictions_track():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/predictions/history', methods=['GET'])
+def predictions_history():
+    """预测跟踪历史归档（每日预警扫描后自动归档；?refresh=1 立即归档一次）。"""
+    try:
+        from app.services.prediction_archive_service import PredictionArchiveService
+        svc = PredictionArchiveService()
+        if request.args.get('refresh') == '1':
+            svc.archive_today()
+        limit = request.args.get('limit', type=int) or 60
+        return jsonify({'records': svc.list_history(limit=limit)})
+    except Exception as e:
+        logger.error(f"预测跟踪历史读取失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/portfolio/<portfolio_id>/attribution', methods=['POST'])
 def portfolio_attribution(portfolio_id):
     """组合因子暴露归因：组合收益回归因子收益率（风格画像）"""
@@ -1470,6 +1497,71 @@ def optimize_portfolio():
         
     except Exception as e:
         logger.error(f"组合优化失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/trades', methods=['GET'])
+def get_portfolio_trades(portfolio_id):
+    """交易流水（倒序，默认 200 条）。"""
+    try:
+        limit = request.args.get('limit', type=int) or 200
+        trades = _portfolio_repo.list_trades(portfolio_id, limit=limit)
+        return jsonify({'success': True, 'trades': trades, 'count': len(trades)})
+    except Exception as e:
+        logger.error(f"读取交易流水失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/trades', methods=['POST'])
+def add_portfolio_trade(portfolio_id):
+    """记一笔交易：账本追加 + 持仓即时更新（加权利成本摊入）。
+
+    body: {ts_code, action: buy|sell, quantity, price, fee?, traded_at?, note?}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        trade = _portfolio_repo.add_trade(
+            portfolio_id,
+            ts_code=data.get('ts_code', ''),
+            action=data.get('action', ''),
+            quantity=data.get('quantity'),
+            price=data.get('price'),
+            fee=data.get('fee') or 0,
+            traded_at=data.get('traded_at'),
+            note=data.get('note') or '',
+        )
+        return jsonify({'success': True, 'trade': trade})
+    except (ValueError, TypeError) as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"记录交易失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/trades/<int:trade_id>', methods=['DELETE'])
+def delete_portfolio_trade(portfolio_id, trade_id):
+    """删除一笔流水并从剩余账本重放重建持仓。"""
+    try:
+        removed = _portfolio_repo.remove_trade(portfolio_id, trade_id)
+        if not removed:
+            return jsonify({'error': '流水不存在'}), 404
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"删除交易流水失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/portfolio/<portfolio_id>/equity-curve', methods=['GET'])
+def get_portfolio_equity_curve(portfolio_id):
+    """持仓市值日频曲线（收盘估值，不含现金）+ 当前总成本线。"""
+    try:
+        days = request.args.get('days', type=int) or 250
+        result = _portfolio_repo.equity_curve(portfolio_id, days=days)
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        logger.error(f"读取组合净值曲线失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 
