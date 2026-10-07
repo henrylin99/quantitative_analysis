@@ -32,6 +32,7 @@ portfolio_optimizer = None
 backtest_engine = None
 training_job_service = None
 factor_analyzer = None
+chip_signal_service = None
 
 SUPPORTED_FACTOR_SCORING_METHODS = {"equal_weight", "factor_weight", "ml_ensemble", "rank_ic"}
 SUPPORTED_PORTFOLIO_OPTIMIZATION_METHODS = {"mean_variance", "risk_parity", "equal_weight", "factor_neutral", "black_litterman"}
@@ -407,6 +408,40 @@ def get_factor_list():
         
     except Exception as e:
         logger.error(f"获取因子列表失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/chip-signals', methods=['GET'])
+def get_chip_signals():
+    """筹码信号扫描：挤压蓄势 / 资金×筹码共振 / 量价资金背离"""
+    try:
+        from app.services.chip_signal_service import ChipSignalService
+
+        global chip_signal_service
+        if chip_signal_service is None:
+            chip_signal_service = ChipSignalService(_data_reader)
+        force = request.args.get('refresh') == '1'
+        result = chip_signal_service.scan(force_refresh=force)
+        if 'error' in result:
+            return jsonify(result), 500
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"筹码信号扫描失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/index-regime', methods=['GET'])
+def get_index_regime():
+    """指数市场状态（动量/均线/波动 regime），供回测仓位调节对照。"""
+    try:
+        from app.services.market_regime_service import MarketRegimeService
+
+        result = MarketRegimeService(_data_reader).regime()
+        if 'error' in result:
+            return jsonify(result), 500
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"指数 regime 计算失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 

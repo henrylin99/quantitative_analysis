@@ -44,6 +44,16 @@ def api_financial_health():
         return _error('财务健康度', e)
 
 
+@api_bp.route('/trial/financial-anomalies', methods=['GET'])
+def api_financial_anomalies():
+    try:
+        from app.services.financial_quality_service import FinancialQualityService
+
+        return _ok(FinancialQualityService().anomaly_scan())
+    except Exception as e:
+        return _error('财务异动扫描', e)
+
+
 @api_bp.route('/trial/moneyflow', methods=['GET'])
 def api_moneyflow():
     try:

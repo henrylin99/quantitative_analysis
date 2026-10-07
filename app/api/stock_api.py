@@ -204,6 +204,27 @@ def get_stock_financials(ts_code):
             'data': None
         }), 500
 
+@api_bp.route('/stocks/<ts_code>/financial-quality', methods=['GET'])
+def get_stock_financial_quality(ts_code):
+    """获取股票财务质量趋势（杜邦分解 + 逐期质量分）"""
+    try:
+        from app.services.financial_quality_service import FinancialQualityService
+
+        result = FinancialQualityService().quality_trend(ts_code)
+        return jsonify({
+            'code': 200,
+            'message': '成功',
+            'data': result
+        })
+    except Exception as e:
+        logger.error(f"获取财务质量趋势API错误: {ts_code}, {e}")
+        return jsonify({
+            'code': 500,
+            'message': f'服务器错误: {str(e)}',
+            'data': None
+        }), 500
+
+
 @api_bp.route('/stocks/<ts_code>/company', methods=['GET'])
 def get_stock_company(ts_code):
     """获取股票公司信息"""

@@ -49,3 +49,33 @@ export function fetchStockFinancials(tsCode: string): Promise<FinancialStatement
 export function fetchStockCompany(tsCode: string): Promise<Record<string, unknown>> {
   return apiGet<Record<string, unknown>>(`/stocks/${encodeURIComponent(tsCode)}/company`)
 }
+
+// 财务质量趋势（杜邦分解 + 逐期质量分）
+export interface FinancialQualityYear {
+  year: string
+  revenue_yoy: number | null
+  profit_yoy: number | null
+  roe: number | null
+  net_margin: number | null
+  gross_margin: number | null
+  asset_turnover: number | null
+  equity_multiplier: number | null
+  cash_to_profit: number | null
+  receiv_yoy: number | null
+  inventory_yoy: number | null
+  score: number
+}
+
+export interface FinancialQualityResult {
+  ts_code: string
+  years: FinancialQualityYear[]
+  latest: FinancialQualityYear
+  roe_trend: string
+  score_trend: string
+  rules: { key: string; label: string }[]
+  error?: string
+}
+
+export function fetchStockFinancialQuality(tsCode: string): Promise<FinancialQualityResult> {
+  return apiGet<FinancialQualityResult>(`/stocks/${encodeURIComponent(tsCode)}/financial-quality`)
+}

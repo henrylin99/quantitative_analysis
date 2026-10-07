@@ -7,8 +7,11 @@ import {
   fetchStockCompany,
   fetchStockCyq,
   fetchStockFinancials,
+  fetchStockFinancialQuality,
   fetchStockMoneyflow,
   type CyqRow,
+  type FinancialQualityResult,
+  type FinancialQualityYear,
   type FinancialStatements,
   type MoneyflowRow,
 } from '../api/stockExtra'
@@ -144,10 +147,12 @@ export default function StockDetailPage() {
   const [mfError, setMfError] = useState<string | null>(null)
 
   const [cyq, setCyq] = useState<CyqRow[] | null>(null)
+  const [cyqPrices, setCyqPrices] = useState<DailyBar[] | null>(null)
   const [cyqLoading, setCyqLoading] = useState(false)
   const [cyqError, setCyqError] = useState<string | null>(null)
 
   const [financials, setFinancials] = useState<FinancialStatements | null>(null)
+  const [finQuality, setFinQuality] = useState<FinancialQualityResult | null>(null)
   const [finLoading, setFinLoading] = useState(false)
   const [finError, setFinError] = useState<string | null>(null)
 
@@ -210,8 +215,17 @@ export default function StockDetailPage() {
     if (activeTab !== 'cyq') return
     setCyqLoading(true)
     setCyqError(null)
-    fetchStockCyq(tsCode, 20)
-      .then((d) => { if (!isCancelled()) setCyq(d) })
+    // 未复权收盘价与筹码成本同口径，叠加在成本分位曲线上看乖离
+    Promise.all([
+      fetchStockCyq(tsCode, 20),
+      fetchStockHistory(tsCode, 60).catch(() => null),
+    ])
+      .then(([d, bars]) => {
+        if (!isCancelled()) {
+          setCyq(d)
+          setCyqPrices(bars)
+        }
+      })
       .catch((e) => {
         if (!isCancelled()) setCyqError(e instanceof Error ? e.message : '筹码数据加载失败')
       })
@@ -226,6 +240,9 @@ export default function StockDetailPage() {
     setFinError(null)
     fetchStockFinancials(tsCode)
       .then((d) => { if (!isCancelled()) setFinancials(d) })
+    fetchStockFinancialQuality(tsCode)
+      .then((d) => { if (!isCancelled()) setFinQuality(d.error ? null : d) })
+      .catch(() => undefined)
       .catch((e) => {
         if (!isCancelled()) setFinError(e instanceof Error ? e.message : '财务数据加载失败')
       })
@@ -366,6 +383,16 @@ export default function StockDetailPage() {
   // —— 筹码：成本分位曲线 + 胜率 ——
   const cyqAsc = useMemo(() => (cyq ? sortByDateAsc(cyq) : null), [cyq])
 
+  const priceByDate = useMemo(() => {
+    const map = new Map<string, number>()
+    if (cyqPrices) {
+      for (const bar of cyqPrices) {
+        if (bar.close != null) map.set(bar.trade_date.slice(0, 10), bar.close)
+      }
+    }
+    return map
+  }, [cyqPrices])
+
   const costOption = useMemo(() => {
     if (!cyqAsc || cyqAsc.length === 0) return null
     const dates = cyqAsc.map((r) => r.trade_date.slice(0, 10))
@@ -394,9 +421,18 @@ export default function StockDetailPage() {
         mk('cost_85pct', '85%分位', '#fbbf24'),
         mk('cost_95pct', '95%分位', palette.up),
         mk('weight_avg', '加权平均', '#f472b6', 1, true),
+        {
+          name: '收盘价',
+          type: 'line' as const,
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: '#e5e7eb', width: 2 },
+          itemStyle: { color: '#e5e7eb' },
+          data: dates.map((d) => priceByDate.get(d) ?? null),
+        },
       ],
     }
-  }, [cyqAsc, palette])
+  }, [cyqAsc, palette, priceByDate])
 
   const winnerOption = useMemo(() => {
     if (!cyqAsc || cyqAsc.length === 0) return null
@@ -423,6 +459,39 @@ export default function StockDetailPage() {
       ],
     }
   }, [cyqAsc, palette])
+
+  // —— 财务质量趋势：ROE 杜邦分解 + 质量分 ——
+  const finQualityOption = useMemo(() => {
+    if (!finQuality || !finQuality.years || finQuality.years.length < 2) return null
+    const years = finQuality.years
+    const dates = years.map((y) => y.year)
+    const line = (field: keyof FinancialQualityYear, name: string, color: string, dashed = false) => ({
+      name,
+      type: 'line' as const,
+      showSymbol: true,
+      connectNulls: false,
+      lineStyle: { color, type: dashed ? ('dashed' as const) : ('solid' as const) },
+      itemStyle: { color },
+      data: years.map((y) => {
+        const v = y[field]
+        return typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(2)) : null
+      }),
+    })
+    return {
+      tooltip: { trigger: 'axis' },
+      legend: { top: 0 },
+      grid: { left: 56, right: 16, top: 34, bottom: 26 },
+      xAxis: { type: 'category', data: dates },
+      yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
+      series: [
+        line('roe', 'ROE', palette.accent, false),
+        line('net_margin', '净利率', palette.teal),
+        line('gross_margin', '毛利率', '#fbbf24'),
+        line('revenue_yoy', '营收YoY', '#94a3b8', true),
+        line('score', '质量分', '#f472b6', true),
+      ],
+    }
+  }, [finQuality, palette])
 
   const cyqStats = useMemo(() => {
     const latest = cyqAsc && cyqAsc.length > 0 ? cyqAsc[cyqAsc.length - 1] : null
@@ -859,6 +928,23 @@ export default function StockDetailPage() {
             </div>
           ) : (
             <EmptyState icon="🏦" text="暂无财务数据" />
+          )}
+
+          {finQuality && finQuality.years && finQuality.years.length >= 2 && (
+            <div className="panel mt-3">
+              <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h6 className="panel-title">
+                  <span className="kicker" />
+                  财务质量趋势（年报 · 杜邦分解）
+                </h6>
+                <span className="text-faint" style={{ fontSize: 12 }}>
+                  ROE 趋势 {finQuality.roe_trend} · 质量分趋势 {finQuality.score_trend}
+                </span>
+              </div>
+              <div className="panel-body">
+                <EChart option={finQualityOption} height={300} />
+              </div>
+            </div>
           )}
         </>
       )}

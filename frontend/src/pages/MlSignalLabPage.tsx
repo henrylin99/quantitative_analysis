@@ -3,6 +3,7 @@ import EChart from '../charts/EChart'
 import { useTheme } from '../theme/ThemeContext'
 import {
   compareModels,
+  fetchChipSignals,
   fetchModelSnapshots,
   fetchModels,
   fetchPortfolios,
@@ -10,6 +11,7 @@ import {
   runPortfolioAttribution,
   runPredictionTracking,
   type AttributionResult,
+  type ChipSignalRow,
   type ModelCompareRow,
   type ModelSnapshot,
   type PredictionTrackResult,
@@ -18,12 +20,13 @@ import { ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass } from '../utils/format'
 
 type Status = 'idle' | 'running' | 'done' | 'failed'
-type TabKey = 'predictions' | 'attribution' | 'models'
+type TabKey = 'predictions' | 'attribution' | 'models' | 'chip'
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'predictions', label: '预测跟踪' },
   { key: 'attribution', label: '组合归因' },
   { key: 'models', label: '模型对比' },
+  { key: 'chip', label: '筹码信号' },
 ]
 
 const fmtPct = (v: number | null | undefined) => formatPercent(v == null ? v : v * 100)
@@ -36,7 +39,7 @@ export default function MlSignalLabPage() {
       <div className="page-head">
         <div>
           <h2>信号实验室</h2>
-          <p className="desc">预测信号滚动跟踪 · 组合因子暴露归因 · 模型训练快照对比</p>
+          <p className="desc">预测信号滚动跟踪 · 组合因子暴露归因 · 模型训练快照对比 · 筹码截面信号</p>
         </div>
       </div>
       <div className="seg mb-3" role="group" style={{ flexWrap: 'wrap' }}>
@@ -54,6 +57,7 @@ export default function MlSignalLabPage() {
       {activeTab === 'predictions' && <PredictionsTab palette={palette} />}
       {activeTab === 'attribution' && <AttributionTab palette={palette} />}
       {activeTab === 'models' && <ModelsTab />}
+      {activeTab === 'chip' && <ChipTab />}
     </div>
   )
 }
@@ -655,6 +659,147 @@ function ModelsTab() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ================= 筹码信号 =================
+
+interface ChipSignalResultView {
+  stats: {
+    scan_date: string
+    universe: number
+    conc_threshold: number
+    counts: { squeeze: number; resonance: number; divergence: number }
+  }
+  definitions: Record<string, string>
+  squeeze: ChipSignalRow[]
+  resonance: ChipSignalRow[]
+  divergence: ChipSignalRow[]
+}
+
+function ChipTab() {
+  const [result, setResult] = useState<ChipSignalResultView | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = (refresh = false) => {
+    if (refresh) setRefreshing(true)
+    fetchChipSignals(refresh)
+      .then(setResult)
+      .catch((e) => setError(e instanceof Error ? e.message : '筹码信号加载失败'))
+      .finally(() => {
+        setLoading(false)
+        setRefreshing(false)
+      })
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  if (loading) return <Loading text="筹码信号扫描中..." />
+  if (error) return <ErrorState message={error} />
+  if (!result) return null
+
+  const { stats } = result
+
+  const mkPanel = (
+    key: 'squeeze' | 'resonance' | 'divergence',
+    title: string,
+    desc: string,
+    tone: string,
+  ) => (
+    <div className="panel">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" style={{ background: tone }} />
+          {title}
+          <span className="chip ms-2">{result[key].length}</span>
+        </h6>
+        <span className="text-faint" style={{ fontSize: 11.5, maxWidth: 640 }}>{desc}</span>
+      </div>
+      <div className="panel-body tight table-container" style={{ maxHeight: 380 }}>
+        {result[key].length === 0 ? (
+          <div className="text-faint">今日无该类信号</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>股票</th>
+                <th className="num">现价</th>
+                <th className="num">5日涨幅</th>
+                <th className="num">获利盘</th>
+                <th className="num">获利盘5日变化</th>
+                <th className="num">筹码集中度</th>
+                <th className="num">成本乖离</th>
+                <th className="num">主力5日净额(万)</th>
+                <th className="num">量能比</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result[key].map((row: ChipSignalRow) => (
+                <tr key={row.ts_code}>
+                  <td>
+                    <code>{row.ts_code}</code>
+                    <span className="ms-1">{row.name ?? ''}</span>
+                  </td>
+                  <td className="num">{formatNumber(row.close, 2)}</td>
+                  <td className={`num ${pctClass((row.pct_5d ?? 0) / 100)}`}>
+                    {row.pct_5d != null ? `${row.pct_5d}%` : '--'}
+                  </td>
+                  <td className="num">{row.winner_rate}%</td>
+                  <td className="num">{row.winner_chg_5d != null ? `+${row.winner_chg_5d}` : '--'}</td>
+                  <td className="num">{formatNumber(row.conc, 4)}</td>
+                  <td className="num">{row.cost_dev != null ? `${row.cost_dev}%` : '--'}</td>
+                  <td className={`num ${row.main_net_5d != null && row.main_net_5d < 0 ? 'text-danger' : 'text-success'}`}>
+                    {row.main_net_5d != null ? formatNumber(row.main_net_5d, 0) : '--'}
+                  </td>
+                  <td className="num">{row.vol_ratio != null ? formatNumber(row.vol_ratio, 2) : '--'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="stat-grid mb-3">
+        <div className="stat">
+          <div className="stat-value">{stats.scan_date}</div>
+          <div className="stat-label">扫描截面</div>
+        </div>
+        <div className="stat">
+          <div className="stat-value">{stats.universe}</div>
+          <div className="stat-label">覆盖股票数</div>
+        </div>
+        <div className="stat">
+          <div className="stat-value">{stats.counts.squeeze}</div>
+          <div className="stat-label">挤压蓄势</div>
+        </div>
+        <div className="stat">
+          <div className="stat-value">{stats.counts.resonance}</div>
+          <div className="stat-label">多头共振</div>
+        </div>
+        <div className="stat">
+          <div className="stat-value">{stats.counts.divergence}</div>
+          <div className="stat-label">背离预警</div>
+        </div>
+        <div className="stat d-flex align-items-center">
+          <button type="button" className="btn btn-outline-secondary btn-sm" disabled={refreshing} onClick={() => load(true)}>
+            {refreshing ? '刷新中…' : '重新扫描'}
+          </button>
+        </div>
+      </div>
+      <div className="d-flex flex-column gap-3">
+        {mkPanel('squeeze', '筹码挤压蓄势', result.definitions.squeeze ?? '', 'var(--accent, #4f8ef7)')}
+        {mkPanel('resonance', '资金×筹码多头共振', result.definitions.resonance ?? '', '#22c55e')}
+        {mkPanel('divergence', '量价资金背离预警', result.definitions.divergence ?? '', '#e8684a')}
+      </div>
     </div>
   )
 }

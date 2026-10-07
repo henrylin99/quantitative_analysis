@@ -730,6 +730,15 @@ class ParquetDataReader:
 
         return None
 
+    def get_index_daily(
+        self,
+        ts_codes: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """读取指数日线（data/index_daily，ts_code 形如 000300.SH）。"""
+        return self._read_index_daily(ts_codes, start_date, end_date)
+
     def _read_index_daily(
         self,
         ts_codes: List[str],

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import EChart from '../charts/EChart'
 import { useTheme } from '../theme/ThemeContext'
-import { fetchFinancialHealth } from '../api/trial'
+import { fetchFinancialAnomalies, fetchFinancialHealth, type FinancialAnomalyData } from '../api/trial'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
-import { formatNumber } from '../utils/format'
+import { formatNumber, pctClass } from '../utils/format'
 
 /** 总分 badge 六档配色（0 灰 → 5 红） */
 const SCORE_COLORS = ['#94a3b8', '#38bdf8', '#34d399', '#fbbf24', '#fb923c', '#ef4444']
@@ -206,8 +206,83 @@ export default function FinancialHealthPage() {
               </table>
             </div>
           </div>
+
+          <AnomalyPanel />
         </>
       )}
+    </div>
+  )
+}
+
+// ================= 财务异动扫描 =================
+
+function AnomalyPanel() {
+  const [anomalies, setAnomalies] = useState<FinancialAnomalyData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchFinancialAnomalies()
+      .then(setAnomalies)
+      .catch((e) => setError(e instanceof Error ? e.message : '财务异动加载失败'))
+  }, [])
+
+  if (error) return null
+  if (!anomalies) return null
+
+  return (
+    <div className="panel mt-3">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          财务异动名单（{anomalies.report_year} 年报）
+        </h6>
+        <span className="text-faint" style={{ fontSize: 12 }}>
+          覆盖 {anomalies.universe} 只 · 命中 {anomalies.total_flagged} 只
+          {Object.entries(anomalies.counts).map(([k, v]) => (
+            <span key={k} className="ms-2">{anomalies.flag_labels[k] ?? k} {v}</span>
+          ))}
+        </span>
+      </div>
+      <div className="panel-body tight table-container" style={{ maxHeight: 480 }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>股票</th>
+              <th className="num">命中</th>
+              <th>异动项</th>
+              <th className="num">营收YoY</th>
+              <th className="num">应收YoY</th>
+              <th className="num">存货YoY</th>
+              <th className="num">毛利率</th>
+              <th className="num">现金流/净利</th>
+            </tr>
+          </thead>
+          <tbody>
+            {anomalies.rows.map((r) => (
+              <tr key={r.ts_code}>
+                <td>
+                  <code>{r.ts_code}</code>
+                  <span className="ms-1" style={{ fontWeight: 600 }}>{r.name ?? ''}</span>
+                </td>
+                <td className="num">
+                  <span className={`badge ${r.n_flags >= 3 ? 'text-bg-danger' : r.n_flags === 2 ? 'text-bg-warning' : 'text-bg-secondary'}`}>
+                    {r.n_flags}
+                  </span>
+                </td>
+                <td style={{ fontSize: 11.5 }}>{r.flags.join('、')}</td>
+                <td className={`num ${pctClass(r.revenue_yoy ?? 0)}`}>{r.revenue_yoy != null ? `${r.revenue_yoy}%` : '--'}</td>
+                <td className={`num ${pctClass(r.receiv_yoy ?? 0)}`}>{r.receiv_yoy != null ? `${r.receiv_yoy}%` : '--'}</td>
+                <td className={`num ${pctClass(r.inventory_yoy ?? 0)}`}>{r.inventory_yoy != null ? `${r.inventory_yoy}%` : '--'}</td>
+                <td className="num">{r.gross_margin != null ? `${r.gross_margin}%` : '--'}</td>
+                <td className="num">{r.cash_to_profit != null ? formatNumber(r.cash_to_profit, 2) : '--'}</td>
+              </tr>
+            ))}
+            {anomalies.rows.length === 0 && (
+              <tr><td colSpan={8}><EmptyState icon="✅" text="无异动" /></td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
