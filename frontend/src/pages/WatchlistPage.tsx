@@ -17,6 +17,7 @@ import {
 } from '../api/market'
 import { StockLink } from '../components/stock/StockLink'
 import { Card, Delta, EmptyState, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
+import { useDebouncedValue } from '../utils/hooks'
 
 const STORAGE_KEY = 'qa-watchlist'
 const DEFAULT_WATCHLIST = ['600000.SH', '000001.SZ', '300750.SZ', '601318.SH', '600519.SH']
@@ -42,16 +43,6 @@ function normalizeCode(input: string): string | null {
     return `${text}.SZ`
   }
   return null
-}
-
-/** 输入防抖：搜索联想用，避免每个按键打一次接口 */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs)
-    return () => clearTimeout(timer)
-  }, [value, delayMs])
-  return debounced
 }
 
 function Yi(amount: number | null | undefined): string {

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchStockOptions, runBacktest, runBacktestOptimize } from '../api/analysis'
+import { runBacktest, runBacktestOptimize } from '../api/analysis'
 import type { OptimizeResult } from '../api/analysis'
+import { fetchTickerSearch, type TickerSearchItem } from '../api/market'
 import type { BacktestResultData, StrategyType } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
+import { useDebouncedValue } from '../utils/hooks'
 import EquityCurve from '../charts/EquityCurve'
 import { formatNumber, formatPercent, pctClass, toLocalDate } from '../utils/format'
 
@@ -67,6 +69,203 @@ const STRATEGIES: StrategyMeta[] = [
 
 type Status = 'idle' | 'running' | 'done' | 'failed'
 
+/** 6 位代码归一化（600000.SH 直用；裸 6 位按交易所规则推断后缀） */
+function normalizeCode(input: string): string | null {
+  const text = input.trim().toUpperCase()
+  if (/^\d{6}\.(SH|SZ|BJ)$/.test(text)) return text
+  if (/^\d{6}$/.test(text)) {
+    if (text.startsWith('6')) return `${text}.SH`
+    if (text.startsWith('8') || text.startsWith('4')) return `${text}.BJ`
+    return `${text}.SZ`
+  }
+  return null
+}
+
+const SUGGEST_BOX: React.CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  left: 0,
+  right: 0,
+  zIndex: 30,
+  marginTop: 4,
+  background: 'var(--surface-2)',
+  border: '1px solid var(--border-strong)',
+  borderRadius: 'var(--radius-sm)',
+  boxShadow: '0 10px 28px rgba(2, 6, 23, 0.35)',
+  overflow: 'hidden',
+}
+
+const SUGGEST_ROW: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  width: '100%',
+  padding: '7px 12px',
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--text)',
+  textAlign: 'left',
+  fontSize: 13,
+  cursor: 'pointer',
+}
+
+const SUGGEST_HINT: React.CSSProperties = {
+  padding: '7px 12px',
+  color: 'var(--text-faint)',
+  fontSize: 12,
+}
+
+const rowHover = {
+  enter: (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = 'var(--surface-3)'
+  },
+  leave: (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = 'transparent'
+  },
+}
+
+/**
+ * 股票手工输入 + 模糊检索组合框：代码 / 名称均可匹配（≥2 字符防抖联想），
+ * 直接输入 6 位代码不经检索直接可用。选中后以 chip 展示，可点「更换」重选。
+ */
+function StockSearchInput({
+  value,
+  name,
+  onPick,
+  onClear,
+}: {
+  value: string
+  name: string
+  onPick: (tsCode: string, stockName: string) => void
+  onClear: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<TickerSearchItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const debounced = useDebouncedValue(query, 300)
+  const direct = normalizeCode(query)
+
+  useEffect(() => {
+    const keyword = debounced.trim()
+    if (keyword.length < 2 || normalizeCode(keyword)) {
+      setItems([])
+      setLoading(false)
+      return
+    }
+    let alive = true
+    setLoading(true)
+    setLoadError(false)
+    fetchTickerSearch(keyword, 8)
+      .then((r) => {
+        if (alive) setItems(r.items.filter((x) => x.ts_code && x.ts_code !== value))
+      })
+      .catch(() => {
+        if (alive) {
+          setItems([])
+          setLoadError(true)
+        }
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [debounced, value])
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const pick = (tsCode: string, stockName: string) => {
+    onPick(tsCode, stockName)
+    setQuery('')
+    setOpen(false)
+  }
+
+  const dropdownOpen = open && query.trim().length >= 2
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' || !dropdownOpen) return
+    e.preventDefault() // 下拉展示时 Enter 采纳第一项，避免误触发表单提交
+    if (direct) pick(direct, '')
+    else if (items.length > 0) pick(items[0].ts_code, items[0].name ?? '')
+  }
+
+  if (value) {
+    return (
+      <div className="d-flex align-items-center gap-2">
+        <span className="chip">{name ? `${name} · ${value}` : value}</span>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onClear}>
+          更换
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        className="form-control"
+        value={query}
+        placeholder="代码或名称，如 600519 / 贵州茅台"
+        autoComplete="off"
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+      />
+      {dropdownOpen && (
+        <div style={SUGGEST_BOX}>
+          {direct && (
+            <button type="button" style={SUGGEST_ROW} onMouseEnter={rowHover.enter} onMouseLeave={rowHover.leave} onClick={() => pick(direct, '')}>
+              <span>直接使用 {direct}</span>
+              <span className="num" style={{ color: 'var(--text-faint)', fontSize: 11 }}>
+                不经检索
+              </span>
+            </button>
+          )}
+          {loading ? (
+            <div style={SUGGEST_HINT}>搜索中…</div>
+          ) : items.length === 0 && !direct ? (
+            <div style={SUGGEST_HINT}>
+              {loadError ? '检索服务暂不可用，可直接输入 6 位代码' : '没有匹配的 A 股标的'}
+            </div>
+          ) : (
+            items.map((item) => (
+              <button
+                key={item.ts_code}
+                type="button"
+                style={SUGGEST_ROW}
+                onMouseEnter={rowHover.enter}
+                onMouseLeave={rowHover.leave}
+                onClick={() => pick(item.ts_code, item.name ?? '')}
+              >
+                <span>{item.name ?? item.ts_code}</span>
+                <span className="num" style={{ color: 'var(--text-faint)', fontSize: 11 }}>
+                  {item.ts_code}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 const STATUS_META: Record<Status, { label: string; className: string }> = {
   idle: { label: '等待回测', className: 'chip' },
   running: { label: '回测中...', className: 'chip' },
@@ -75,8 +274,8 @@ const STATUS_META: Record<Status, { label: string; className: string }> = {
 }
 
 export default function BacktestPage() {
-  const [stocks, setStocks] = useState<{ ts_code: string; symbol: string; name: string }[]>([])
   const [tsCode, setTsCode] = useState('')
+  const [stockName, setStockName] = useState('')
   const [strategyType, setStrategyType] = useState<'' | StrategyType>('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -90,6 +289,22 @@ export default function BacktestPage() {
 
   const [searchParams] = useSearchParams()
 
+  /** 选中股票：缺名称（直输代码 / URL 预选）时用检索接口补一次显示名，失败不阻塞 */
+  const applyStock = (code: string, name: string) => {
+    setTsCode(code)
+    if (name) {
+      setStockName(name)
+      return
+    }
+    setStockName('')
+    fetchTickerSearch(code, 5)
+      .then((r) => {
+        const hit = r.items.find((x) => x.ts_code === code)
+        if (hit?.name) setStockName(hit.name)
+      })
+      .catch(() => undefined)
+  }
+
   useEffect(() => {
     const end = new Date()
     const start = new Date()
@@ -97,14 +312,9 @@ export default function BacktestPage() {
     setEndDate(toLocalDate(end))
     setStartDate(toLocalDate(start))
 
-    // 旧版契约：/backtest?stock=CODE 预选股票
+    // 旧版契约：/backtest?stock=CODE 预选股票（个股详情页跳转入口）
     const preset = searchParams.get('stock')?.trim().toUpperCase()
-    fetchStockOptions()
-      .then((data) => {
-        setStocks(data.stocks)
-        if (preset && data.stocks.some((s) => s.ts_code === preset)) setTsCode(preset)
-      })
-      .catch(() => setStocks([]))
+    if (preset) applyStock(preset, '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -120,7 +330,7 @@ export default function BacktestPage() {
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!tsCode || !strategyType) {
-      setFormError('请选择股票与策略类型')
+      setFormError('请输入股票（代码或名称检索）并选择策略类型')
       return
     }
     setFormError(null)
@@ -150,6 +360,7 @@ export default function BacktestPage() {
     const start = new Date()
     start.setFullYear(end.getFullYear() - 1)
     setTsCode('')
+    setStockName('')
     setStrategyType('')
     setStartDate(toLocalDate(start))
     setEndDate(toLocalDate(end))
@@ -180,14 +391,15 @@ export default function BacktestPage() {
             <div className="row g-3">
               <div className="col-xl-3 col-md-6">
                 <label className="form-label">股票 *</label>
-                <select className="form-select" value={tsCode} onChange={(e) => setTsCode(e.target.value)}>
-                  <option value="">请选择股票</option>
-                  {stocks.map((s) => (
-                    <option key={s.ts_code} value={s.ts_code}>
-                      {s.symbol} - {s.name}
-                    </option>
-                  ))}
-                </select>
+                <StockSearchInput
+                  value={tsCode}
+                  name={stockName}
+                  onPick={(code, name) => applyStock(code, name)}
+                  onClear={() => {
+                    setTsCode('')
+                    setStockName('')
+                  }}
+                />
               </div>
               <div className="col-xl-3 col-md-6">
                 <label className="form-label">策略类型 *</label>
@@ -338,7 +550,10 @@ export default function BacktestPage() {
               </h6>
             </div>
             <div className="panel-body d-flex gap-2 flex-wrap">
-              <span className="chip">股票 · {result.config.ts_code}</span>
+              <span className="chip">
+                股票 · {stockName ? `${stockName} ` : ''}
+                {result.config.ts_code}
+              </span>
               <span className="chip">
                 期间 · {result.config.start_date} ~ {result.config.end_date}
               </span>
