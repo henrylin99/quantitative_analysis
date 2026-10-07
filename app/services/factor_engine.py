@@ -60,6 +60,9 @@ class FactorEngine:
             # 筹码面因子
             'chip_concentration': self._chip_concentration_factor,
             'winner_rate_change': self._winner_rate_change_factor,
+            'cost_deviation': self._cost_deviation_factor,
+            'winner_rate_level': self._winner_rate_level_factor,
+            'chip_concentration_chg_20d': self._chip_concentration_chg_factor,
         }
         # Alpha191 因子（全市场宽面板计算，走 _alpha191_factor 分发）；
         # 批量计算走 scripts/compute_alpha191.py（面板共享一次加载），
@@ -160,6 +163,13 @@ class FactorEngine:
                 ],
                 "calculation_rule": "((buy_lg_amount+buy_elg_amount)-(sell_lg_amount+sell_elg_amount)) / (buy_sm_amount+buy_md_amount+buy_lg_amount+buy_elg_amount)。",
                 "sample_expectation": "若大单净流入为 625、分母为 1000，则样例值应为 0.625。",
+            },
+            {
+                "factor_id": "cost_deviation",
+                "factor_name": "成本乖离",
+                "required_fields": ["close", "weight_avg"],
+                "calculation_rule": "(close - weight_avg) / weight_avg，收盘价相对全体持仓者加权平均成本的偏离度。",
+                "sample_expectation": "若 close=11.5、weight_avg=10.0，则样例值应为 0.15。",
             },
         ]
 
@@ -298,6 +308,9 @@ class FactorEngine:
         'money_flow_momentum': ['moneyflow'],
         'chip_concentration': ['cyq'],
         'winner_rate_change': ['cyq'],
+        'cost_deviation': ['daily', 'cyq'],
+        'winner_rate_level': ['cyq'],
+        'chip_concentration_chg_20d': ['cyq'],
     }
 
     # 交易日窗口 → 日历日预热窗的换算系数：252 交易日/365 日历日 ≈ 1.45，
@@ -314,6 +327,8 @@ class FactorEngine:
         'daily_basic': ('get_daily_basic', True, False),
         'moneyflow': ('get_moneyflow', True, False),
         'cyq': ('get_cyq_perf', True, False),
+        # daily 为未复权收盘价——cyq 成本是未复权口径，成本乖离必须用同口径价格
+        'daily': ('get_daily', True, False),
         'income': ('get_income_statement', False, True),
         'balance': ('get_balance_sheet', False, True),
     }
@@ -765,6 +780,51 @@ class FactorEngine:
         df['factor_value'] = df.groupby('ts_code')['winner_rate'].diff(5)
         return self._finalize_factor_result(df, 'factor_value', factor_id)
 
+    def _cost_deviation_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """成本乖离因子：收盘价相对市场加权平均成本的偏离度。
+
+        正值 = 现价高于全体持仓者平均成本（获利状态），负值 = 套牢状态。
+        """
+        if 'cyq' not in data or data['cyq'].empty \
+                or 'daily' not in data or data['daily'].empty:
+            return pd.DataFrame()
+
+        prices = data['daily'].copy()
+        prices['trade_date'] = pd.to_datetime(prices['trade_date'])
+        prices = prices[['ts_code', 'trade_date', 'close']]
+        cyq = data['cyq'].copy()
+        cyq['trade_date'] = pd.to_datetime(cyq['trade_date'])
+        merged = prices[['ts_code', 'trade_date', 'close']].merge(
+            cyq[['ts_code', 'trade_date', 'weight_avg']],
+            on=['ts_code', 'trade_date'], how='inner',
+        )
+        merged = self._sorted_by_code_and_date(merged)
+        merged['factor_value'] = (merged['close'] - merged['weight_avg']) / merged['weight_avg']
+        return self._finalize_factor_result(merged, 'factor_value', factor_id)
+
+    def _winner_rate_level_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """获利盘水平因子：获利盘比例（0~1），衡量当前价格下的获利持仓占比"""
+        if 'cyq' not in data or data['cyq'].empty:
+            return pd.DataFrame()
+
+        df = data['cyq'].copy()
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+        df['factor_value'] = df['winner_rate'] / 100.0
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
+    def _chip_concentration_chg_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """筹码集中度20日变化因子：90%筹码区间宽度的20日差分。
+
+        负值 = 筹码区间收窄（趋向集中，常见于吸筹/蓄势），正值 = 筹码发散。
+        """
+        if 'cyq' not in data or data['cyq'].empty:
+            return pd.DataFrame()
+
+        df = self._sorted_by_code_and_date(data['cyq'])
+        df['conc'] = (df['cost_95pct'] - df['cost_5pct']) / df['cost_50pct']
+        df['factor_value'] = df.groupby('ts_code')['conc'].diff(20)
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def filter_universe_asof(self, basic_df: pd.DataFrame, trade_date: str) -> List[str]:
         """按历史时点过滤股票池，消除幸存者偏差与次新股污染。
 
@@ -1007,7 +1067,7 @@ class FactorEngine:
                     ftype = 'fundamental'
                 elif any(x in factor_id for x in ['money', 'flow']):
                     ftype = 'money_flow'
-                elif any(x in factor_id for x in ['chip', 'winner']):
+                elif any(x in factor_id for x in ['chip', 'winner', 'cost_dev']):
                     ftype = 'chip'
                 else:
                     ftype = 'other'

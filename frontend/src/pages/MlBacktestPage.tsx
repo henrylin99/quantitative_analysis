@@ -5,8 +5,10 @@ import {
   fetchBacktestRunResult,
   fetchBacktestRunStatus,
   fetchFactors,
+  fetchIndexRegime,
   fetchModels,
   runMlBacktest,
+  type IndexRegimeRow,
   type MlBacktestResult,
 } from '../api/mlFactor'
 import { ErrorState, Loading } from '../components/StateViews'
@@ -162,6 +164,35 @@ export default function MlBacktestPage() {
 
   const pm = result?.performance_metrics
 
+  const [regimes, setRegimes] = useState<IndexRegimeRow[]>([])
+
+  useEffect(() => {
+    fetchIndexRegime()
+      .then((r) => setRegimes(r.indexes ?? []))
+      .catch(() => undefined)
+  }, [])
+
+  const regimeTint: Record<string, string> = { 多头: '#22c55e', 空头: '#e8684a', 震荡: '#f59e0b' }
+
+  const regimeOption = useMemo(() => {
+    if (regimes.length === 0) return null
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v: number) => `${((v - 1) * 100).toFixed(1)}%` },
+      grid: { left: 48, right: 12, top: 12, bottom: 22 },
+      xAxis: { type: 'category', data: regimes[0].series.map((p) => p.date), boundaryGap: false, axisLabel: { show: false } },
+      yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${((v - 1) * 100).toFixed(0)}%` } },
+      series: regimes.map((r) => ({
+        name: r.name,
+        type: 'line' as const,
+        showSymbol: false,
+        data: r.series.map((p) => p.close),
+        lineStyle: { color: regimeTint[r.regime] ?? palette.text, width: 1.6 },
+        itemStyle: { color: regimeTint[r.regime] ?? palette.text },
+      })),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regimes, palette])
+
   const returnsOption = useMemo(() => {
     if (!result?.equity_curve?.length) return null
     return {
@@ -173,6 +204,7 @@ export default function MlBacktestPage() {
       series: [
         { name: '策略净值', type: 'line', showSymbol: false, data: result.equity_curve.map((p) => p.portfolio), itemStyle: { color: palette.accent }, areaStyle: { color: palette.accent, opacity: 0.1 } },
         { name: '基准净值', type: 'line', showSymbol: false, data: result.equity_curve.map((p) => p.benchmark), itemStyle: { color: palette.text } },
+        { name: '超额净值', type: 'line', showSymbol: false, connectNulls: false, data: result.equity_curve.map((p) => (p.excess != null ? 1 + p.excess : null)), lineStyle: { type: 'dashed', width: 1.5 }, itemStyle: { color: palette.violet ?? '#a78bfa' } },
       ],
     }
   }, [result, palette])
@@ -243,6 +275,42 @@ export default function MlBacktestPage() {
         </div>
         <span className="chip">{status === 'running' ? '回测中…' : status === 'done' ? '回测完成' : status === 'failed' ? '回测失败' : '等待回测'}</span>
       </div>
+
+      {regimes.length > 0 && (
+        <div className="panel mb-3">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              指数市场状态（20日动量 × 均线排列）
+            </h6>
+            <span className="text-faint" style={{ fontSize: 12 }}>
+              回测为恒仓口径；实际执行时可按当前 regime 调节仓位
+            </span>
+          </div>
+          <div className="panel-body">
+            <div className="row g-2">
+              {regimes.map((r) => (
+                <div key={r.code} className="col-lg-3 col-md-6 col-6">
+                  <div className="p-2 rounded h-100" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span style={{ fontSize: 13 }}>{r.name}</span>
+                      <span className={`badge ${r.regime === '多头' ? 'text-bg-success' : r.regime === '空头' ? 'text-bg-danger' : 'text-bg-warning'}`}>{r.regime}</span>
+                    </div>
+                    <div className="text-faint" style={{ fontSize: 11.5, marginTop: 2 }}>
+                      {formatNumber(r.close, 2)} · 20d{' '}
+                      <span className={pctClass(r.ret_20d ?? 0)}>{r.ret_20d != null ? `${r.ret_20d}%` : '--'}</span>
+                      {' · 60d '}
+                      <span className={pctClass(r.ret_60d ?? 0)}>{r.ret_60d != null ? `${r.ret_60d}%` : '--'}</span>
+                      {r.vol_20d_ann != null ? ` · 波动 ${r.vol_20d_ann}%` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {regimeOption && <EChart option={regimeOption} height={180} />}
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <div className="panel-body">

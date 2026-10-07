@@ -1116,14 +1116,20 @@ class BacktestEngine:
         initial_capital: float,
     ) -> List[Dict[str, Any]]:
         benchmark_map = {row['date']: row.get('value') for row in benchmark_returns}
-        return [
-            {
+        curve = []
+        for item in portfolio_values:
+            benchmark = benchmark_map.get(item['date'])
+            portfolio = item['total_value'] / initial_capital if initial_capital else None
+            # 超额净值：策略与基准同时从 1 起步后的净值差
+            excess = (portfolio - benchmark) \
+                if portfolio is not None and benchmark is not None else None
+            curve.append({
                 'date': item['date'],
-                'portfolio': item['total_value'] / initial_capital if initial_capital else None,
-                'benchmark': benchmark_map.get(item['date']),
-            }
-            for item in portfolio_values
-        ]
+                'portfolio': portfolio,
+                'benchmark': benchmark,
+                'excess': excess,
+            })
+        return curve
 
     def _build_drawdown_series(self, portfolio_values: List[Dict[str, Any]], initial_capital: float) -> List[Dict[str, Any]]:
         data = []
