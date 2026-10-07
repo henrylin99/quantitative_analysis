@@ -477,6 +477,7 @@ function AttributionTab({ palette }: { palette: Palette }) {
 // ================= 模型对比 =================
 
 function ModelsTab() {
+  const { palette } = useTheme()
   const [models, setModels] = useState<Array<{ model_id: string; model_name?: string }>>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [snapshots, setSnapshots] = useState<ModelSnapshot[]>([])
@@ -521,13 +522,36 @@ function ModelsTab() {
     }
   }
 
+  // metrics 里的 feature_importance 是 {特征: 重要度} 字典，不进标量对比表，
+  // 单独在下方"特征重要性"面板展示
   const metricKeys = useMemo(() => {
     const keys = new Set<string>()
     for (const row of compareRows) {
-      if (row.metrics) Object.keys(row.metrics).forEach((k) => keys.add(k))
+      if (!row.metrics) continue
+      Object.entries(row.metrics).forEach(([k, v]) => {
+        if (v !== null && typeof v === 'object') return
+        keys.add(k)
+      })
     }
     return [...keys]
   }, [compareRows])
+
+  const topImportance = (v: unknown): Array<[string, number]> => {
+    if (!v || typeof v !== 'object') return []
+    return Object.entries(v as Record<string, number>)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+  }
+
+  const compactMetrics = (v: unknown) => {
+    if (!v || typeof v !== 'object') return v
+    const out: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (val !== null && typeof val === 'object') continue
+      out[k] = val
+    }
+    return out
+  }
 
   const metricVal = (v: unknown) => {
     const n = Number(v)
@@ -613,6 +637,46 @@ function ModelsTab() {
         </div>
       )}
 
+      {compareRows.length > 0 && (
+        <div className="panel mb-3">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              特征重要性 Top 10（最新快照）
+            </h6>
+          </div>
+          <div className="panel-body tight table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>特征</th>
+                  <th className="num">重要度</th>
+                  <th style={{ width: '30%' }} />
+                </tr>
+              </thead>
+              <tbody>
+                {compareRows.flatMap((row) => {
+                  const items = topImportance(row.metrics?.feature_importance)
+                  if (items.length === 0) return [<tr key={row.model_id}><td colSpan={4} className="text-faint">{row.model_id}：无特征重要性数据</td></tr>]
+                  const max = items[0][1] || 1
+                  return items.map(([feat, imp], i) => (
+                    <tr key={`${row.model_id}-${feat}`}>
+                      {i === 0 ? <td rowSpan={items.length} style={{ verticalAlign: "top" }}><code>{row.model_id}</code></td> : null}
+                      <td className="text-faint" style={{ fontSize: 12 }}>{feat}</td>
+                      <td className="num">{formatNumber(imp, 4)}</td>
+                      <td>
+                        <div style={{ height: 8, background: palette.violet, width: `${(imp / max) * 100}%`, borderRadius: 2 }} />
+                      </td>
+                    </tr>
+                  ))
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {snapshots.length > 0 && (
         <div className="panel">
           <div className="panel-head">
@@ -652,7 +716,7 @@ function ModelsTab() {
                       {JSON.stringify(s.model_params ?? {})}
                     </td>
                     <td className="text-faint" style={{ fontSize: 11, maxWidth: 200 }}>
-                      {JSON.stringify(s.metrics ?? {})}
+                      {JSON.stringify(compactMetrics(s.metrics ?? {}))}
                     </td>
                   </tr>
                 ))}
