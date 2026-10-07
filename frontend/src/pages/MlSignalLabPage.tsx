@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import EChart from '../charts/EChart'
 import { useTheme } from '../theme/ThemeContext'
 import {
   compareModels,
+  fetchChipSignalBacktest,
   fetchChipSignals,
   fetchModelSnapshots,
   fetchModels,
@@ -11,6 +12,7 @@ import {
   runPortfolioAttribution,
   runPredictionTracking,
   type AttributionResult,
+  type ChipSignalBacktestResult,
   type ChipSignalRow,
   type ModelCompareRow,
   type ModelSnapshot,
@@ -799,6 +801,188 @@ function ChipTab() {
         {mkPanel('squeeze', '筹码挤压蓄势', result.definitions.squeeze ?? '', 'var(--accent, #4f8ef7)')}
         {mkPanel('resonance', '资金×筹码多头共振', result.definitions.resonance ?? '', '#22c55e')}
         {mkPanel('divergence', '量价资金背离预警', result.definitions.divergence ?? '', '#e8684a')}
+      </div>
+      <ChipBacktestPanel />
+    </div>
+  )
+}
+
+const BT_COLORS: Record<string, string> = {
+  squeeze: '#4f8ef7',
+  resonance: '#22c55e',
+  divergence: '#e8684a',
+}
+
+const HORIZONS = [5, 10, 20] as const
+
+function ChipBacktestPanel() {
+  const { palette } = useTheme()
+  const [data, setData] = useState<ChipSignalBacktestResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(20)
+
+  const load = (refresh = false) => {
+    if (refresh) {
+      setRefreshing(true)
+      setLoading(true)
+    }
+    fetchChipSignalBacktest(12, refresh)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '信号回测加载失败'))
+      .finally(() => {
+        setLoading(false)
+        setRefreshing(false)
+      })
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const chartOption = useMemo(() => {
+    if (!data) return null
+    const key = `h${horizon}`
+    const series: Record<string, unknown>[] = Object.keys(data.signals).map((name) => ({
+      name: data.signals[name].label,
+      type: 'line',
+      showSymbol: false,
+      connectNulls: false,
+      data: data.nav_series[name]?.[key]?.nav ?? [],
+      lineStyle: { width: 1.6 },
+      itemStyle: { color: BT_COLORS[name] },
+    }))
+    const uni = Object.keys(data.signals)[0]
+    if (uni) {
+      series.push({
+        name: '全市场等权',
+        type: 'line',
+        showSymbol: false,
+        data: data.nav_series[uni]?.[key]?.uni_nav ?? [],
+        lineStyle: { width: 1.2, type: 'dashed' },
+        itemStyle: { color: palette.border },
+      })
+    }
+    return {
+      textStyle: { color: palette.text },
+      tooltip: { trigger: 'axis' },
+      legend: { top: 0, textStyle: { color: palette.text, fontSize: 11 } },
+      grid: { left: 56, right: 16, top: 30, bottom: 28 },
+      xAxis: { type: 'category', data: data.nav_series.squeeze?.[key]?.dates ?? [] },
+      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: palette.gridHorz } } },
+      series,
+    }
+  }, [data, horizon, palette])
+
+  if (loading) return <Loading text="信号历史回测计算中（约 15s，服务端缓存 1 小时）..." />
+  if (error) return <ErrorState message={error} />
+  if (!data) return null
+
+  const fmtBp = (v: number | null) => (v == null ? '--' : `${(v / 100).toFixed(2)}%`)
+  const tCell = (v: number | null) =>
+    v == null ? (
+      '--'
+    ) : (
+      <span className={v >= 2 ? 'text-success' : v <= -2 ? 'text-danger' : ''}>
+        {v.toFixed(2)}
+      </span>
+    )
+
+  return (
+    <div className="panel mt-3">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" style={{ background: '#a855f7' }} />
+          信号有效性回测（近 12 个月）
+        </h6>
+        <div className="d-flex align-items-center gap-2">
+          <span className="text-faint" style={{ fontSize: 11.5 }}>
+            {data.meta.start} ~ {data.meta.end} · {data.meta.n_days} 个截面 ·
+            T+1 开盘入场、T+1+H 开盘出场 · 超额基准为全市场等权
+          </span>
+          <div className="seg">
+            {HORIZONS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                className={`seg-item ${horizon === h ? 'active' : ''}`}
+                onClick={() => setHorizon(h)}
+              >
+                {h}日
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            disabled={refreshing}
+            onClick={() => load(true)}
+          >
+            {refreshing ? '重算中…' : '重算'}
+          </button>
+        </div>
+      </div>
+      <div className="panel-body tight">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>信号</th>
+              <th className="num">触发数</th>
+              {HORIZONS.map((h) => (
+                <Fragment key={h}>
+                  <th className="num" colSpan={3}>
+                    {h}日持有
+                  </th>
+                </Fragment>
+              ))}
+            </tr>
+            <tr>
+              <th></th>
+              <th className="num"></th>
+              {HORIZONS.map((h) => (
+                <Fragment key={h}>
+                  <th className="num">平均收益</th>
+                  <th className="num">超额</th>
+                  <th className="num">t值</th>
+                </Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(data.signals).map(([name, sig]) => {
+              const totalEvents = HORIZONS.reduce(
+                (acc, h) => acc + (sig.horizons[`h${h}`]?.n_events ?? 0),
+                0,
+              )
+              return (
+                <tr key={name}>
+                  <td>
+                    <span className="kicker" style={{ background: BT_COLORS[name] }} />
+                    {sig.label}
+                  </td>
+                  <td className="num">{totalEvents > 0 ? totalEvents : '--'}</td>
+                  {HORIZONS.map((h) => {
+                    const st = sig.horizons[`h${h}`]
+                    return (
+                      <Fragment key={h}>
+                        <td className="num">{fmtBp(st?.mean_ret_bp ?? null)}</td>
+                        <td className={`num ${(st?.excess_bp ?? 0) < 0 ? 'text-danger' : (st?.excess_bp ?? 0) > 0 ? 'text-success' : ''}`}>
+                          {fmtBp(st?.excess_bp ?? null)}
+                        </td>
+                        <td className="num">{tCell(st?.excess_t ?? null)}</td>
+                      </Fragment>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {!data.meta.has_moneyflow && (
+          <div className="text-faint mt-2">⚠️ 无资金流数据，共振/背离信号无法计算</div>
+        )}
+        {chartOption && <EChart option={chartOption} height={320} />}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fetchMarketBrief } from '../api/trial'
-import type { BriefIndustryRow, BriefStockRow } from '../api/trial'
+import { fetchDailyAlerts, fetchMarketBrief } from '../api/trial'
+import type { BriefIndustryRow, BriefStockRow, DailyAlertRecord } from '../api/trial'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass } from '../utils/format'
 
@@ -215,6 +215,100 @@ export default function MarketBriefPage() {
           </div>
         </>
       )}
+      <DailyAlertsPanel />
+    </div>
+  )
+}
+
+const ALERT_LEVEL_COLORS: Record<string, string> = {
+  warn: '#e8684a',
+  info: '#94a3b8',
+}
+
+function DailyAlertsPanel() {
+  const [records, setRecords] = useState<DailyAlertRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+
+  const load = (refresh = false) => {
+    if (refresh) setScanning(true)
+    fetchDailyAlerts(refresh)
+      .then((d) => setRecords(d.records))
+      .catch((e) => setError(e instanceof Error ? e.message : '预警记录加载失败'))
+      .finally(() => setScanning(false))
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  return (
+    <div className="panel mt-3">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" style={{ background: '#e8684a' }} />
+          每日预警记录
+        </h6>
+        <div className="d-flex align-items-center gap-2">
+          <span className="text-faint" style={{ fontSize: 11.5 }}>
+            每日收盘后自动扫描（regime 翻转 / 筹码信号新增 / 行业轮动榜首）
+          </span>
+          <button type="button" className="btn btn-outline-secondary btn-sm" disabled={scanning} onClick={() => load(true)}>
+            {scanning ? '扫描中…' : '立即扫描'}
+          </button>
+        </div>
+      </div>
+      <div className="panel-body tight">
+        {error && <ErrorState message={error} />}
+        {!error && records == null && <Loading text="预警记录加载中..." />}
+        {!error && records && records.length === 0 && (
+          <EmptyState icon="🔕" text="暂无预警记录（首个交易日收盘后自动生成）" />
+        )}
+        {!error && records && records.length > 0 && (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>预警</th>
+                <th>指数 regime</th>
+                <th className="num">信号数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.slice().reverse().map((r) => (
+                <tr key={r.scan_date}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.scan_date}</td>
+                  <td>
+                    {(r.alerts ?? []).map((a, i) => (
+                      <div key={i} className="d-flex align-items-start gap-1" style={{ fontSize: 12 }}>
+                        <span
+                          className="badge"
+                          style={{ background: ALERT_LEVEL_COLORS[a.level] ?? '#94a3b8', color: '#fff', flexShrink: 0 }}
+                        >
+                          {a.level === 'warn' ? '预警' : '动态'}
+                        </span>
+                        <span>{a.message}</span>
+                      </div>
+                    ))}
+                  </td>
+                  <td>
+                    {(r.regime ?? []).map((x) => (
+                      <span key={x.code} className="me-2" style={{ fontSize: 12 }}>
+                        {x.name}·{x.regime}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="num">
+                    {r.signals?.stats
+                      ? `${r.signals.stats.counts.squeeze}/${r.signals.stats.counts.resonance}/${r.signals.stats.counts.divergence}`
+                      : '--'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }

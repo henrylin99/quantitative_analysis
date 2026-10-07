@@ -253,3 +253,50 @@ export interface FinancialAnomalyData {
 }
 
 export const fetchFinancialAnomalies = () => apiGet<FinancialAnomalyData>('/trial/financial-anomalies', undefined, 120_000)
+
+// ================= 财务异动前向收益 =================
+
+export interface AnomalyHorizonStats {
+  n: number
+  mean_ret_bp: number | null
+  win_rate: number | null
+  excess_bp: number | null
+  excess_t: number | null
+}
+
+export interface AnomalyForwardData {
+  report_year: string
+  horizons: number[]
+  groups: Record<string, { label: string; n_stocks: number } & Record<string, AnomalyHorizonStats | string | number>>
+  note: string
+}
+
+export const fetchAnomalyForward = (refresh = false) =>
+  apiGet<AnomalyForwardData>('/trial/financial-anomaly-backtest', refresh ? { refresh: '1' } : undefined, 180_000)
+
+// ================= 每日预警记录 =================
+
+export interface DailyAlertItem {
+  type: string
+  level: 'info' | 'warn' | string
+  message: string
+}
+
+export interface DailyAlertRecord {
+  scan_date: string
+  scanned_at: string
+  regime: { code: string; name: string; regime: string }[] | null
+  signals: {
+    stats: { scan_date: string; universe: number; counts: Record<string, number> }
+    codes: Record<string, string[]>
+  } | null
+  rotation: {
+    top: { industry: string; total_score: number }[]
+    bottom: { industry: string; total_score: number }[]
+  } | null
+  anomaly: { report_year: string; total_flagged: number } | null
+  alerts: DailyAlertItem[]
+}
+
+export const fetchDailyAlerts = (refresh = false) =>
+  apiGet<{ records: DailyAlertRecord[] }>('/trial/daily-alerts', refresh ? { refresh: '1' } : undefined, 180_000)

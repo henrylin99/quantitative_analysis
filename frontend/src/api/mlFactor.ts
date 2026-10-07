@@ -860,3 +860,44 @@ export interface IndexRegimeRow {
 
 export const fetchIndexRegime = () =>
   rawGet<{ indexes: IndexRegimeRow[]; generated_at: string }>('/ml-factor/index-regime')
+
+// ================= 筹码信号历史有效性回测 =================
+
+export interface ChipSignalHorizonStats {
+  n_days: number
+  n_events: number
+  avg_events: number
+  mean_ret_bp: number | null
+  median_ret_bp: number | null
+  win_rate: number | null
+  excess_bp: number | null
+  excess_t: number | null
+  worst_ret_bp: number | null
+  total_ret_pct: number | null
+  uni_total_ret_pct: number | null
+  nav: number | null
+  uni_nav: number | null
+}
+
+export interface ChipSignalBacktestResult {
+  months?: number
+  meta: {
+    start: string
+    end: string
+    n_days: number
+    universe_avg_count: number
+    horizons: number[]
+    min_events_per_day: number
+    has_moneyflow: boolean
+  }
+  signals: Record<string, { label: string; horizons: Record<string, ChipSignalHorizonStats> }>
+  nav_series: Record<string, Record<string, { dates: string[]; nav: (number | null)[]; uni_nav: number[] }>>
+  definitions: Record<string, string>
+}
+
+export const fetchChipSignalBacktest = (months = 12, refresh = false) =>
+  rawGet<ChipSignalBacktestResult>(
+    '/ml-factor/chip-signal-backtest',
+    refresh ? { months, refresh: '1' } : { months },
+    180_000,
+  )

@@ -54,6 +54,45 @@ def api_financial_anomalies():
         return _error('财务异动扫描', e)
 
 
+@api_bp.route('/trial/daily-alerts', methods=['GET'])
+def api_daily_alerts():
+    """每日预警扫描记录（?refresh=1 立即扫描一次）。"""
+    try:
+        from app.services.daily_alert_service import DailyAlertService
+
+        limit = request.args.get('limit', type=int) or 30
+        if request.args.get('refresh') == '1':
+            DailyAlertService().run_scan(force=False)
+        return _ok({'records': DailyAlertService().list_records(limit=limit)})
+    except Exception as e:
+        return _error('每日预警记录', e)
+
+
+@api_bp.route('/trial/industry-rotation', methods=['GET'])
+def api_industry_rotation():
+    """行业轮动评分：动量 + 主力资金 + 估值分位三维截面 z-score。"""
+    try:
+        from app.services.industry_rotation_service import IndustryRotationService
+
+        months = request.args.get('months', type=int) or 12
+        force = request.args.get('refresh') == '1'
+        return _ok(IndustryRotationService().run(months=months, force_refresh=force))
+    except Exception as e:
+        return _error('行业轮动评分', e)
+
+
+@api_bp.route('/trial/financial-anomaly-backtest', methods=['GET'])
+def api_financial_anomaly_backtest():
+    """财务异动名单按披露日的前向收益（异动组 vs 全市场等权）。"""
+    try:
+        from app.services.signal_backtest_service import AnomalyForwardService
+
+        force = request.args.get('refresh') == '1'
+        return _ok(AnomalyForwardService().run(force_refresh=force))
+    except Exception as e:
+        return _error('财务异动前向收益', e)
+
+
 @api_bp.route('/trial/moneyflow', methods=['GET'])
 def api_moneyflow():
     try:
