@@ -63,6 +63,11 @@ class FactorEngine:
             'cost_deviation': self._cost_deviation_factor,
             'winner_rate_level': self._winner_rate_level_factor,
             'chip_concentration_chg_20d': self._chip_concentration_chg_factor,
+
+            # 风格因子（规模 / 股息 / 流动性）
+            'size_ln_mv': self._size_ln_mv_factor,
+            'dividend_yield': self._dividend_yield_factor,
+            'turnover_rank': self._turnover_rank_factor,
         }
         # Alpha191 因子（全市场宽面板计算，走 _alpha191_factor 分发）；
         # 批量计算走 scripts/compute_alpha191.py（面板共享一次加载），
@@ -208,6 +213,11 @@ class FactorEngine:
         try:
             result = pd.DataFrame()
 
+            # 入口统一日期格式：作业环境变量可能传 YYYYMMDD，下游
+            # strptime('%Y-%m-%d')（预热窗/IC 回看）会直接解析失败
+            start_date = pd.to_datetime(str(start_date)).strftime('%Y-%m-%d')
+            end_date = pd.to_datetime(str(end_date)).strftime('%Y-%m-%d')
+
             # 检查是否为内置因子
             if factor_id in self.builtin_factors:
                 result = self._calculate_builtin_factor(
@@ -311,6 +321,9 @@ class FactorEngine:
         'cost_deviation': ['daily', 'cyq'],
         'winner_rate_level': ['cyq'],
         'chip_concentration_chg_20d': ['cyq'],
+        'size_ln_mv': ['daily_basic'],
+        'dividend_yield': ['daily_basic'],
+        'turnover_rank': ['daily_basic'],
     }
 
     # 交易日窗口 → 日历日预热窗的换算系数：252 交易日/365 日历日 ≈ 1.45，
@@ -771,6 +784,51 @@ class FactorEngine:
         df['factor_value'] = (df['cost_95pct'] - df['cost_5pct']) / df['cost_50pct']
         return self._finalize_factor_result(df, 'factor_value', factor_id)
 
+    def _size_ln_mv_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """市值（规模）风格因子：总市值的自然对数"""
+        if 'daily_basic' not in data or data['daily_basic'].empty:
+            return pd.DataFrame()
+
+        df = data['daily_basic'].copy()
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+        df['total_mv'] = pd.to_numeric(df['total_mv'], errors='coerce')
+        df = df[df['total_mv'].notna() & (df['total_mv'] > 0)]
+        if df.empty:
+            return pd.DataFrame()
+
+        df['factor_value'] = np.log(df['total_mv'])
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
+    def _dividend_yield_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """股息率风格因子：股息率 TTM（百分数转小数）"""
+        if 'daily_basic' not in data or data['daily_basic'].empty:
+            return pd.DataFrame()
+
+        df = data['daily_basic'].copy()
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+        df['dv_ttm'] = pd.to_numeric(df['dv_ttm'], errors='coerce')
+        df = df[df['dv_ttm'].notna() & (df['dv_ttm'] > 0)]
+        if df.empty:
+            return pd.DataFrame()
+
+        df['factor_value'] = df['dv_ttm'] / 100.0
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
+    def _turnover_rank_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
+        """流动性风格因子：流通换手率的当日截面百分位（0-1，高=交易拥挤）"""
+        if 'daily_basic' not in data or data['daily_basic'].empty:
+            return pd.DataFrame()
+
+        df = data['daily_basic'].copy()
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+        df['turnover_rate_f'] = pd.to_numeric(df['turnover_rate_f'], errors='coerce')
+        df = df[df['turnover_rate_f'].notna() & (df['turnover_rate_f'] > 0)]
+        if df.empty:
+            return pd.DataFrame()
+
+        df['factor_value'] = df.groupby('trade_date')['turnover_rate_f'].rank(pct=True)
+        return self._finalize_factor_result(df, 'factor_value', factor_id)
+
     def _winner_rate_change_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """胜率变化因子：5日胜率差分"""
         if 'cyq' not in data or data['cyq'].empty:
@@ -1067,6 +1125,8 @@ class FactorEngine:
                     ftype = 'fundamental'
                 elif any(x in factor_id for x in ['money', 'flow']):
                     ftype = 'money_flow'
+                elif any(x in factor_id for x in ['size', 'dividend', 'turnover_rank']):
+                    ftype = 'style'
                 elif any(x in factor_id for x in ['chip', 'winner', 'cost_dev']):
                     ftype = 'chip'
                 else:
