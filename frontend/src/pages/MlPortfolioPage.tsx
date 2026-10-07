@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  addPortfolioTrade,
   createPortfolioPosition,
   deletePortfolio,
   deletePosition,
+  deletePortfolioTrade,
   fetchLatestFactorCoverageDate,
   fetchPortfolioDetail,
+  fetchPortfolioEquityCurve,
+  fetchPortfolioTrades,
   fetchPortfolios,
   rebalanceApply,
   rebalancePreview,
@@ -12,9 +16,13 @@ import {
   runIntegratedSelection,
   saveOptimizedPortfolio,
   type IntegratedSelectionResult,
+  type PortfolioEquityCurve,
   type PortfolioListItem,
   type PortfolioSummary,
+  type PortfolioTrade,
 } from '../api/mlFactor'
+import EChart from '../charts/EChart'
+import { useTheme } from '../theme/ThemeContext'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { downloadCsv, formatNumber, formatPercent, toLocalDate } from '../utils/format'
 
@@ -63,6 +71,12 @@ export default function MlPortfolioPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [rebalance, setRebalance] = useState<{ instructions: [string, number][]; turnover: number; cost: number } | null>(null)
   const [rebBusy, setRebBusy] = useState(false)
+  // 交易流水 + 市值曲线
+  const [trades, setTrades] = useState<PortfolioTrade[]>([])
+  const [curve, setCurve] = useState<PortfolioEquityCurve | null>(null)
+  const emptyTradeForm = { ts_code: '', action: 'buy' as 'buy' | 'sell', quantity: '', price: '', fee: '', traded_at: toLocalDate(new Date()), note: '' }
+  const [tradeForm, setTradeForm] = useState(emptyTradeForm)
+  const [tradeMsg, setTradeMsg] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -140,12 +154,67 @@ export default function MlPortfolioPage() {
   const openDetail = async (pid: string) => {
     setDetailLoading(true)
     setRebalance(null)
+    setTradeForm(emptyTradeForm)
+    setTradeMsg(null)
     try {
       setDetail(await fetchPortfolioDetail(pid))
+      fetchPortfolioTrades(pid).then((r) => setTrades(r.trades ?? [])).catch(() => setTrades([]))
+      fetchPortfolioEquityCurve(pid)
+        .then((r) => setCurve('error' in r ? null : r))
+        .catch(() => setCurve(null))
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '详情加载失败')
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  const submitTrade = async () => {
+    if (!detail) return
+    const code = tradeForm.ts_code.trim().toUpperCase()
+    const qty = Number(tradeForm.quantity)
+    const price = Number(tradeForm.price)
+    if (!code || !qty || !price) {
+      setTradeMsg('代码、数量、价格均为必填')
+      return
+    }
+    setTradeMsg(null)
+    try {
+      await addPortfolioTrade(detail.portfolio_id, {
+        ts_code: code,
+        action: tradeForm.action,
+        quantity: qty,
+        price,
+        fee: Number(tradeForm.fee) || 0,
+        traded_at: tradeForm.traded_at || undefined,
+        note: tradeForm.note || undefined,
+      })
+      setTradeMsg('已记账，持仓已更新')
+      setTradeForm({ ...emptyTradeForm, traded_at: tradeForm.traded_at })
+      fetchPortfolioTrades(detail.portfolio_id).then((r) => setTrades(r.trades ?? [])).catch(() => undefined)
+      fetchPortfolioEquityCurve(detail.portfolio_id)
+        .then((r) => setCurve('error' in r ? null : r))
+        .catch(() => undefined)
+      openDetail(detail.portfolio_id)
+      load()
+    } catch (e) {
+      setTradeMsg(e instanceof Error ? e.message : '记账失败')
+    }
+  }
+
+  const removeTrade = async (t: PortfolioTrade) => {
+    if (!detail) return
+    if (!window.confirm(`删除流水 #${t.id}（${t.action} ${t.ts_code}）？持仓将从剩余流水重放重建。`)) return
+    try {
+      await deletePortfolioTrade(detail.portfolio_id, t.id)
+      fetchPortfolioTrades(detail.portfolio_id).then((r) => setTrades(r.trades ?? [])).catch(() => undefined)
+      fetchPortfolioEquityCurve(detail.portfolio_id)
+        .then((r) => setCurve('error' in r ? null : r))
+        .catch(() => undefined)
+      openDetail(detail.portfolio_id)
+      load()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '删除失败')
     }
   }
 
@@ -535,6 +604,19 @@ export default function MlPortfolioPage() {
                     <div className="stat-label">最大权重</div>
                   </div>
                 </div>
+                {curve && (
+                  <div className="panel mb-3" style={{ margin: 0 }}>
+                    <div className="panel-head">
+                      <h6 className="panel-title">
+                        <span className="kicker" />
+                        组合市值曲线（收盘估值 · {curve.n_trades} 笔流水）
+                      </h6>
+                    </div>
+                    <div className="panel-body">
+                      <EquityCurveChart curve={curve} />
+                    </div>
+                  </div>
+                )}
                 <div className="table-container" style={{ maxHeight: 420 }}>
                   <table className="data-table">
                     <thead>
@@ -582,6 +664,132 @@ export default function MlPortfolioPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* 记账 + 交易流水 */}
+                <div className="panel mt-3" style={{ margin: 0 }}>
+                  <div className="panel-head">
+                    <h6 className="panel-title">
+                      <span className="kicker" />
+                      交易记账（账本为准，持仓随每笔成交更新）
+                    </h6>
+                  </div>
+                  <div className="panel-body">
+                    <div className="d-flex gap-2 flex-wrap align-items-end">
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">代码</div>
+                        <input
+                          list="portfolio-trade-codes"
+                          value={tradeForm.ts_code}
+                          placeholder="600519.SH"
+                          style={{ width: 110 }}
+                          onChange={(e) => setTradeForm({ ...tradeForm, ts_code: e.target.value })}
+                        />
+                      </label>
+                      <datalist id="portfolio-trade-codes">
+                        {detail.positions.map((p) => (
+                          <option key={p.id} value={p.ts_code} />
+                        ))}
+                      </datalist>
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">方向</div>
+                        <select
+                          value={tradeForm.action}
+                          onChange={(e) => setTradeForm({ ...tradeForm, action: e.target.value as 'buy' | 'sell' })}
+                        >
+                          <option value="buy">买入</option>
+                          <option value="sell">卖出</option>
+                        </select>
+                      </label>
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">数量（股）</div>
+                        <input
+                          type="number"
+                          value={tradeForm.quantity}
+                          style={{ width: 90 }}
+                          onChange={(e) => setTradeForm({ ...tradeForm, quantity: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">价格</div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={tradeForm.price}
+                          style={{ width: 90 }}
+                          onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">费用</div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={tradeForm.fee}
+                          style={{ width: 80 }}
+                          onChange={(e) => setTradeForm({ ...tradeForm, fee: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ fontSize: 12 }}>
+                        <div className="text-faint">日期</div>
+                        <input
+                          type="date"
+                          value={tradeForm.traded_at}
+                          onChange={(e) => setTradeForm({ ...tradeForm, traded_at: e.target.value })}
+                        />
+                      </label>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={submitTrade}>
+                        记账
+                      </button>
+                      {tradeMsg && <span className="text-faint" style={{ fontSize: 12 }}>{tradeMsg}</span>}
+                    </div>
+                    <div className="table-container mt-2" style={{ maxHeight: 260 }}>
+                      {trades.length === 0 ? (
+                        <div className="text-faint" style={{ fontSize: 12 }}>暂无流水（买入记账后自动建仓/加仓）</div>
+                      ) : (
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>日期</th>
+                              <th>代码</th>
+                              <th>方向</th>
+                              <th className="num">数量</th>
+                              <th className="num">价格</th>
+                              <th className="num">费用</th>
+                              <th>备注</th>
+                              <th />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trades.map((t) => (
+                              <tr key={t.id}>
+                                <td>{t.id}</td>
+                                <td>{t.traded_at}</td>
+                                <td>
+                                  <code>{t.ts_code}</code>
+                                </td>
+                                <td>
+                                  <span className={t.action === 'buy' ? 'text-up' : 'text-down'}>
+                                    {t.action === 'buy' ? '买入' : '卖出'}
+                                  </span>
+                                </td>
+                                <td className="num">{formatNumber(t.quantity, 0)}</td>
+                                <td className="num">{formatNumber(t.price, 3)}</td>
+                                <td className="num">{formatNumber(t.fee, 2)}</td>
+                                <td className="text-faint" style={{ fontSize: 12 }}>{t.note || '--'}</td>
+                                <td>
+                                  <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => removeTrade(t)}>
+                                    删
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -589,4 +797,43 @@ export default function MlPortfolioPage() {
       )}
     </div>
   )
+}
+
+function EquityCurveChart({ curve }: { curve: PortfolioEquityCurve }) {
+  const { palette } = useTheme()
+  const option = useMemo(() => {
+    return {
+      textStyle: { color: palette.text },
+      tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatNumber(v, 0) },
+      legend: { top: 0, textStyle: { color: palette.text, fontSize: 11 } },
+      grid: { left: 70, right: 16, top: 30, bottom: 26 },
+      xAxis: { type: 'category', data: curve.dates },
+      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: palette.gridHorz } } },
+      series: [
+        {
+          name: '组合市值',
+          type: 'line',
+          showSymbol: false,
+          connectNulls: true,
+          data: curve.values,
+          lineStyle: { width: 1.8, color: palette.accent },
+          itemStyle: { color: palette.accent },
+          areaStyle: { opacity: 0.08 },
+        },
+        ...(curve.cost_basis > 0
+          ? [
+              {
+                name: '持仓成本',
+                type: 'line',
+                showSymbol: false,
+                data: curve.dates.map(() => curve.cost_basis),
+                lineStyle: { width: 1, type: 'dashed', color: palette.border },
+                itemStyle: { color: palette.border },
+              },
+            ]
+          : []),
+      ],
+    }
+  }, [curve, palette])
+  return <EChart option={option} height={280} />
 }

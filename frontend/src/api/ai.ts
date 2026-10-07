@@ -1,4 +1,4 @@
-import { rawDelete, rawGet } from './client'
+import { rawDelete, rawGet, rawPost } from './client'
 
 // ================= AI 工作台 =================
 export interface AiStatus {
@@ -39,6 +39,42 @@ export const fetchAiSessions = async (): Promise<AiSession[]> => {
 }
 
 export const deleteAiSession = (id: string) => rawDelete<{ success: boolean }>(`/ai-assistant/sessions/${id}`)
+
+// ================= 沉淀：看板 + 常用查询 =================
+
+export interface AiBoard {
+  id: string
+  title: string
+  content: string
+  content_type: string
+  meta: Record<string, unknown>
+  created_at: string
+}
+
+export interface AiSavedQuery {
+  id: string
+  title: string
+  prompt: string
+  created_at: string
+}
+
+export const fetchAiSaved = async (): Promise<{ boards: AiBoard[]; queries: AiSavedQuery[] }> => {
+  try {
+    const r = await rawGet<{ success: boolean; boards: AiBoard[]; queries: AiSavedQuery[] }>('/ai-assistant/saved')
+    return { boards: r.boards ?? [], queries: r.queries ?? [] }
+  } catch {
+    return { boards: [], queries: [] }
+  }
+}
+
+export const saveAiBoard = (title: string, content: string) =>
+  rawPost<{ success: boolean; record: AiBoard }>('/ai-assistant/saved', { kind: 'board', title, content })
+
+export const saveAiQuery = (prompt: string, title?: string) =>
+  rawPost<{ success: boolean; record: AiSavedQuery }>('/ai-assistant/saved', { kind: 'query', prompt, title })
+
+export const deleteAiSaved = (kind: 'boards' | 'queries', id: string) =>
+  rawDelete<{ success: boolean }>(`/ai-assistant/saved/${kind}/${encodeURIComponent(id)}`)
 
 export const fetchAiMessages = async (id: string): Promise<AiMessage[]> => {
   const r = await rawGet<{ success: boolean; messages: AiMessage[] }>(`/ai-assistant/sessions/${id}/messages`, { limit: 200 })

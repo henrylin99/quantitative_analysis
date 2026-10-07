@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
-import { fetchDailyAlerts, fetchMarketBrief } from '../api/trial'
-import type { BriefIndustryRow, BriefStockRow, DailyAlertRecord } from '../api/trial'
+import {
+  fetchAlertPushConfig,
+  fetchDailyAlerts,
+  fetchMarketBrief,
+  testAlertPush,
+  updateAlertPushConfig,
+} from '../api/trial'
+import type {
+  AlertPushChannel,
+  AlertPushConfig,
+  BriefIndustryRow,
+  BriefStockRow,
+  DailyAlertRecord,
+} from '../api/trial'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass } from '../utils/format'
 
@@ -229,6 +241,7 @@ function DailyAlertsPanel() {
   const [records, setRecords] = useState<DailyAlertRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [showPush, setShowPush] = useState(false)
 
   const load = (refresh = false) => {
     if (refresh) setScanning(true)
@@ -253,11 +266,15 @@ function DailyAlertsPanel() {
           <span className="text-faint" style={{ fontSize: 11.5 }}>
             每日收盘后自动扫描（regime 翻转 / 筹码信号新增 / 行业轮动榜首）
           </span>
+          <button type="button" className={`btn btn-sm ${showPush ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setShowPush((s) => !s)}>
+            推送设置
+          </button>
           <button type="button" className="btn btn-outline-secondary btn-sm" disabled={scanning} onClick={() => load(true)}>
             {scanning ? '扫描中…' : '立即扫描'}
           </button>
         </div>
       </div>
+      {showPush && <AlertPushSettings />}
       <div className="panel-body tight">
         {error && <ErrorState message={error} />}
         {!error && records == null && <Loading text="预警记录加载中..." />}
@@ -308,6 +325,143 @@ function DailyAlertsPanel() {
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  )
+}
+
+const PUSH_CHANNEL_TYPES: Array<{
+  value: AlertPushChannel['type']
+  label: string
+  param: 'send_key' | 'url'
+  placeholder: string
+}> = [
+  { value: 'serverchan', label: 'Server酱', param: 'send_key', placeholder: 'SendKey（sctapi.ftqq.com 获取）' },
+  { value: 'wecom_webhook', label: '企业微信机器人', param: 'url', placeholder: '群机器人 Webhook 地址' },
+  { value: 'dingtalk_webhook', label: '钉钉机器人', param: 'url', placeholder: '群机器人 Webhook 地址' },
+  { value: 'webhook', label: '自定义 Webhook', param: 'url', placeholder: '接收 JSON POST 的 URL' },
+]
+
+function AlertPushSettings() {
+  const [cfg, setCfg] = useState<AlertPushConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchAlertPushConfig()
+      .then(setCfg)
+      .catch((e) => setMsg(e instanceof Error ? e.message : '推送配置加载失败'))
+  }, [])
+
+  if (!cfg) return <Loading text="推送配置加载中..." />
+
+  const save = () => {
+    setSaving(true)
+    setMsg(null)
+    updateAlertPushConfig(cfg)
+      .then((c) => {
+        setCfg(c)
+        setMsg('已保存')
+      })
+      .catch((e) => setMsg(e instanceof Error ? e.message : '保存失败'))
+      .finally(() => setSaving(false))
+  }
+
+  const test = () => {
+    setTesting(true)
+    setMsg(null)
+    testAlertPush()
+      .then((r) =>
+        setMsg(
+          r.ok
+            ? '测试推送已发送，请查收'
+            : `测试失败：${r.results?.map((x) => `${x.type}: ${x.message}`).join('；') || r.message || '未知错误'}`,
+        ),
+      )
+      .catch((e) => setMsg(e instanceof Error ? e.message : '测试失败'))
+      .finally(() => setTesting(false))
+  }
+
+  const setChannel = (i: number, patch: Partial<AlertPushChannel>) =>
+    setCfg({ ...cfg, channels: cfg.channels.map((c, j) => (j === i ? { ...c, ...patch } : c)) })
+
+  return (
+    <div style={{ borderBottom: '1px solid rgba(148,163,184,0.25)', padding: '10px 14px' }}>
+      <div className="d-flex gap-3 flex-wrap align-items-center">
+        <label className="d-flex gap-1 align-items-center" style={{ fontSize: 13 }}>
+          <input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          启用出站推送
+        </label>
+        <label className="d-flex gap-1 align-items-center" style={{ fontSize: 13 }}>
+          <span className="text-faint">推送级别</span>
+          <select
+            value={cfg.min_level}
+            onChange={(e) => setCfg({ ...cfg, min_level: e.target.value as AlertPushConfig['min_level'] })}
+          >
+            <option value="info">每日推送（含"无变化"动态）</option>
+            <option value="warn">仅预警（regime 翻转等）</option>
+          </select>
+        </label>
+        <button type="button" className="btn btn-primary btn-sm" disabled={saving} onClick={save}>
+          {saving ? '保存中…' : '保存配置'}
+        </button>
+        <button type="button" className="btn btn-outline-secondary btn-sm" disabled={testing || cfg.channels.length === 0} onClick={test}>
+          {testing ? '发送中…' : '发送测试'}
+        </button>
+        {msg && (
+          <span className="text-faint" style={{ fontSize: 12 }}>
+            {msg}
+          </span>
+        )}
+      </div>
+      <div className="mt-2">
+        {cfg.channels.map((ch, i) => {
+          const meta = PUSH_CHANNEL_TYPES.find((t) => t.value === ch.type)
+          const paramValue = meta?.param === 'send_key' ? (ch.send_key ?? '') : (ch.url ?? '')
+          return (
+            <div key={i} className="d-flex gap-2 align-items-center mb-1" style={{ fontSize: 13 }}>
+              <select
+                value={ch.type}
+                onChange={(e) => {
+                  const t = PUSH_CHANNEL_TYPES.find((x) => x.value === e.target.value)
+                  if (t) setChannel(i, { type: t.value, url: undefined, send_key: undefined })
+                }}
+              >
+                {PUSH_CHANNEL_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                style={{ flex: 1, minWidth: 260 }}
+                placeholder={meta?.placeholder}
+                value={paramValue}
+                onChange={(e) =>
+                  setChannel(i, meta?.param === 'send_key' ? { send_key: e.target.value } : { url: e.target.value })
+                }
+              />
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setCfg({ ...cfg, channels: cfg.channels.filter((_, j) => j !== i) })}
+              >
+                删除
+              </button>
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          className="btn btn-outline-secondary btn-sm"
+          onClick={() => setCfg({ ...cfg, channels: [...cfg.channels, { type: 'serverchan', send_key: '' }] })}
+        >
+          + 添加渠道
+        </button>
+      </div>
+      <div className="text-faint mt-1" style={{ fontSize: 11 }}>
+        每日扫描落盘后自动推送（企业微信/钉钉为 markdown 摘要，自定义 Webhook 收到完整 JSON）。
       </div>
     </div>
   )

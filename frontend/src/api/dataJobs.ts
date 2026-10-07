@@ -89,6 +89,44 @@ export const buildWideTable = async () => {
 
 export const fetchInitStatus = () => rawGet<{ success: boolean; status: InitStatus }>('/data-jobs/init-status')
 
+// ================= 盘后数据链路 =================
+
+export interface PipelineFreshnessRow {
+  table: string
+  latest_date: string | null
+  expected_date: string | null
+  lag_trading_days: number | null
+  ok: boolean
+}
+
+export interface PipelineStatus {
+  enabled: boolean
+  jobs: string[]
+  running: boolean
+  recent_runs: Array<{
+    started_at: string
+    finished_at: string | null
+    is_trading_day: boolean
+    ok: boolean
+    message?: string
+    steps: Array<{ job_type: string; run_id?: number; status?: string; message?: string; started_at: string; finished_at?: string }>
+  }>
+  freshness: {
+    checked_at: string
+    expected_date: string | null
+    has_calendar: boolean
+    tables: PipelineFreshnessRow[]
+    lagged_tables: string[]
+    all_fresh: boolean
+  }
+}
+
+export const fetchPipelineStatus = () =>
+  rawGet<{ success: boolean } & PipelineStatus>('/data-jobs/pipeline/status')
+
+export const runPipeline = () =>
+  rawPost<{ success: boolean; message?: string }>('/data-jobs/pipeline/run', {})
+
 // ================= 分钟数据 /api/realtime-analysis/data（{success, data}） =================
 export interface MinuteStats {
   total_stocks: number

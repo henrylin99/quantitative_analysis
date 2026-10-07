@@ -133,6 +133,45 @@ def init_status():
         return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
 
 
+@data_jobs_bp.route("/pipeline/status", methods=["GET"])
+def pipeline_status():
+    """盘后数据链路：开关/顺序、最近运行记录、各表新鲜度巡检。"""
+    try:
+        from app.services.data_jobs.pipeline import (
+            DataFreshnessService,
+            DataPipelineOrchestrator,
+            PIPELINE_JOBS,
+            _chain_running,
+        )
+
+        orchestrator = DataPipelineOrchestrator()
+        return jsonify({
+            "success": True,
+            "enabled": orchestrator.enabled(),
+            "jobs": list(PIPELINE_JOBS),
+            "running": _chain_running.is_set(),
+            "recent_runs": orchestrator.list_runs(),
+            "freshness": DataFreshnessService().status(),
+        })
+    except Exception:
+        logger.exception("读取数据链路状态失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
+
+
+@data_jobs_bp.route("/pipeline/run", methods=["POST"])
+def pipeline_run():
+    """立即在后台跑一次完整数据链路（串行：日历→行情→…→因子计算）。"""
+    try:
+        from app.services.data_jobs.pipeline import DataPipelineOrchestrator
+
+        result = DataPipelineOrchestrator().start_background()
+        status = 200 if result.get("ok") else 409
+        return jsonify({"success": result.get("ok", False), **result}), status
+    except Exception:
+        logger.exception("启动数据链路失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
+
+
 @data_jobs_bp.route("/wide-table/status", methods=["GET"])
 def wide_table_status():
     """返回大宽表状态：是否存在、日期、是否需要更新、是否过了 18:00。"""
