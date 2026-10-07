@@ -690,6 +690,7 @@ class ModelRepository:
 
 class PortfolioRepository:
     TABLE_POSITIONS = "portfolio_positions"
+    TABLE_TRADES = "portfolio_trades"
 
     def __init__(self, store: ParquetStateStore):
         self.store = store
@@ -881,6 +882,250 @@ class PortfolioRepository:
             "max_position_weight": max((float(pos.get("weight") or 0) for pos in enriched), default=0),
             "positions": enriched,
         }
+
+    # ------------------------------------------------------------------
+    # 交易流水：账本为准（append-only），持仓可由账本重放重建
+    # ------------------------------------------------------------------
+    def list_trades(self, portfolio_id: str, limit: int = 200) -> List[Dict[str, Any]]:
+        df = self.store.read_frame(self.TABLE_TRADES)
+        if df.empty or "portfolio_id" not in df.columns:
+            return []
+        df = df[df["portfolio_id"] == portfolio_id]
+        if df.empty:
+            return []
+        df = df.sort_values(["traded_at", "id"], ascending=[False, False]).head(limit)
+        return [_record_to_dict(row) for _, row in df.iterrows()]
+
+    def add_trade(self, portfolio_id: str, ts_code: str, action: str,
+                  quantity: float, price: float, fee: float = 0.0,
+                  traded_at: Optional[str] = None, note: str = "") -> Dict[str, Any]:
+        action = str(action or "").lower()
+        if action not in ("buy", "sell"):
+            raise ValueError("action 必须是 buy 或 sell")
+        quantity = float(quantity)
+        price = float(price)
+        fee = max(0.0, float(fee or 0))
+        if quantity <= 0 or price <= 0:
+            raise ValueError("quantity/price 必须为正数")
+
+        now = _now_iso()
+        record = {
+            "portfolio_id": portfolio_id,
+            "ts_code": ts_code,
+            "action": action,
+            "quantity": quantity,
+            "price": price,
+            "fee": fee,
+            "traded_at": (traded_at or now)[:10],
+            "note": str(note or ""),
+            "created_at": now,
+        }
+        with self.store.locked(self.TABLE_TRADES):
+            df = self.store.read_frame(self.TABLE_TRADES)
+            record["id"] = int(self.store.next_integer_id(self.TABLE_TRADES))
+            row = pd.DataFrame([record])
+            df = row if df.empty else pd.concat([df, row], ignore_index=True)
+            self.store.write_frame(self.TABLE_TRADES, df)
+        self._apply_trade_to_position(portfolio_id, record)
+        return record
+
+    def remove_trade(self, portfolio_id: str, trade_id: int) -> bool:
+        """删除一笔流水并从剩余账本重放重建该组合持仓。"""
+        with self.store.locked(self.TABLE_TRADES):
+            df = self.store.read_frame(self.TABLE_TRADES)
+            if df.empty:
+                return False
+            mask = (df["portfolio_id"] == portfolio_id) & (df["id"] == int(trade_id))
+            if not mask.any():
+                return False
+            df = df[~mask]
+            self.store.write_frame(self.TABLE_TRADES, df)
+        self.rebuild_positions_from_trades(portfolio_id)
+        return True
+
+    def rebuild_positions_from_trades(self, portfolio_id: str) -> int:
+        """从交易账本重放重建持仓（加权利 costs 摊入成本；清零仓位保留行）。"""
+        df = self.store.read_frame(self.TABLE_TRADES)
+        if df.empty or "portfolio_id" not in df.columns:
+            return 0
+        trades = df[df["portfolio_id"] == portfolio_id] \
+            .sort_values(["traded_at", "id"])
+        if trades.empty:
+            return 0
+
+        state: Dict[str, Dict[str, float]] = {}
+        realized_total = 0.0
+        for _, t in trades.iterrows():
+            code = t["ts_code"]
+            st = state.setdefault(code, {"size": 0.0, "cost": 0.0})
+            qty = float(t["quantity"])
+            price = float(t["price"])
+            fee = float(t.get("fee") or 0)
+            if t["action"] == "buy":
+                st["size"] += qty
+                st["cost"] += price * qty + fee
+            else:
+                sell_size = min(qty, st["size"])
+                avg = st["cost"] / st["size"] if st["size"] > 0 else 0.0
+                realized_total += (price - avg) * sell_size - fee
+                st["size"] = max(0.0, st["size"] - qty)
+                st["cost"] = avg * st["size"]
+
+        with self.store.locked(self.TABLE_POSITIONS):
+            pdf = self.store.read_frame(self.TABLE_POSITIONS)
+            if pdf.empty and "portfolio_id" not in pdf.columns:
+                # 表不存在或被删空：给最小骨架，让下面的"账本有而持仓无"分支能建行
+                pdf = pd.DataFrame(columns=["id", "portfolio_id", "ts_code", "position_size",
+                                            "avg_cost", "current_price", "market_value",
+                                            "unrealized_pnl", "weight", "sector", "is_active",
+                                            "created_at", "updated_at"])
+            elif "portfolio_id" not in pdf.columns:
+                return 0
+            mask_active = (pdf["portfolio_id"] == portfolio_id)
+            if "is_active" in pdf.columns:
+                mask_active &= pdf["is_active"].fillna(True).astype(bool)
+            now = _now_iso()
+            touched = 0
+            existing_codes = set(pdf.loc[mask_active, "ts_code"].astype(str))
+            for code, st in state.items():
+                size = st["size"]
+                avg = st["cost"] / size if size > 0 else 0.0
+                pmask = mask_active & (pdf["ts_code"] == code)
+                if pmask.any():
+                    idx = pmask[pmask].index
+                    pdf.loc[idx, "position_size"] = size
+                    pdf.loc[idx, "avg_cost"] = round(avg, 4)
+                    cur_price = pd.to_numeric(pdf.loc[idx, "current_price"], errors="coerce").fillna(avg)
+                    pdf.loc[idx, "market_value"] = size * cur_price
+                    pdf.loc[idx, "unrealized_pnl"] = (cur_price - avg) * size
+                    pdf.loc[idx, "updated_at"] = now
+                    touched += len(idx)
+                elif size > 0:
+                    # 账本里有而持仓表没有的代码 → 新建持仓行
+                    rec = {
+                        "portfolio_id": portfolio_id, "ts_code": code,
+                        "position_size": size, "avg_cost": round(avg, 4),
+                        "current_price": avg, "market_value": size * avg,
+                        "unrealized_pnl": 0.0, "weight": 0.0,
+                        "sector": "", "is_active": True,
+                        "created_at": now, "updated_at": now,
+                    }
+                    rec["id"] = int(self.store.next_integer_id(self.TABLE_POSITIONS))
+                    pdf = pd.concat([pdf, pd.DataFrame([rec])], ignore_index=True)
+                    touched += 1
+            self.store.write_frame(self.TABLE_POSITIONS, pdf)
+        return touched
+
+    def equity_curve(self, portfolio_id: str, days: int = 250) -> Dict[str, Any]:
+        """按日收盘估值回放组合市值曲线（不含现金；成本线为当前持仓总成本）。"""
+        df = self.store.read_frame(self.TABLE_TRADES)
+        if df.empty or "portfolio_id" not in df.columns:
+            return {"error": "暂无交易流水"}
+        trades = df[df["portfolio_id"] == portfolio_id].sort_values(["traded_at", "id"])
+        if trades.empty:
+            return {"error": "暂无交易流水"}
+
+        codes = sorted(trades["ts_code"].dropna().astype(str).unique().tolist())
+        start = str(trades["traded_at"].min())[:10]
+        from app.services.data_reader import ParquetDataReader
+
+        try:
+            daily = ParquetDataReader().get_daily(ts_codes=codes, start_date=start,
+                                                  end_date=None)
+        except Exception as e:
+            return {"error": f"读取行情失败: {e}"}
+        if daily.empty:
+            return {"error": "无行情数据"}
+
+        close = daily.pivot_table(index="trade_date", columns="ts_code",
+                                  values="close", aggfunc="last").sort_index()
+        close.index = pd.to_datetime(close.index).strftime("%Y-%m-%d")
+        close = close.tail(int(days))
+
+        # 逐日持仓：当日及以前的成交决定当日持仓量
+        qty_by_code: Dict[str, Dict[str, float]] = {}
+        for code in codes:
+            sub = trades[trades["ts_code"] == code]
+            delta = sub["quantity"] * sub["action"].map({"buy": 1, "sell": -1})
+            qty_by_code[code] = delta.groupby(sub["traded_at"].astype(str).str[:10]).sum().cumsum()
+
+        dates = close.index.tolist()
+        values = []
+        for d in dates:
+            total = 0.0
+            have = False
+            for code in codes:
+                qseries = qty_by_code[code]
+                q = 0.0
+                past = [v for dd, v in qseries.items() if dd <= d]
+                if past:
+                    q = past[-1]
+                px = close.at[d, code] if code in close.columns else float("nan")
+                if pd.notna(px) and q:
+                    total += q * float(px)
+                    have = True
+            values.append(round(total, 2) if have else None)
+
+        positions = self.list_positions(portfolio_id, active_only=True)
+        cost_basis = sum(float(p.get("position_size") or 0) * float(p.get("avg_cost") or 0)
+                         for p in positions)
+        return {
+            "dates": dates,
+            "values": values,
+            "cost_basis": round(cost_basis, 2),
+            "codes": codes,
+            "n_trades": int(len(trades)),
+        }
+
+    def _apply_trade_to_position(self, portfolio_id: str, trade: Dict[str, Any]) -> None:
+        """单笔成交即时更新对应持仓行（加权利成本摊入；完整重放见 rebuild）。"""
+        code = trade["ts_code"]
+        with self.store.locked(self.TABLE_POSITIONS):
+            pdf = self.store.read_frame(self.TABLE_POSITIONS)
+            now = _now_iso()
+            if pdf.empty or "portfolio_id" not in pdf.columns:
+                pdf = pd.DataFrame()
+            mask = pd.Series(False, index=pdf.index) if not pdf.empty else pd.Series(dtype=bool)
+            if not pdf.empty:
+                mask = (pdf["portfolio_id"] == portfolio_id) & (pdf["ts_code"] == code)
+                if "is_active" in pdf.columns:
+                    mask &= pdf["is_active"].fillna(True).astype(bool)
+            qty = float(trade["quantity"])
+            price = float(trade["price"])
+            fee = float(trade.get("fee") or 0)
+            if mask.any():
+                idx = mask[mask].index
+                size = float(pd.to_numeric(pdf.loc[idx, "position_size"], errors="coerce").fillna(0).iloc[-1])
+                avg = float(pd.to_numeric(pdf.loc[idx, "avg_cost"], errors="coerce").fillna(0).iloc[-1])
+            else:
+                idx = None
+                size, avg = 0.0, 0.0
+
+            if trade["action"] == "buy":
+                new_size = size + qty
+                new_avg = (avg * size + price * qty + fee) / new_size if new_size > 0 else 0.0
+            else:
+                new_size = max(0.0, size - qty)
+                new_avg = avg  # 卖出不改成本基
+            ref_price = price if trade["action"] == "buy" else (price or avg)
+            updates = {
+                "position_size": new_size,
+                "avg_cost": round(new_avg, 4),
+                "current_price": ref_price,
+                "market_value": new_size * ref_price,
+                "unrealized_pnl": (ref_price - new_avg) * new_size,
+                "updated_at": now,
+            }
+            if idx is not None and len(idx):
+                for col, val in updates.items():
+                    pdf.loc[idx, col] = val
+            else:
+                rec = {"portfolio_id": portfolio_id, "ts_code": code,
+                       "weight": 0.0, "sector": "", "is_active": True,
+                       "created_at": now, **updates}
+                rec["id"] = int(self.store.next_integer_id(self.TABLE_POSITIONS))
+                pdf = pd.concat([pdf, pd.DataFrame([rec])], ignore_index=True)
+            self.store.write_frame(self.TABLE_POSITIONS, pdf)
 
 
 class BacktestRepository:

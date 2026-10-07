@@ -8,14 +8,17 @@ import {
   fetchModelSnapshots,
   fetchModels,
   fetchPortfolios,
+  fetchPredictionHistory,
   fetchScreeningList,
   runPortfolioAttribution,
   runPredictionTracking,
   type AttributionResult,
   type ChipSignalBacktestResult,
   type ChipSignalRow,
+  type ChipSignalThresholds,
   type ModelCompareRow,
   type ModelSnapshot,
+  type PredictionHistoryRecord,
   type PredictionTrackResult,
 } from '../api/mlFactor'
 import { ErrorState, Loading } from '../components/StateViews'
@@ -291,6 +294,112 @@ function PredictionsTab({ palette }: { palette: Palette }) {
           {model?.error && <div className="col-12 text-faint">{model.error}</div>}
         </div>
       )}
+
+      <PredictionHistoryPanel />
+    </div>
+  )
+}
+
+// ================= 预测跟踪历史归档 =================
+
+function PredictionHistoryPanel() {
+  const [records, setRecords] = useState<PredictionHistoryRecord[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = (refresh = false) => {
+    if (refresh) setBusy(true)
+    fetchPredictionHistory(refresh)
+      .then((r) => setRecords(r.records ?? []))
+      .catch((e) => setError(e instanceof Error ? e.message : '历史归档加载失败'))
+      .finally(() => setBusy(false))
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const modelIds = useMemo(() => {
+    const ids: string[] = []
+    for (const r of records ?? []) {
+      for (const mid of Object.keys(r.models ?? {})) {
+        if (!ids.includes(mid)) ids.push(mid)
+      }
+    }
+    return ids.slice(0, 6)
+  }, [records])
+
+  const baseIc = (r: PredictionHistoryRecord, mid: string): number | null => {
+    const m = r.models?.[mid]
+    if (!m || m.error) return null
+    const key = m.base_horizon != null ? `ic_mean_${m.base_horizon}d` : null
+    const v = key ? m[key] : null
+    return typeof v === 'number' ? v : null
+  }
+
+  return (
+    <div className="panel mt-3">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          跟踪历史沉淀（每日随预警扫描自动归档）
+        </h6>
+        <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy} onClick={() => load(true)}>
+          {busy ? '归档中…' : '立即归档一次'}
+        </button>
+      </div>
+      <div className="panel-body tight">
+        {error && <ErrorState message={error} />}
+        {!error && records == null && <Loading text="历史归档加载中..." />}
+        {!error && records && records.length === 0 && (
+          <div className="text-faint" style={{ fontSize: 12 }}>
+            暂无归档记录。首个交易日 18:30 后自动生成；也可点"立即归档一次"。
+          </div>
+        )}
+        {!error && records && records.length > 0 && (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>归档日期</th>
+                {modelIds.map((mid) => (
+                  <th key={mid} className="num">
+                    {mid}
+                  </th>
+                ))}
+                <th className="num">IC 池均值</th>
+                <th className="num">模型一致性</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records
+                .slice()
+                .reverse()
+                .map((r) => (
+                  <tr key={r.track_date}>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {r.track_date}
+                      {r.pred_end ? <span className="text-faint">（预测至 {r.pred_end}）</span> : null}
+                    </td>
+                    {modelIds.map((mid) => {
+                      const ic = baseIc(r, mid)
+                      return (
+                        <td key={mid} className={`num ${ic != null ? pctClass(ic) : ''}`}>
+                          {ic != null ? formatNumber(ic, 4) : '--'}
+                        </td>
+                      )
+                    })}
+                    <td className={`num ${r.ic_pool_mean != null ? pctClass(r.ic_pool_mean) : ''}`}>
+                      {r.ic_pool_mean != null ? formatNumber(r.ic_pool_mean, 4) : '--'}
+                    </td>
+                    <td className="num">
+                      {r.consistency_mean != null ? formatNumber(r.consistency_mean, 3) : '--'}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }
@@ -879,6 +988,17 @@ const BT_COLORS: Record<string, string> = {
 
 const HORIZONS = [5, 10, 20] as const
 
+const THRESHOLD_FIELDS: Array<{ key: keyof ChipSignalThresholds; label: string; step: number }> = [
+  { key: 'squeeze_winner_min', label: '挤压·获利盘≥%', step: 1 },
+  { key: 'squeeze_conc_quantile', label: '挤压·集中度分位', step: 0.05 },
+  { key: 'squeeze_volume_ratio_max', label: '挤压·量能收缩≤', step: 0.05 },
+  { key: 'squeeze_pct5d_max', label: '挤压·5日涨幅≤', step: 0.01 },
+  { key: 'resonance_winner_lo', label: '共振·获利盘下限', step: 1 },
+  { key: 'resonance_winner_hi', label: '共振·获利盘上限', step: 1 },
+  { key: 'divergence_pct5d_min', label: '背离·5日涨幅≥', step: 0.01 },
+  { key: 'divergence_winner_min', label: '背离·获利盘≥%', step: 1 },
+]
+
 function ChipBacktestPanel() {
   const { palette } = useTheme()
   const [data, setData] = useState<ChipSignalBacktestResult | null>(null)
@@ -886,13 +1006,16 @@ function ChipBacktestPanel() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(20)
+  const [showAdv, setShowAdv] = useState(false)
+  const [applied, setApplied] = useState<ChipSignalThresholds | undefined>(undefined)
+  const [draft, setDraft] = useState<Record<string, string>>({})
 
-  const load = (refresh = false) => {
+  const load = (refresh = false, thresholds?: ChipSignalThresholds) => {
     if (refresh) {
       setRefreshing(true)
       setLoading(true)
     }
-    fetchChipSignalBacktest(12, refresh)
+    fetchChipSignalBacktest(12, refresh, thresholds)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : '信号回测加载失败'))
       .finally(() => {
@@ -979,14 +1102,72 @@ function ChipBacktestPanel() {
           </div>
           <button
             type="button"
+            className={`btn btn-sm ${Object.keys(applied ?? {}).length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setShowAdv((s) => !s)}
+          >
+            阈值{Object.keys(applied ?? {}).length > 0 ? '·已自定义' : ''}
+          </button>
+          <button
+            type="button"
             className="btn btn-outline-secondary btn-sm"
             disabled={refreshing}
-            onClick={() => load(true)}
+            onClick={() => load(true, applied)}
           >
             {refreshing ? '重算中…' : '重算'}
           </button>
         </div>
       </div>
+      {showAdv && (
+        <div className="panel-body tight" style={{ borderBottom: `1px solid ${palette.border}` }}>
+          <div className="d-flex gap-2 flex-wrap align-items-center">
+            {THRESHOLD_FIELDS.map((f) => (
+              <label key={f.key} className="d-flex gap-1 align-items-center" style={{ fontSize: 12 }}>
+                <span className="text-faint">{f.label}</span>
+                <input
+                  type="number"
+                  step={f.step}
+                  style={{ width: 76 }}
+                  value={draft[f.key] ?? ''}
+                  placeholder={String(data?.thresholds?.[f.key] ?? '')}
+                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                />
+              </label>
+            ))}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={refreshing}
+              onClick={() => {
+                const cleaned: ChipSignalThresholds = {}
+                for (const f of THRESHOLD_FIELDS) {
+                  const v = parseFloat(draft[f.key])
+                  if (Number.isFinite(v)) cleaned[f.key] = v
+                }
+                setApplied(Object.keys(cleaned).length > 0 ? cleaned : undefined)
+                load(true, Object.keys(cleaned).length > 0 ? cleaned : undefined)
+              }}
+            >
+              按此阈值重算
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm"
+              disabled={refreshing}
+              onClick={() => {
+                setDraft({})
+                setApplied(undefined)
+                load(true, undefined)
+              }}
+            >
+              恢复默认
+            </button>
+          </div>
+          <div className="text-faint mt-1" style={{ fontSize: 11 }}>
+            留空 = 用当前默认阈值（占位数字）。阈值覆盖仅影响回测结果，用于寻找更优参数；确认有效后再同步到
+            signal_defs.py 默认值，线上扫描口径不受影响。
+          </div>
+        </div>
+      )}
       <div className="panel-body tight">
         <table className="data-table">
           <thead>

@@ -9,7 +9,9 @@ import {
   fetchMinuteQuality,
   fetchMinuteStats,
   fetchMinuteSyncStatus,
+  fetchPipelineStatus,
   fetchWideTableStatus,
+  runPipeline,
   submitDataJob,
   syncMinuteData,
   syncMinuteMultiple,
@@ -17,6 +19,7 @@ import {
   type DataJobRun,
   type InitStatus,
   type MinuteStats,
+  type PipelineStatus,
   type WideTableStatus,
 } from '../api/dataJobs'
 import { EmptyState, ErrorState } from '../components/StateViews'
@@ -353,6 +356,9 @@ export default function DataManagementPage() {
           {wideMsg && <span className="alert-note py-1">{wideMsg}</span>}
         </div>
       </div>
+
+      {/* 盘后数据链路 */}
+      <PipelinePanel />
 
       {/* 推荐初始化顺序 + 当前任务 */}
       <div className="row g-3">
@@ -721,6 +727,155 @@ export default function DataManagementPage() {
               </pre>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ================= 盘后数据链路 =================
+
+const PIPELINE_STEP_LABELS: Record<string, string> = {
+  trade_calendar: '交易日历',
+  daily_history_by_date: '日线行情',
+  daily_basic: '日线指标',
+  moneyflow: '资金流',
+  stk_factor: '技术因子',
+  cyq_perf: '筹码分布',
+  wide_table_builder: '大宽表',
+  stock_partition_rebuild: '股票分区',
+  factor_compute: '因子计算',
+}
+
+function PipelinePanel() {
+  const [status, setStatus] = useState<PipelineStatus | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = () => {
+    fetchPipelineStatus()
+      .then((r) => setStatus(r))
+      .catch(() => setStatus(null))
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  // 链路运行中每 10s 轮询，直到结束
+  useEffect(() => {
+    if (!status?.running) return
+    const t = setInterval(load, 10_000)
+    return () => clearInterval(t)
+  }, [status?.running])
+
+  const start = async () => {
+    setStarting(true)
+    setMsg(null)
+    try {
+      const r = await runPipeline()
+      setMsg(r.message ?? '链路已启动')
+      setTimeout(load, 1500)
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : '链路启动失败')
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const fr = status?.freshness
+  const lastRun = status?.recent_runs?.[status.recent_runs.length - 1]
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          盘后数据链路（自动编排 + 完整性巡检）
+          <span className={`badge ${status?.running ? 'text-bg-primary' : status?.enabled ? 'text-bg-success' : 'text-bg-secondary'}`}>
+            {status?.running ? '运行中' : status?.enabled ? '每日自动' : '已关闭'}
+          </span>
+        </h6>
+        <div className="d-flex gap-2">
+          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load}>
+            刷新
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={starting || status?.running} onClick={start}>
+            {status?.running ? '链路运行中…' : starting ? '启动中…' : '立即跑全链路'}
+          </button>
+        </div>
+      </div>
+      <div className="panel-body tight">
+        <div className="hint mb-2" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+          每个交易日收盘后（默认 18:30，DAILY_ALERT_TIME 可调）数据链路自动先于预警扫描执行：交易日历 → 日线 → 指标 →
+          资金流 → 技术因子 → 筹码 → 大宽表 → 股票分区 → 因子计算（非交易日自动跳过；DATA_PIPELINE_ENABLED=0 可关闭）。
+          {msg && <span className="ms-2">{msg}</span>}
+        </div>
+        <div className="row g-3">
+          <div className="col-lg-7">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>数据表</th>
+                  <th>最新分区</th>
+                  <th>应至</th>
+                  <th className="num">滞后（交易日）</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(fr?.tables ?? []).map((r) => (
+                  <tr key={r.table}>
+                    <td>{PIPELINE_STEP_LABELS[r.table] ?? r.table}</td>
+                    <td>{r.latest_date ?? '--'}</td>
+                    <td>{r.expected_date ?? '--'}</td>
+                    <td className="num">{r.lag_trading_days ?? '--'}</td>
+                    <td>
+                      <span className={`badge ${r.ok ? 'text-bg-success' : 'text-bg-danger'}`}>
+                        {r.ok ? '新鲜' : '滞后'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {!fr && (
+                  <tr>
+                    <td colSpan={5} className="text-faint">
+                      新鲜度加载中…
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="col-lg-5">
+            {lastRun ? (
+              <>
+                <div className="d-flex gap-2 flex-wrap align-items-center mb-1" style={{ fontSize: 12 }}>
+                  <span className="text-faint">最近一次链路</span>
+                  <span className={`badge ${lastRun.ok ? 'text-bg-success' : 'text-bg-danger'}`}>
+                    {lastRun.ok ? '完成' : '中断'}
+                  </span>
+                  <span className="text-faint">
+                    {lastRun.started_at} ~ {lastRun.finished_at ?? '进行中'}
+                  </span>
+                </div>
+                <ol className="ps-3" style={{ fontSize: 12, margin: 0 }}>
+                  {lastRun.steps.map((s, i) => (
+                    <li key={i}>
+                      {PIPELINE_STEP_LABELS[s.job_type] ?? s.job_type}
+                      {s.status ? ` · ${s.status}` : ''}
+                      {s.started_at ? ` (${s.started_at}` : ''}
+                      {s.finished_at ? ` → ${s.finished_at})` : ')'}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            ) : (
+              <div className="text-faint" style={{ fontSize: 12 }}>
+                暂无链路运行记录（每日 18:30 自动生成，或点"立即跑全链路"）
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

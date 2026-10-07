@@ -930,6 +930,44 @@ def _tool_query_fund(args: Dict[str, Any]) -> Dict[str, Any]:
 # 工具注册表
 # ----------------------------------------------------------------------
 
+def _tool_save_board(args: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.ai.saved_items import AiSavedStore
+
+    record = AiSavedStore().save_board(args.get('title', ''), args.get('content', ''),
+                                       meta={'source': 'ai_tool'})
+    return {'saved': True, 'id': record['id'], 'title': record['title'],
+            'message': f"已保存为看板《{record['title']}》"}
+
+
+def _tool_save_query(args: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.ai.saved_items import AiSavedStore
+
+    record = AiSavedStore().save_query(args.get('prompt', ''), args.get('title'))
+    return {'saved': True, 'id': record['id'], 'title': record['title'],
+            'message': '已保存为常用查询'}
+
+
+def _tool_list_saved(_args: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.ai.saved_items import AiSavedStore
+
+    saved = AiSavedStore().list_all()
+    return {
+        'boards': [{'id': b['id'], 'title': b['title'], 'created_at': b['created_at']}
+                   for b in saved['boards']],
+        'queries': [{'id': q['id'], 'title': q['title'], 'created_at': q['created_at']}
+                    for q in saved['queries']],
+    }
+
+
+def _tool_delete_saved(args: Dict[str, Any]) -> Dict[str, Any]:
+    from app.services.ai.saved_items import AiSavedStore
+
+    removed = AiSavedStore().delete(args.get('kind', ''), args.get('id', ''))
+    if not removed:
+        raise ToolError(f"未找到要删除的条目: {args.get('id')}")
+    return {'deleted': True, 'id': args.get('id')}
+
+
 class AiTool:
     def __init__(self, name: str, description: str, parameters: Dict[str, Any],
                  kind: str, handler: Callable[[Dict[str, Any]], Any]):
@@ -1239,6 +1277,56 @@ AI_TOOLS: List[AiTool] = [
         },
         'read',
         _tool_query_fund,
+    ),
+    AiTool(
+        'save_board',
+        '把一段分析结论保存为命名看板（沉淀），供用户随时回看。适合保存：'
+        '完整的分析结论、关键数据表、复盘要点。title 一句话概括，content 为 markdown 正文。',
+        {
+            'type': 'object',
+            'properties': {
+                'title': {'type': 'string', 'description': '看板标题，如"2026-10-06 市场复盘"'},
+                'content': {'type': 'string', 'description': 'markdown 正文（结论/表格）'},
+            },
+            'required': ['title', 'content'],
+        },
+        'action',
+        _tool_save_board,
+    ),
+    AiTool(
+        'save_query',
+        '把用户的提问保存为常用查询模板，之后可一键重跑。',
+        {
+            'type': 'object',
+            'properties': {
+                'prompt': {'type': 'string', 'description': '查询文本（原样可重跑）'},
+                'title': {'type': 'string', 'description': '可选短标题，默认取前 30 字'},
+            },
+            'required': ['prompt'],
+        },
+        'action',
+        _tool_save_query,
+    ),
+    AiTool(
+        'list_saved',
+        '列出已保存的看板与常用查询（标题 + id + 时间）。',
+        {'type': 'object', 'properties': {}},
+        'read',
+        _tool_list_saved,
+    ),
+    AiTool(
+        'delete_saved',
+        '删除一条看板或常用查询。kind: boards / queries。',
+        {
+            'type': 'object',
+            'properties': {
+                'kind': {'type': 'string', 'enum': ['boards', 'queries']},
+                'id': {'type': 'string'},
+            },
+            'required': ['kind', 'id'],
+        },
+        'action',
+        _tool_delete_saved,
     ),
 ]
 

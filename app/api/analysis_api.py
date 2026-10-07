@@ -10,10 +10,10 @@ def screen_stocks():
     try:
         data = request.get_json()
         logger.info(f"收到筛选请求: {data}")
-        
+
         # 使用StockService进行筛选
         result = StockService.screen_stocks(data)
-        
+
         return jsonify({
             'code': 200,
             'message': '筛选完成',
@@ -26,6 +26,45 @@ def screen_stocks():
             'message': f'服务器错误: {str(e)}',
             'data': None
         }), 500
+
+
+@api_bp.route('/analysis/backtest/optimize', methods=['POST'])
+def backtest_optimize():
+    """单股技术策略参数寻优：mode=grid 全样本网格 / mode=walk_forward 滚动样本外。
+
+    body: {ts_code, strategy_type, start_date, end_date,
+           mode?, grid?, metric?, is_days?, oos_days?, step?}
+    """
+    try:
+        from app.services.backtest_optimizer import BacktestOptimizerService
+
+        data = request.get_json(silent=True) or {}
+        for field in ('ts_code', 'strategy_type', 'start_date', 'end_date'):
+            if not data.get(field):
+                return jsonify({'code': 400, 'message': f'缺少必要参数: {field}', 'data': None}), 400
+
+        svc = BacktestOptimizerService()
+        mode = data.get('mode') or 'grid'
+        common = dict(
+            ts_code=data['ts_code'],
+            strategy_type=data['strategy_type'],
+            start_date=data['start_date'],
+            end_date=data['end_date'],
+            grid=data.get('grid'),
+            metric=data.get('metric') or 'sharpe_ratio',
+        )
+        if mode == 'walk_forward':
+            result = svc.walk_forward(is_days=int(data.get('is_days') or 120),
+                                      oos_days=int(data.get('oos_days') or 60),
+                                      step=data.get('step'), **common)
+        else:
+            result = svc.grid_search(**common)
+        if 'error' in result:
+            return jsonify({'code': 400, 'message': result['error'], 'data': result}), 400
+        return jsonify({'code': 200, 'message': '寻优完成', 'data': result})
+    except Exception as e:
+        logger.error(f"策略寻优API错误: {e}")
+        return jsonify({'code': 500, 'message': f'寻优失败: {str(e)}', 'data': None}), 500
 
 @api_bp.route('/analysis/backtest', methods=['POST'])
 def backtest_strategy():

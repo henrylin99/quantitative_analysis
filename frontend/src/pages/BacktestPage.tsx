@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchStockOptions, runBacktest } from '../api/analysis'
+import { fetchStockOptions, runBacktest, runBacktestOptimize } from '../api/analysis'
+import type { OptimizeResult } from '../api/analysis'
 import type { BacktestResultData, StrategyType } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import EquityCurve from '../charts/EquityCurve'
@@ -278,6 +279,8 @@ export default function BacktestPage() {
         </div>
       </div>
 
+      <OptimizePanel tsCode={tsCode} strategyType={strategyType} startDate={startDate} endDate={endDate} />
+
       {status === 'running' && <Loading text="回测进行中..." />}
       {runError && <ErrorState message={runError} onRetry={() => handleSubmit()} />}
 
@@ -398,5 +401,195 @@ export default function BacktestPage() {
         </>
       )}
     </div>
+  )
+}
+
+// ================= 参数寻优（grid / walk_forward） =================
+
+const OPTIMIZEABLE = ['ma_cross', 'kdj', 'rsi']
+
+function OptimizePanel({
+  tsCode,
+  strategyType,
+  startDate,
+  endDate,
+}: {
+  tsCode: string
+  strategyType: '' | StrategyType
+  startDate: string
+  endDate: string
+}) {
+  const [mode, setMode] = useState<'grid' | 'walk_forward'>('walk_forward')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<OptimizeResult | null>(null)
+
+  const run = async () => {
+    if (!tsCode || !strategyType || !startDate || !endDate) {
+      setError('请先在上方选择股票、策略与日期区间')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const r = await runBacktestOptimize({
+        ts_code: tsCode,
+        strategy_type: strategyType,
+        start_date: startDate,
+        end_date: endDate,
+        mode,
+      })
+      setResult(r)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '寻优请求失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const unsupported = strategyType !== '' && !OPTIMIZEABLE.includes(strategyType)
+
+  return (
+    <div className="panel">
+      <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          参数寻优（当前股票 / 策略 / 日期区间）
+        </h6>
+        <div className="d-flex align-items-center gap-2">
+          <div className="seg">
+            <button type="button" className={`seg-item ${mode === 'walk_forward' ? 'active' : ''}`} onClick={() => setMode('walk_forward')}>
+              滚动样本外
+            </button>
+            <button type="button" className={`seg-item ${mode === 'grid' ? 'active' : ''}`} onClick={() => setMode('grid')}>
+              网格搜索
+            </button>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy || unsupported} onClick={run}>
+            {busy ? '寻优中…' : '开始寻优'}
+          </button>
+        </div>
+      </div>
+      <div className="panel-body tight">
+        <div className="hint mb-2" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+          {unsupported
+            ? '该策略的轨道值来自预存技术因子，无可调参数，暂不支持寻优（支持：均线交叉 / KDJ / RSI）。'
+            : mode === 'walk_forward'
+              ? '滚动样本外：IS 窗内网格选参 → 紧随 OOS 窗验证 → 逐窗前推。OOS 显著差于 IS 即过拟合信号，这是可信的参数结论来源。'
+              : '全样本网格搜索：所有组合在同一数据上排名，结果偏乐观，仅用于了解参数敏感度。'}
+        </div>
+        {error && <ErrorState message={error} />}
+        {result?.mode === 'grid' && <GridResult result={result} />}
+        {result?.mode === 'walk_forward' && <WalkForwardResult result={result} />}
+      </div>
+    </div>
+  )
+}
+
+const fmtParams = (p: Record<string, number>) =>
+  Object.entries(p)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ')
+
+function GridResult({ result }: { result: OptimizeResult }) {
+  const rows = (result.results ?? []).filter((r) => r.valid).slice(0, 10)
+  return (
+    <>
+      {result.best && (
+        <div className="alert-note py-1 mb-2" style={{ fontSize: 12.5 }}>
+          最优（按 {result.metric}）：{fmtParams(result.best.params)} · 收益{' '}
+          {formatPercent((result.best.total_return ?? 0) * 100)} · 夏普 {formatNumber(result.best.sharpe_ratio ?? 0, 2)} · 交易{' '}
+          {result.best.total_trades} 笔
+        </div>
+      )}
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>排名</th>
+            <th>参数</th>
+            <th className="num">累计收益</th>
+            <th className="num">夏普</th>
+            <th className="num">最大回撤</th>
+            <th className="num">胜率</th>
+            <th className="num">交易数</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td style={{ fontSize: 12 }}>{fmtParams(r.params)}</td>
+              <td className={`num ${pctClass((r.total_return ?? 0) * 100)}`}>{formatPercent((r.total_return ?? 0) * 100)}</td>
+              <td className="num">{formatNumber(r.sharpe_ratio ?? 0, 2)}</td>
+              <td className="num">{formatPercent(-Math.abs(r.max_drawdown ?? 0) * 100)}</td>
+              <td className="num">{formatPercent((r.win_rate ?? 0) * 100)}</td>
+              <td className="num">{r.total_trades}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {result.note && <div className="text-faint mt-2" style={{ fontSize: 11.5 }}>{result.note}</div>}
+    </>
+  )
+}
+
+function WalkForwardResult({ result }: { result: OptimizeResult }) {
+  const s = result.summary
+  if (!s) return null
+  return (
+    <>
+      <div className="d-flex gap-2 flex-wrap mb-2">
+        <span className="chip">窗口数 · {s.n_windows}</span>
+        <span className="chip">OOS 正收益窗口 · {s.oos_hit_rate != null ? formatPercent(s.oos_hit_rate * 100) : '--'}</span>
+        <span className={`chip`}>OOS 链式收益 · {s.oos_chained_return != null ? formatPercent(s.oos_chained_return * 100) : '--'}</span>
+        <span className="chip">OOS 均值 · {s.oos_mean_return != null ? formatPercent(s.oos_mean_return * 100) : '--'}</span>
+        <span className="chip">IS 平均{result.metric === 'sharpe_ratio' ? '夏普' : '收益'} · {s.is_mean_metric != null ? formatNumber(s.is_mean_metric, 2) : '--'}</span>
+      </div>
+      {result.param_stability && Object.keys(result.param_stability).length > 0 && (
+        <div className="d-flex gap-2 flex-wrap mb-2" style={{ fontSize: 12 }}>
+          {Object.entries(result.param_stability).map(([k, vals]) => (
+            <span key={k} className="text-faint">
+              {k}：
+              {vals.map((v) => `${v.value}×${v.count}`).join(' / ')}
+            </span>
+          ))}
+        </div>
+      )}
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>IS 区间</th>
+            <th>OOS 区间</th>
+            <th>选中参数</th>
+            <th className="num">IS {result.metric === 'sharpe_ratio' ? '夏普' : '收益'}</th>
+            <th className="num">OOS 收益</th>
+            <th className="num">OOS 超额</th>
+            <th className="num">OOS 交易</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(result.windows ?? []).map((w, i) => {
+            const excess = w.oos_total_return != null && w.oos_benchmark_return != null ? w.oos_total_return - w.oos_benchmark_return : null
+            return (
+              <tr key={i}>
+                <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{w.is_start} ~ {w.is_end}</td>
+                <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{w.oos_start} ~ {w.oos_end}</td>
+                <td style={{ fontSize: 12 }}>{fmtParams(w.best_params)}</td>
+                <td className="num">{result.metric === 'sharpe_ratio' ? formatNumber(w.is_metric, 2) : formatPercent((w.is_total_return ?? 0) * 100)}</td>
+                <td className={`num ${pctClass((w.oos_total_return ?? 0) * 100)}`}>
+                  {w.oos_total_return != null ? formatPercent(w.oos_total_return * 100) : '--'}
+                </td>
+                <td className={`num ${excess != null ? pctClass(excess * 100) : ''}`}>
+                  {excess != null ? formatPercent(excess * 100) : '--'}
+                </td>
+                <td className="num">{w.oos_trades ?? '--'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {result.note && <div className="text-faint mt-2" style={{ fontSize: 11.5 }}>{result.note}</div>}
+    </>
   )
 }

@@ -1,4 +1,4 @@
-import { apiGet } from './client'
+import { apiGet, apiPost, apiPut } from './client'
 
 // ================= 每日市场简报 =================
 export interface BriefSummary {
@@ -300,3 +300,40 @@ export interface DailyAlertRecord {
 
 export const fetchDailyAlerts = (refresh = false) =>
   apiGet<{ records: DailyAlertRecord[] }>('/trial/daily-alerts', refresh ? { refresh: '1' } : undefined, 180_000)
+
+// ================= 预警推送 =================
+
+export type AlertPushChannelType = 'serverchan' | 'wecom_webhook' | 'dingtalk_webhook' | 'webhook'
+
+export interface AlertPushChannel {
+  type: AlertPushChannelType
+  url?: string
+  send_key?: string
+}
+
+export interface AlertPushConfig {
+  enabled: boolean
+  min_level: 'info' | 'warn'
+  channels: AlertPushChannel[]
+}
+
+export interface AlertPushLogEntry {
+  pushed_at: string
+  scan_date: string
+  results: { type: string; ok: boolean; message: string }[]
+}
+
+export const fetchAlertPushConfig = () =>
+  apiGet<AlertPushConfig>('/trial/daily-alerts/push-config')
+
+export const updateAlertPushConfig = (cfg: AlertPushConfig) =>
+  apiPut<AlertPushConfig>('/trial/daily-alerts/push-config', cfg)
+
+export const testAlertPush = () =>
+  apiPost<{ ok: boolean; message?: string; results?: { type: string; ok: boolean; message: string }[] }>(
+    '/trial/daily-alerts/push-test',
+    {},
+  )
+
+export const fetchAlertPushLog = () =>
+  apiGet<{ records: AlertPushLogEntry[] }>('/trial/daily-alerts/push-log')

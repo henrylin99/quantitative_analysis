@@ -68,6 +68,143 @@ def api_daily_alerts():
         return _error('每日预警记录', e)
 
 
+@api_bp.route('/trial/daily-alerts/push-config', methods=['GET'])
+def api_alert_push_config_get():
+    """预警推送配置（渠道列表 + 启用状态 + 最低推送级别）。"""
+    try:
+        from app.services.alert_push_service import AlertPushService
+
+        return _ok(AlertPushService().get_config())
+    except Exception as e:
+        return _error('读取推送配置', e)
+
+
+@api_bp.route('/trial/daily-alerts/push-config', methods=['PUT'])
+def api_alert_push_config_put():
+    """更新预警推送配置。body: {enabled, min_level, channels: [{type, url|send_key}]}"""
+    try:
+        from app.services.alert_push_service import AlertPushService
+
+        payload = request.get_json(silent=True) or {}
+        return _ok(AlertPushService().update_config(payload))
+    except Exception as e:
+        return _error('保存推送配置', e)
+
+
+@api_bp.route('/trial/daily-alerts/push-test', methods=['POST'])
+def api_alert_push_test():
+    """向已配置渠道发送测试推送。"""
+    try:
+        from app.services.alert_push_service import AlertPushService
+
+        return _ok(AlertPushService().send_test())
+    except Exception as e:
+        return _error('推送测试', e)
+
+
+@api_bp.route('/trial/daily-alerts/push-log', methods=['GET'])
+def api_alert_push_log():
+    """推送投递日志（最近 N 条）。"""
+    try:
+        from app.services.alert_push_service import AlertPushService
+
+        limit = request.args.get('limit', type=int) or 20
+        return _ok({'records': AlertPushService().list_log(limit=limit)})
+    except Exception as e:
+        return _error('推送日志', e)
+
+
+# ================= 自选股（服务端持久化） =================
+
+@api_bp.route('/trial/watchlist', methods=['GET'])
+def api_watchlist_get():
+    """自选股清单（服务端持久化，含分组/备注/价格提醒）。"""
+    try:
+        from app.services.watchlist_service import WatchlistService
+
+        return _ok({'items': WatchlistService().list_items()})
+    except Exception as e:
+        return _error('读取自选股', e)
+
+
+@api_bp.route('/trial/watchlist', methods=['PUT'])
+def api_watchlist_put():
+    """整体替换自选股清单（localStorage 迁移/批量编辑用）。"""
+    try:
+        from app.services.watchlist_service import WatchlistService
+
+        payload = request.get_json(silent=True) or {}
+        return _ok({'items': WatchlistService().replace_items(payload.get('items') or [])})
+    except Exception as e:
+        return _error('保存自选股', e)
+
+
+@api_bp.route('/trial/watchlist', methods=['POST'])
+def api_watchlist_add():
+    """添加自选股。body: {ts_code, group?, note?}"""
+    try:
+        from app.services.watchlist_service import WatchlistService
+
+        payload = request.get_json(silent=True) or {}
+        item = WatchlistService().add_item(
+            payload.get('ts_code', ''), payload.get('group') or '', payload.get('note') or '')
+        return _ok({'item': item})
+    except ValueError as e:
+        return jsonify({'code': 400, 'message': str(e), 'data': None}), 400
+    except Exception as e:
+        return _error('添加自选股', e)
+
+
+@api_bp.route('/trial/watchlist/item', methods=['PUT'])
+def api_watchlist_update():
+    """更新单个自选股字段（分组/备注/提醒价）。body: {ts_code, ...patch}"""
+    try:
+        from app.services.watchlist_service import WatchlistService
+
+        payload = request.get_json(silent=True) or {}
+        item = WatchlistService().update_item(payload.get('ts_code', ''),
+                                              {k: v for k, v in payload.items() if k != 'ts_code'})
+        if item is None:
+            return jsonify({'code': 404, 'message': '自选股不存在', 'data': None}), 404
+        return _ok({'item': item})
+    except Exception as e:
+        return _error('更新自选股', e)
+
+
+@api_bp.route('/trial/watchlist', methods=['DELETE'])
+def api_watchlist_delete():
+    """删除自选股（?ts_code=）。"""
+    try:
+        from app.services.watchlist_service import WatchlistService
+
+        removed = WatchlistService().remove_item(request.args.get('ts_code', ''))
+        return _ok({'removed': removed})
+    except Exception as e:
+        return _error('删除自选股', e)
+
+
+@api_bp.route('/trial/watchlist/alerts', methods=['GET'])
+def api_watchlist_alerts():
+    """价格提醒触发记录。"""
+    try:
+        from app.services.watchlist_service import WatchlistAlertService
+
+        return _ok({'alerts': WatchlistAlertService().list_alerts()})
+    except Exception as e:
+        return _error('价格提醒记录', e)
+
+
+@api_bp.route('/trial/watchlist/alerts/check', methods=['POST'])
+def api_watchlist_alerts_check():
+    """立即跑一轮价格提醒检查。"""
+    try:
+        from app.services.watchlist_service import WatchlistAlertService
+
+        return _ok(WatchlistAlertService().check())
+    except Exception as e:
+        return _error('价格提醒检查', e)
+
+
 @api_bp.route('/trial/industry-rotation', methods=['GET'])
 def api_industry_rotation():
     """行业轮动评分：动量 + 主力资金 + 估值分位三维截面 z-score。"""
