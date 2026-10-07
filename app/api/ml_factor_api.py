@@ -430,6 +430,23 @@ def get_chip_signals():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/chip-signal-backtest', methods=['GET'])
+def get_chip_signal_backtest():
+    """筹码信号历史有效性回测：三类信号触发后 5/10/20 日前向收益与超额。"""
+    try:
+        from app.services.signal_backtest_service import ChipSignalBacktestService
+
+        months = request.args.get('months', type=int) or 12
+        force = request.args.get('refresh') == '1'
+        result = ChipSignalBacktestService(_data_reader).run(months=months, force_refresh=force)
+        if 'error' in result:
+            return jsonify(result), 500
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"筹码信号回测失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/index-regime', methods=['GET'])
 def get_index_regime():
     """指数市场状态（动量/均线/波动 regime），供回测仓位调节对照。"""

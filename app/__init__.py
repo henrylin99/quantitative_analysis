@@ -139,5 +139,15 @@ def create_app(config_name='default'):
         except Exception:
             app.logger.warning("启动清理僵尸数据任务失败（不阻塞应用启动）", exc_info=True)
 
+    # 每日收盘后定时扫描（筹码信号/regime/行业轮动/财务异动 → 预警记录）。
+    # 测试环境不启动；多 worker 部署由 run_scan 的同日去重兜底。
+    if not app.config.get("TESTING") and os.getenv("DAILY_ALERT_ENABLED", "1") != "0":
+        try:
+            from app.services.daily_alert_service import DailyAlertScheduler
+
+            DailyAlertScheduler.instance().start()
+        except Exception:
+            app.logger.warning("每日预警调度线程启动失败（不阻塞应用启动）", exc_info=True)
+
     return app
 

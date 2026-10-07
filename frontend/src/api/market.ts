@@ -355,3 +355,43 @@ export function fetchAnomalyAnalysisByStocks(codes: string[]) {
     codes: codes.join(','),
   })
 }
+
+// ================= 行业轮动评分 =================
+
+export interface IndustryRotationRow {
+  industry: string
+  n_members: number
+  mom_5d: number | null
+  mom_20d: number | null
+  flow_5d: number | null
+  flow_20d: number | null
+  pe_med: number | null
+  pe_hist_pct: number | null
+  mom_z: number | null
+  flow_z: number | null
+  value_z: number | null
+  total_score: number
+  rank: number
+}
+
+export interface IndustryRotationData {
+  meta: {
+    eval_start: string
+    eval_end: string
+    n_industries: number
+    n_days: number
+    has_moneyflow: boolean
+    has_valuation: boolean
+    min_members: number
+  }
+  score_formula: string
+  rows: IndustryRotationRow[]
+  nav_chart: {
+    dates: string[]
+    top: Record<string, number[]>
+    bottom: Record<string, number[]>
+  }
+}
+
+export const fetchIndustryRotation = (refresh = false) =>
+  apiGet<IndustryRotationData>('/trial/industry-rotation', refresh ? { refresh: '1' } : undefined, 180_000)

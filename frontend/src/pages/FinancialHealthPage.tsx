@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import EChart from '../charts/EChart'
 import { useTheme } from '../theme/ThemeContext'
-import { fetchFinancialAnomalies, fetchFinancialHealth, type FinancialAnomalyData } from '../api/trial'
+import {
+  fetchAnomalyForward,
+  fetchFinancialAnomalies,
+  fetchFinancialHealth,
+  type AnomalyForwardData,
+  type FinancialAnomalyData,
+} from '../api/trial'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, pctClass } from '../utils/format'
 
@@ -283,6 +289,85 @@ function AnomalyPanel() {
           </tbody>
         </table>
       </div>
+      <AnomalyForwardBlock />
+    </div>
+  )
+}
+
+const FWD_HORIZONS = [5, 10, 20, 60] as const
+
+function AnomalyForwardBlock() {
+  const [data, setData] = useState<AnomalyForwardData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = () => {
+    setLoading(true)
+    fetchAnomalyForward()
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '前向收益计算失败'))
+      .finally(() => setLoading(false))
+  }
+
+  if (!data && !loading && !error) {
+    return (
+      <div className="panel-body d-flex align-items-center justify-content-between gap-2" style={{ borderTop: '1px solid rgba(128,128,128,0.15)' }}>
+        <span className="text-faint" style={{ fontSize: 12 }}>
+          异动名单披露后表现：按实际披露日（f_ann_date）次一交易日开盘入场，统计 5/10/20/60 日持有收益 vs 全市场等权（首次计算约 30s，服务端缓存 1 小时）
+        </span>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={run}>
+          计算披露后收益
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="panel-body" style={{ borderTop: '1px solid rgba(128,128,128,0.15)' }}>
+      {loading && <Loading text="披露后前向收益计算中（约 30s）..." />}
+      {error && (
+        <div className="d-flex align-items-center gap-2">
+          <span className="text-danger" style={{ fontSize: 12 }}>{error}</span>
+          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={run}>重试</button>
+        </div>
+      )}
+      {data && (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>组别</th>
+              <th className="num">股票数</th>
+              {FWD_HORIZONS.map((h) => (
+                <th key={h} className="num" colSpan={2}>{h}日超额 / t值</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(data.groups).map(([key, g]) => (
+              <tr key={key}>
+                <td style={{ fontWeight: 600 }}>{g.label}</td>
+                <td className="num">{g.n_stocks}</td>
+                {FWD_HORIZONS.map((h) => {
+                  const st = g[`h${h}`] as { excess_bp: number | null; excess_t: number | null } | undefined
+                  const bp = st?.excess_bp
+                  const t = st?.excess_t
+                  return (
+                    <Fragment key={h}>
+                      <td className={`num ${bp == null ? '' : bp > 0 ? 'text-success' : 'text-danger'}`}>
+                        {bp == null ? '--' : `${(bp / 100).toFixed(2)}%`}
+                      </td>
+                      <td className={`num ${t != null && Math.abs(t) >= 2 ? 'fw-bold' : ''}`}>
+                        {t == null ? '--' : t.toFixed(2)}
+                      </td>
+                    </Fragment>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {data && <div className="text-faint mt-2" style={{ fontSize: 11.5 }}>{data.note}</div>}
     </div>
   )
 }

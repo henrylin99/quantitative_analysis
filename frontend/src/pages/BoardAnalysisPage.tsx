@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Layers, RefreshCw, Search } from 'lucide-react'
+import { Layers, RefreshCw, Search, TrendingUp } from 'lucide-react'
 import {
   fetchBoardConstituents,
   fetchBoards,
+  fetchIndustryRotation,
+  type IndustryRotationData,
   type ThsBoardRow,
 } from '../api/market'
+import EChart from '../charts/EChart'
 import { StockLink } from '../components/stock/StockLink'
 import { Card, Delta, EmptyState, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
 import { cn } from '../lib/cn'
@@ -203,6 +206,137 @@ export default function BoardAnalysisPage({ tag, title, subtitle }: BoardAnalysi
           )}
         </Card>
       </div>
+
+      {tag === 'industry' && <RotationCard />}
     </div>
+  )
+}
+
+function RotationCard() {
+  const rotationQuery = useQuery({
+    queryKey: ['trial', 'industry-rotation'],
+    queryFn: () => fetchIndustryRotation(),
+    staleTime: 30 * 60_000,
+    retry: 1,
+  })
+
+  const navOption = useMemo(() => {
+    const data: IndustryRotationData | undefined = rotationQuery.data
+    if (!data?.nav_chart) return null
+    const palette = ['#4f8ef7', '#22c55e', '#f59e0b', '#a855f7', '#14b8a6']
+    const mk = (group: 'top' | 'bottom', dash: boolean) =>
+      Object.entries(data.nav_chart[group]).map(([name, values], i) => ({
+        name: `${group === 'top' ? '↑' : '↓'} ${name}`,
+        type: 'line',
+        showSymbol: false,
+        data: values,
+        lineStyle: { width: 1.4, type: dash ? 'dashed' : 'solid' },
+        itemStyle: { color: palette[i % palette.length] },
+      }))
+    return {
+      textStyle: { color: '#94a3b8' },
+      tooltip: { trigger: 'axis' },
+      legend: { top: 0, textStyle: { color: '#94a3b8', fontSize: 10 } },
+      grid: { left: 56, right: 16, top: 44, bottom: 28 },
+      xAxis: { type: 'category', data: data.nav_chart.dates },
+      yAxis: { type: 'value', scale: true },
+      series: [...mk('top', false), ...mk('bottom', true)],
+    }
+  }, [rotationQuery.data])
+
+  const flowCell = (v: number | null) =>
+    v == null ? (
+      '--'
+    ) : (
+      <span className={v > 0 ? 'text-emerald-500' : 'text-rose-500'}>
+        {(v / 1e4).toFixed(2)}亿
+      </span>
+    )
+
+  return (
+    <Card className="mt-1.5 p-0">
+      <SectionTitle
+        icon={<TrendingUp size={13} />}
+        title="行业轮动评分（本地日频 · Tushare 行业口径）"
+        hint={
+          rotationQuery.data
+            ? `${rotationQuery.data.meta.eval_start} ~ ${rotationQuery.data.meta.eval_end} · ${rotationQuery.data.meta.n_industries} 个行业 · 每小时缓存`
+            : '计算中…'
+        }
+      />
+      {rotationQuery.isLoading ? (
+        <SkeletonRows rows={6} />
+      ) : rotationQuery.isError ? (
+        <EmptyState
+          title="行业轮动评分加载失败"
+          description={(rotationQuery.error as Error)?.message}
+          action={
+            <button
+              type="button"
+              className="rounded-btn border border-line px-2.5 py-1 text-xs text-fg-secondary hover:bg-elevated"
+              onClick={() => rotationQuery.refetch()}
+            >
+              重试
+            </button>
+          }
+        />
+      ) : rotationQuery.data ? (
+        <div className="grid grid-cols-1 gap-3 p-2 xl:grid-cols-[1fr_32rem]">
+          <div className="max-h-[26rem] overflow-y-auto">
+            <table className="w-full border-collapse text-xs">
+              <thead className="sticky top-0 z-10 bg-surface">
+                <tr className="border-b border-line text-left text-2xs text-fg-muted">
+                  <th className="w-8 px-2 py-1.5 text-center font-medium">#</th>
+                  <th className="px-2 py-1.5 font-medium">行业</th>
+                  <th className="px-2 py-1.5 text-right font-medium">成分</th>
+                  <th className="px-2 py-1.5 text-right font-medium">20日动量</th>
+                  <th className="px-2 py-1.5 text-right font-medium">5日主力净额</th>
+                  <th className="px-2 py-1.5 text-right font-medium">20日主力净额</th>
+                  <th className="px-2 py-1.5 text-right font-medium">PE中位</th>
+                  <th className="px-2 py-1.5 text-right font-medium">PE历史分位</th>
+                  <th className="px-2 py-1.5 text-right font-medium">总分</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rotationQuery.data.rows.map((row) => (
+                  <tr key={row.industry} className="border-t border-line/60 hover:bg-elevated/50">
+                    <td className="num px-2 py-1.5 text-center text-2xs text-fg-muted">{row.rank}</td>
+                    <td className="px-2 py-1.5 font-medium">{row.industry}</td>
+                    <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.n_members}</td>
+                    <td className="num px-2 py-1.5 text-right">
+                      <Delta value={row.mom_20d} />
+                    </td>
+                    <td className="num px-2 py-1.5 text-right">{flowCell(row.flow_5d)}</td>
+                    <td className="num px-2 py-1.5 text-right">{flowCell(row.flow_20d)}</td>
+                    <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.pe_med ?? '--'}</td>
+                    <td className="num px-2 py-1.5 text-right text-fg-secondary">
+                      {row.pe_hist_pct != null ? `${(row.pe_hist_pct * 100).toFixed(0)}%` : '--'}
+                    </td>
+                    <td
+                      className={cn(
+                        'num px-2 py-1.5 text-right font-semibold',
+                        row.total_score > 0 ? 'text-emerald-500' : 'text-rose-500',
+                      )}
+                    >
+                      {row.total_score.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            {navOption ? (
+              <EChart option={navOption} height={340} />
+            ) : (
+              <EmptyState title="暂无净值数据" />
+            )}
+            <p className="px-2 pb-2 text-2xs leading-relaxed text-fg-muted">
+              {rotationQuery.data.score_formula}。实线为评分最高 5 行业，虚线为最低 5 行业（成分股等权累计净值）。
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </Card>
   )
 }
