@@ -71,7 +71,12 @@
 - **数据中心入口**：页面 `/data-management`，支持任务提交、查询、重试、状态过滤、进度轮询、历史展示
 
 ## 数据下载
-- 视频讲解地址：v2.0版本 https://youtu.be/SpHsZdlyii8  v3.0版本：https://youtu.be/p0iJxGveW60
+- 视频讲解地址：
+  - v2.0版本 https://youtu.be/SpHsZdlyii8  
+  - v3.0版本：https://youtu.be/p0iJxGveW60
+  - v4.0版本：https://youtu.be/Vn3b8DwRjuY
+  - v5.0版本：https://youtu.be/YgSganav4os
+  - v6.0版本：https://youtu.be/YPFYBNcmbqU
 - 为方便学习使用，数据已改为 Parquet 模式，下载后安装环境即可使用，不需要安装 MySQL
 - 数据更新到 2026 年 09 月 22 日，包含历史行情、基本面、技术面、资金流入、筹码分布，每月更新一次
 
