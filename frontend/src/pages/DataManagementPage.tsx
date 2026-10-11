@@ -5,25 +5,31 @@ import {
   fetchDataJobDefs,
   fetchDataJobRun,
   fetchDataJobRuns,
+  fetchFactorValuesAudit,
   fetchInitStatus,
   fetchMinuteQuality,
   fetchMinuteStats,
   fetchMinuteSyncStatus,
   fetchPipelineStatus,
+  fetchStorageOverview,
   fetchWideTableStatus,
+  runFactorValuesCleanup,
   runPipeline,
   submitDataJob,
   syncMinuteData,
   syncMinuteMultiple,
   type DataJobDef,
   type DataJobRun,
+  type FactorValuesAudit,
+  type FactorValuesCleanupResult,
   type InitStatus,
   type MinuteStats,
   type PipelineStatus,
+  type StorageOverview,
   type WideTableStatus,
 } from '../api/dataJobs'
 import { EmptyState, ErrorState } from '../components/StateViews'
-import { formatDateTime, formatNumber, toLocalDate } from '../utils/format'
+import { formatBytes, formatDateTime, formatNumber, toLocalDate } from '../utils/format'
 
 const RECOMMENDED = ['trade_calendar', 'stock_basic', 'daily_history_by_date', 'daily_basic']
 const PERIODS = ['5min', '15min', '30min', '60min']
@@ -359,6 +365,9 @@ export default function DataManagementPage() {
 
       {/* 盘后数据链路 */}
       <PipelinePanel />
+
+      {/* 存储治理 */}
+      <GovernancePanel />
 
       {/* 推荐初始化顺序 + 当前任务 */}
       <div className="row g-3">
@@ -745,6 +754,129 @@ const PIPELINE_STEP_LABELS: Record<string, string> = {
   wide_table_builder: '大宽表',
   stock_partition_rebuild: '股票分区',
   factor_compute: '因子计算',
+}
+
+// ================= 存储治理 =================
+
+function GovernancePanel() {
+  const [overview, setOverview] = useState<StorageOverview | null>(null)
+  const [audit, setAudit] = useState<FactorValuesAudit | null>(null)
+  const [retentionDays, setRetentionDays] = useState(800)
+  const [dryRun, setDryRun] = useState<FactorValuesCleanupResult | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = () => {
+    fetchStorageOverview()
+      .then((r) => setOverview(r.data))
+      .catch(() => setOverview(null))
+    fetchFactorValuesAudit()
+      .then((r) => setAudit(r.data))
+      .catch(() => setAudit(null))
+  }
+
+  useEffect(load, [])
+
+  const cleanup = async (confirm: boolean) => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = await runFactorValuesCleanup(retentionDays, confirm)
+      const d = r.data
+      setDryRun(confirm ? null : d)
+      setMsg(
+        confirm
+          ? `已删除 ${d.deleted_count ?? 0} 个分区，回收 ${formatBytes(d.reclaim_bytes)}`
+          : `预览：${d.cutoff} 前共 ${d.candidate_count} 个分区，可回收 ${formatBytes(d.reclaim_bytes)}（未删除，需点"确认清理"）`,
+      )
+      if (confirm) load()
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : '清理失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const fv = overview?.factor_values
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          存储治理
+          <span className="chip">{formatBytes(overview?.total_bytes)}</span>
+        </h6>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load}>
+          ⟳ 刷新
+        </button>
+      </div>
+      <div className="panel-body d-flex flex-column gap-2">
+        {/* 体积排行 top5 */}
+        <div className="d-flex gap-2 flex-wrap">
+          {(overview?.dirs ?? []).slice(0, 5).map((d) => (
+            <span className="chip" key={d.name}>
+              {d.name} · {formatBytes(d.size_bytes)}
+            </span>
+          ))}
+          {!overview && <span className="text-faint" style={{ fontSize: 12 }}>加载中…</span>}
+        </div>
+
+        {/* factor_values 分区统计 */}
+        <div className="d-flex gap-2 flex-wrap" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+          <span>
+            factor_values：{fv?.partitions ?? 0} 个日分区（{fv?.oldest ?? '--'} → {fv?.latest ?? '--'}），
+            合计 {formatBytes(fv?.size_bytes)}，月增约 {formatBytes(fv?.growth_per_month_bytes)}
+          </span>
+        </div>
+
+        {/* 退化因子 */}
+        {audit && audit.degenerate.length > 0 && (
+          <div className="alert-note py-1" style={{ fontSize: 12 }}>
+            覆盖不足因子（最新分区 &lt; 2000 股）：
+            {audit.degenerate.map((d) => ` ${d.factor_id}(${d.rows})`).join('、')}
+          </div>
+        )}
+
+        {/* 保留窗口清理 */}
+        <div className="d-flex gap-2 align-items-center flex-wrap">
+          <label style={{ fontSize: 13 }}>
+            保留窗口（天）：
+            <input
+              type="number"
+              className="form-control form-control-sm d-inline-block"
+              style={{ width: 90, margin: '0 8px' }}
+              min={90}
+              value={retentionDays}
+              onChange={(e) => setRetentionDays(Number(e.target.value) || 800)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            disabled={busy}
+            onClick={() => cleanup(false)}
+          >
+            预览可清理分区
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm"
+            disabled={busy || !dryRun || dryRun.candidate_count === 0}
+            onClick={() => cleanup(true)}
+          >
+            确认清理
+          </button>
+          {dryRun && (
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+              待删 {dryRun.candidate_count} 个分区（{dryRun.cutoff} 前），保留 {dryRun.remaining_partitions} 个
+            </span>
+          )}
+        </div>
+        {msg && <div className="alert-note py-1">{msg}</div>}
+      </div>
+    </div>
+  )
 }
 
 function PipelinePanel() {
