@@ -25,9 +25,9 @@ from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
 from app.services.signal_defs import (
-    DEFAULT_THRESHOLDS,
     SIGNAL_LABELS,
     SignalThresholds,
+    current_thresholds,
     divergence_mask,
     resonance_mask,
     signal_definitions,
@@ -86,8 +86,11 @@ class ChipSignalBacktestService:
         self._cache_at: float = 0.0
 
     def run(self, months: int = 12, force_refresh: bool = False,
-            thresholds: SignalThresholds = DEFAULT_THRESHOLDS) -> Dict[str, Any]:
+            thresholds: SignalThresholds = None) -> Dict[str, Any]:
         import time
+
+        if thresholds is None:
+            thresholds = current_thresholds()  # 与 ChipSignalService 同源（含寻优写回）
 
         months = max(3, min(int(months or 12), 24))
         cache_key = (months, thresholds.signature())
@@ -105,7 +108,12 @@ class ChipSignalBacktestService:
         return result
 
     # ------------------------------------------------------------------
-    def _run(self, months: int, t: SignalThresholds) -> Dict[str, Any]:
+    def _load_panels(self, months: int) -> Dict[str, Any]:
+        """一次性构建信号回测宽面板（阈值寻优复用：面板只建一次，网格逐组合算掩码）。
+
+        返回 dict：dates / winner / conc / winner_chg / pct5 / vol_ratio /
+        open_al / net5 / net_last / has_moneyflow；无有效截面时含 error。
+        """
         end = datetime.now()
         eval_start = end - timedelta(days=months * 31)
         # 预热：量能比需要 20 交易日、5日涨幅/获利盘变化需要 5 交易日
@@ -154,12 +162,16 @@ class ChipSignalBacktestService:
         def align(w: pd.DataFrame) -> pd.DataFrame:
             return w.reindex(index=dates)
 
-        winner = align(winner_w)
-        conc = align(conc_w)
-        winner_chg = align(winner_chg_w)
-        pct5 = align(pct5_w)
-        vol_ratio = align(vol_ratio_w)
-        open_al = align(open_w)
+        panels = {
+            "dates": dates,
+            "winner": align(winner_w),
+            "conc": align(conc_w),
+            "winner_chg": align(winner_chg_w),
+            "pct5": align(pct5_w),
+            "vol_ratio": align(vol_ratio_w),
+            "open_al": align(open_w),
+            "has_moneyflow": not flow.empty,
+        }
 
         net5 = net_last = None
         if not flow.empty:
@@ -169,6 +181,23 @@ class ChipSignalBacktestService:
             net_w = _pivot_last(flow, "main_net")
             net5 = align(net_w.rolling(5, min_periods=3).sum())
             net_last = align(net_w)
+        panels["net5"] = net5
+        panels["net_last"] = net_last
+        return panels
+
+    def _run(self, months: int, t: SignalThresholds) -> Dict[str, Any]:
+        panels = self._load_panels(months)
+        if "error" in panels:
+            return panels
+        dates = panels["dates"]
+        winner = panels["winner"]
+        conc = panels["conc"]
+        winner_chg = panels["winner_chg"]
+        pct5 = panels["pct5"]
+        vol_ratio = panels["vol_ratio"]
+        open_al = panels["open_al"]
+        net5 = panels["net5"]
+        net_last = panels["net_last"]
 
         # ---------- 信号掩码（与 ChipSignalService 同一套规则/阈值，见 signal_defs） ----------
         conc_thresh = conc.quantile(t.squeeze_conc_quantile, axis=1)

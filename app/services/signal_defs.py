@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import dataclasses
+import json
+import os
 from dataclasses import dataclass
 from typing import Dict, Union
 
@@ -58,6 +60,81 @@ class SignalThresholds:
 
 
 DEFAULT_THRESHOLDS = SignalThresholds()
+
+
+# ---------------------------------------------------------------------------
+# 阈值持久化（寻优写回的落点）：data/config/signal_thresholds.json。
+# 5.3 寻优写回后，ChipSignalService（扫描）与 ChipSignalBacktestService
+# （回测）通过 current_thresholds() 读到同一份阈值——"一处定义、两处消费"。
+# 文件不存在时即代码默认值，零侵入。
+# ---------------------------------------------------------------------------
+def _override_path() -> str:
+    data_dir = os.getenv(
+        "DATA_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"),
+    )
+    return os.path.join(data_dir, "config", "signal_thresholds.json")
+
+
+def current_thresholds() -> SignalThresholds:
+    """当前生效阈值：寻优写回的 JSON 覆盖（若有）优先，否则代码默认。"""
+    try:
+        with open(_override_path(), encoding="utf-8") as f:
+            payload = json.load(f)
+        if isinstance(payload, dict) and payload:
+            return SignalThresholds.from_params(payload)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        import warnings
+        warnings.warn("signal_thresholds.json 解析失败，回退代码默认阈值")
+    return DEFAULT_THRESHOLDS
+
+
+def save_threshold_override(t: SignalThresholds) -> str:
+    """寻优写回：原子写 JSON，返回路径。"""
+    path = _override_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {f.name: getattr(t, f.name) for f in dataclasses.fields(t)}
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    return path
+
+
+def clear_threshold_override() -> bool:
+    """清除写回（恢复代码默认）。"""
+    try:
+        os.remove(_override_path())
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def merge_thresholds(params: Union[dict, None]) -> SignalThresholds:
+    """在"当前生效阈值"（含寻优写回）之上叠加请求覆盖。
+
+    API 层阈值实验入口统一走这里：无覆盖参数时返回 current_thresholds()
+    而不是代码默认——保证写回后扫描/回测/实验三处读到同一份。
+    """
+    if not params:
+        return current_thresholds()
+    base = current_thresholds()
+    allowed = {f.name for f in dataclasses.fields(SignalThresholds)}
+    merged = {f.name: getattr(base, f.name)
+              for f in dataclasses.fields(SignalThresholds)}
+    for key, value in params.items():
+        if key not in allowed or value is None or value == "":
+            continue
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            continue
+        if pd.isna(num):
+            continue
+        merged[key] = num
+    return SignalThresholds(**merged)
 
 
 def _le(value, thresh):

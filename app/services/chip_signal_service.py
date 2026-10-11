@@ -23,8 +23,8 @@ from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
 from app.services.signal_defs import (
-    DEFAULT_THRESHOLDS,
     SignalThresholds,
+    current_thresholds,
     divergence_mask,
     resonance_mask,
     signal_definitions,
@@ -45,7 +45,9 @@ class ChipSignalService:
 
     # ------------------------------------------------------------------
     def scan(self, force_refresh: bool = False,
-             thresholds: SignalThresholds = DEFAULT_THRESHOLDS) -> Dict[str, Any]:
+             thresholds: SignalThresholds = None) -> Dict[str, Any]:
+        if thresholds is None:
+            thresholds = current_thresholds()  # 寻优写回后扫描/回测同源
         """全市场扫描最近一个筹码交易日截面，返回三类信号。"""
         import time
 
