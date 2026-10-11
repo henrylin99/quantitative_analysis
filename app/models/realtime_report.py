@@ -7,6 +7,7 @@ from app.extensions import db
 from app.utils.time_utils import now_local
 from sqlalchemy import Index, Text
 import json
+from datetime import datetime
 from app.services.persistence import persist_changes, persist_new, remove_instance
 
 
@@ -301,14 +302,17 @@ class RealtimeReport(db.Model):
             self.generation_time = generation_time
         persist_changes(self)
 
-    def attach_dispatch_metadata(self, subscription_id, channels=None, subscriber_email=None, subscriber_phone=None):
-        """附加分发元数据到报告数据。"""
+    def attach_dispatch_metadata(self, subscription_id, channels=None, subscriber_email=None,
+                                 subscriber_phone=None, delivery_results=None):
+        """附加分发元数据到报告数据（含逐渠道外发结果）。"""
         payload = json.loads(self.report_data) if self.report_data else {}
         payload["dispatch"] = {
             "subscription_id": subscription_id,
             "channels": channels or ["log"],
             "subscriber_email": subscriber_email,
             "subscriber_phone": subscriber_phone,
+            "delivery_results": delivery_results or [],
+            "dispatched_at": datetime.now().isoformat(timespec="seconds"),
         }
         self.report_data = json.dumps(payload)
         persist_changes(self)

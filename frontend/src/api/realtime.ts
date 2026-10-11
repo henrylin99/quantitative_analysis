@@ -1,4 +1,4 @@
-import { extractApiError, rawGet, rawPost, rawPut } from './client'
+import { extractApiError, http, rawGet, rawPost, rawPut } from './client'
 
 // ================= 实时技术指标 =================
 export interface SupportedIndicator {
@@ -414,3 +414,36 @@ export const fetchWsStatus = () =>
   )
 
 export const testWsConnection = () => rawPost<{ success: boolean; data?: unknown; message?: string }>('/websocket/test-connection', {})
+
+// ================= 报告导出 =================
+export const exportReport = async (id: number, format: 'pdf' | 'html'): Promise<void> => {
+  try {
+    const resp = await http.get(`/realtime-analysis/reports/reports/${id}/export`, {
+      params: { format },
+      responseType: 'blob',
+      timeout: 120_000,
+    })
+    const disposition: string = (resp.headers?.['content-disposition'] as string) ?? ''
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i)
+    const filename = match ? decodeURIComponent(match[1].replace(/"/g, '')) : `report_${id}.${format}`
+    const url = URL.createObjectURL(resp.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    // 501（weasyprint 未安装）等错误信封在 blob 里，解析出来透出
+    const blob = (err as { response?: { data?: unknown } })?.response?.data
+    let message = ''
+    if (blob instanceof Blob) {
+      try {
+        const env = JSON.parse(await blob.text()) as { message?: string }
+        message = env.message ?? ''
+      } catch {
+        /* 非 JSON blob，忽略 */
+      }
+    }
+    throw new Error(message || extractApiError(err, '报告导出失败'))
+  }
+}
