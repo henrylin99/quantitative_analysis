@@ -588,6 +588,12 @@ export interface QuantilePortfolioResult {
   }>
   nav: Record<string, number[]>
   nav_long_short: number[]
+  nav_long_short_hedged?: number[]
+  long_short_hedged_summary?: QuantilePerfSummary
+  long_short_leverage?: number[]
+  industry_neutral?: boolean
+  vol_target?: number | null
+  ls_caveats?: string
   groups_summary: Record<string, QuantilePerfSummary>
   long_short_summary: QuantilePerfSummary
   avg_turnover: Record<string, number | null>
@@ -604,6 +610,9 @@ export const runQuantilePortfolioBacktest = async (body: {
   cost_bps: number
   min_stocks?: number
   cost_bps_list?: number[]
+  industry_neutral?: boolean
+  vol_target?: number | null
+  leverage_cap?: number
 }): Promise<QuantilePortfolioResult> => {
   try {
     return await rawPost<QuantilePortfolioResult>(

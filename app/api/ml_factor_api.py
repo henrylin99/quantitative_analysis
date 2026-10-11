@@ -1002,6 +1002,9 @@ def factor_quantile_portfolio_backtest():
             cost_bps=float(data.get('cost_bps', 0.0)),
             min_stocks=int(data.get('min_stocks', 50)),
             cost_bps_list=[float(c) for c in (data.get('cost_bps_list') or [])],
+            industry_neutral=bool(data.get('industry_neutral', False)),
+            vol_target=data.get('vol_target'),
+            leverage_cap=float(data.get('leverage_cap', 1.5)),
         )
         if 'error' in result:
             return jsonify(result), 404

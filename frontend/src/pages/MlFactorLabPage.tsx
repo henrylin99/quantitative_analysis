@@ -148,6 +148,8 @@ function BacktestTab(props: TabShared & { setStartDate: (v: string) => void; set
   const [holdingDays, setHoldingDays] = useState(20)
   const [nQuantiles, setNQuantiles] = useState(5)
   const [costBps, setCostBps] = useState('10')
+  const [industryNeutral, setIndustryNeutral] = useState(false)
+  const [volTarget, setVolTarget] = useState('')
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<QuantilePortfolioResult | null>(null)
@@ -173,6 +175,8 @@ function BacktestTab(props: TabShared & { setStartDate: (v: string) => void; set
         n_quantiles: nQuantiles,
         cost_bps: Number(costBps) || 0,
         cost_bps_list: [0, 5, 10, 15, 20],
+        industry_neutral: industryNeutral,
+        vol_target: volTarget ? Number(volTarget) : null,
       })
       setResult(r)
       setStatus('done')
@@ -206,6 +210,16 @@ function BacktestTab(props: TabShared & { setStartDate: (v: string) => void; set
       lineStyle: { width: 2.5 },
       itemStyle: { color: palette.accent },
     })
+    if (result.nav_long_short_hedged) {
+      series.push({
+        name: '对冲多空（等名义本金）',
+        type: 'line',
+        showSymbol: false,
+        data: result.nav_long_short_hedged,
+        lineStyle: { width: 1.5 },
+        itemStyle: { color: palette.violet },
+      })
+    }
     return {
       tooltip: { trigger: 'axis' },
       legend: { top: 0, type: 'scroll' },
@@ -282,6 +296,29 @@ function BacktestTab(props: TabShared & { setStartDate: (v: string) => void; set
               <label className="form-label">单边费率(bps)</label>
               <input type="number" className="form-control" min={0} step="1" value={costBps} onChange={(e) => setCostBps(e.target.value)} />
             </div>
+            <div className="col-6 col-md-1 d-flex flex-column justify-content-end">
+              <label className="form-label d-flex align-items-center gap-1 mb-1">
+                <input
+                  type="checkbox"
+                  checked={industryNeutral}
+                  onChange={(e) => setIndustryNeutral(e.target.checked)}
+                />
+                行业中性
+              </label>
+            </div>
+            <div className="col-6 col-md-1">
+              <label className="form-label">波动率目标</label>
+              <input
+                type="number"
+                className="form-control"
+                min={0}
+                max={1}
+                step={0.05}
+                placeholder="如 0.15"
+                value={volTarget}
+                onChange={(e) => setVolTarget(e.target.value)}
+              />
+            </div>
             <div className="col-6 col-md-2 d-flex gap-2">
               <button type="button" className="btn btn-primary flex-fill" disabled={status === 'running'} onClick={submit}>
                 {status === 'running' ? '回测中…' : '运行回测'}
@@ -333,8 +370,15 @@ function BacktestTab(props: TabShared & { setStartDate: (v: string) => void; set
 
           <div className="text-faint mb-3" style={{ fontSize: 12 }}>
             信号日收盘分桶 → T+1 收盘成交，非重叠持有 {result.holding_days} 个交易日；末个信号日无完整持有期已剔除。
-            区间 {result.first_signal_date} ~ {result.last_signal_date}，单边费率 {result.cost_bps} bps（按换手扣双边）。
+            区间 {result.first_signal_date} ~ {result.last_signal_date}，单边费率 {result.cost_bps} bps（按换手扣双边，多空两腿各计）。
+            {result.industry_neutral ? '行业中性（截面行业去均值）已开启。' : ''}
+            {result.vol_target ? `波动率目标 ${result.vol_target}（事前杠杆，上限 1.5）。` : ''}
           </div>
+          {result.ls_caveats ? (
+            <div className="text-faint mb-3" style={{ fontSize: 12 }}>
+              ⚠️ {result.ls_caveats}
+            </div>
+          ) : null}
 
           <div className="row g-3">
             <div className="col-12">
