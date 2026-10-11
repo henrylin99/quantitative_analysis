@@ -4,6 +4,7 @@
 """
 
 import os
+import threading
 
 from flask import Blueprint, request, jsonify
 from app.utils.request_parsing import parse_int_arg
@@ -475,3 +476,63 @@ def get_data_stats():
             'success': False,
             'message': f'获取失败: {str(e)}'
         }), 500 
+
+
+# ================= 全市场分钟线同步（批次 3.2） =================
+
+_market_sync_thread = None
+
+
+@realtime_analysis_bp.route('/data/market-sync/status', methods=['GET'])
+def get_market_sync_status():
+    """全市场分钟线同步进度（state.json 视图）。"""
+    try:
+        from app.services.minute_market_sync_service import MinuteMarketSyncService
+
+        return jsonify({'success': True, 'data': MinuteMarketSyncService().get_progress()})
+    except Exception as e:
+        logger.error(f"分钟同步状态API错误: {str(e)}")
+        return jsonify({'success': False, 'message': f'获取失败: {str(e)}'}), 500
+
+
+@realtime_analysis_bp.route('/data/market-sync/run', methods=['POST'])
+def run_market_sync():
+    """后台线程触发全市场分钟线同步（增量/回填），立即返回。"""
+    global _market_sync_thread
+    try:
+        from app.services.minute_market_sync_service import MinuteMarketSyncService
+
+        payload = request.get_json(silent=True) or {}
+        mode = payload.get('mode', 'incremental')
+        if mode not in ('incremental', 'backfill'):
+            return jsonify({'success': False, 'message': f"不支持的模式: {mode}"}), 400
+
+        service = MinuteMarketSyncService()
+        progress = service.get_progress()
+        if progress.get('running'):
+            return jsonify({'success': False,
+                            'message': f"同步已在运行（run {progress.get('run_id')}），请稍后查询进度"}), 409
+
+        stock_list = None
+        limit = payload.get('limit')
+        if limit:
+            stock_list = service.load_stock_universe()[: int(limit)]
+
+        def _worker():
+            try:
+                result = service.sync_market(
+                    period_type=payload.get('period_type', '5min'),
+                    mode=mode,
+                    start_date=payload.get('start_date'),
+                    stock_list=stock_list,
+                )
+                logger.info(f"全市场分钟线同步结束: {result.get('message')}")
+            except Exception:
+                logger.error("全市场分钟线同步线程异常", exc_info=True)
+
+        _market_sync_thread = threading.Thread(target=_worker, name="minute-market-sync", daemon=True)
+        _market_sync_thread.start()
+        return jsonify({'success': True, 'message': f"已启动全市场{('回填' if mode == 'backfill' else '增量')}同步，进度见 status 接口"})
+    except Exception as e:
+        logger.error(f"分钟同步触发API错误: {str(e)}")
+        return jsonify({'success': False, 'message': f'触发失败: {str(e)}'}), 500

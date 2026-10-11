@@ -23,6 +23,7 @@ class JobRegistry:
             "wide_table_builder",     # 20
             "stock_partition_rebuild",  # 21（个股查询提速：日期分区 → 股票分区）
             "factor_compute",         # 因子计算（打分/回测的前置作业）
+            "minute_market_sync",     # 全市场 5min 分钟线（东财源，断点续传）
         }
 
         # 注意：baostock_daily / min5 / min15 / min30 / min60 已从注册表摘除：
@@ -182,6 +183,21 @@ class JobRegistry:
                     "daily_history_by_code", "daily_basic", "stk_factor",
                     "moneyflow", "cyq_perf", "income_statement", "balance_sheet",
                 ],
+            ),
+            "minute_market_sync": JobDefinition(
+                "minute_market_sync",
+                "分钟数据",
+                "app/utils/minute_market_sync.py",
+                display_name="全市场分钟线同步",
+                description=(
+                    "东财源逐股同步全市场 5min 分钟线（约 5500 只，串行限速约 1 小时）。"
+                    "默认增量（近 12 个交易日）；DATA_JOB_MINUTE_MODE=backfill 回填至"
+                    " DATA_JOB_START_DATE（缺省 6 个月滚动窗口）；中断自动断点续传。"
+                ),
+                recommended_order=12,
+                source_name="eastmoney",
+                source_mode="incremental",
+                supports_incremental=True,
             ),
         }
 

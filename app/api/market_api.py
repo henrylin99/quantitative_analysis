@@ -354,3 +354,27 @@ def cleanup_factor_values():
     except Exception as exc:  # noqa: BLE001
         logger.error(f"factor_values 清理API错误: {exc}")
         return _error(f"factor_values 清理失败: {exc}")
+
+
+@datasources_bp.route("/minute-cleanup", methods=["POST"])
+def cleanup_minute_partitions():
+    """stock_minute 日分区保留窗口清理（默认 dry-run；confirm=true 才执行删除）。"""
+    try:
+        from app.services.data_governance_service import get_data_governance_service
+
+        payload = request.get_json(silent=True) or {}
+        retention_days = int(payload.get("retention_days", 185))
+        if retention_days < 30:
+            return _error("retention_days 不得小于 30（分钟数据滚动窗口过短无研究价值）", 400)
+        timeframe = str(payload.get("timeframe", "5min"))
+        if timeframe not in ("5min", "15min", "30min", "60min"):
+            return _error(f"不支持的周期: {timeframe}", 400)
+        confirm = bool(payload.get("confirm", False))
+        return _ok(
+            get_data_governance_service().cleanup_minute_partitions(
+                retention_days=retention_days, timeframe=timeframe, confirm=confirm
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"分钟分区清理API错误: {exc}")
+        return _error(f"分钟分区清理失败: {exc}")

@@ -105,12 +105,21 @@ Date: 2026-10-11
 - 验收：迁移后无双份代码；`realtime_indicator_engine` 等消费方读数与迁移前一致（抽样对账）。
 - 实施：新增 `app/services/minute_code_style.py`（normalize_minute_code / minute_code_aliases 单一来源）；`MinuteParquetStore.write_frame` 对新帧与存量分区统一归一（同 bar 双风格自动去重 keep=last）；Baostock 同步与通达信 `normalize_tdx_minute_bars` 产出端同步归一；读侧别名兼容 + 非规范查询 debug 日志。迁移脚本 `scripts/migrate_minute_codes.py`（dry-run 默认 / `--execute` / 幂等）：真实数据 272 个分区 14286 行全部规范，二次执行零改动。全量测试 994 通过；实测指标计算链路 MA/RSI 正常出值并落库。
 
-### 3.2 全市场 5min 覆盖
+### 3.2 全市场 5min 覆盖 ✅ 2026-10-11（开发完成，回填已在后台执行）
 
 - 改动：
   - `tongdaxin_minute_sync_service` 扩展全市场同步：分批、限频、断点续传、失败告警，接入盘后 18:30 调度链（在数据链路编排之后）。
   - **先做 6 个月滚动窗口**：量级估算 5600 只 × 48 bar/日 × ~120 交易日 ≈ 3200 万行，parquet 压缩后估 1-2GB；跑通后再评估是否长期保留。
 - 验收：全市场 ≥5000 只 5min 数据持续更新；中断可续传；调度链失败不阻塞后续预警步骤。
+- 实施：
+  - **数据源定版（2026-10-11 实测 + 用户确认）**：分钟级 K 线唯一可用源是 **pytdx**（服务器 IP 常换，硬编码 4 主机已半死，可用主机集中在 pytdx 内置池后半段国泰君安块 117.34.114.x，周末实测可用）；baostock/akshare/tickflow/tushare 分钟线均不可用（详见记忆 minute-kline-source-pytdx-only）。
+  - `app/services/minute_tdx_fetcher.py`：动态主机探测（真实 bars 金丝雀验证，非仅 TCP 握手）+ 可用主机缓存/轮换/全池重扫 + 分页回填（单页 800 根，6 个月 ≈ 8 页，实测 600000.SH 回填 5808 根精确覆盖 6 个月窗口）；跨页 pre_close 全序列重算。
+  - `app/services/minute_market_sync_service.py`：全市场编排（增量 600 根/只；回填至 start_date 缺省 185 天），断点续传（state.json 已完成清单）、连续 30 只失败冷却停手（cooldown 标记区分"运行中"与"待续传"）、心跳 30 分钟过期。
+  - 晚间链路：`daily_alert_service` 四步之后新增第五步（周末跳过、`MINUTE_MARKET_SYNC_ENABLED=0` 可关、异常不阻塞次日调度）。
+  - 北交所支持：`code_mapping` 扩展 market=2（920/43/83 开头），实测可取 bars。
+  - API：`GET /api/realtime-analysis/data/market-sync/status`、`POST .../run`（后台线程）；数据管理页新增"全市场分钟线同步"面板（进度条/启动增量/启动 6 个月回填）。
+  - 治理：`DataGovernanceService.cleanup_minute_partitions`（保留窗口锚定最新分区、dry-run 默认）+ `POST /api/datasources/minute-cleanup`。
+- 回填状态：2026-10-11 已通过 API 启动全市场 6 个月回填（~5300 只 A 股含北交所，预计数小时，断点可续，进度见数据管理页）。滚动保留窗口清理待回填完成后按需执行。
 
 ### 3.3 日内因子库
 

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import {
   aggregateMinuteData,
   buildWideTable,
+  fetchMinuteMarketSyncStatus,
+  runMinuteMarketSync,
   fetchDataJobDefs,
   fetchDataJobRun,
   fetchDataJobRuns,
@@ -23,11 +25,13 @@ import {
   type FactorValuesAudit,
   type FactorValuesCleanupResult,
   type InitStatus,
+  type MinuteMarketSyncProgress,
   type MinuteStats,
   type PipelineStatus,
   type StorageOverview,
   type WideTableStatus,
 } from '../api/dataJobs'
+import { extractApiError } from '../api/client'
 import { EmptyState, ErrorState } from '../components/StateViews'
 import { formatBytes, formatDateTime, formatNumber, toLocalDate } from '../utils/format'
 
@@ -368,6 +372,9 @@ export default function DataManagementPage() {
 
       {/* 存储治理 */}
       <GovernancePanel />
+
+      {/* 全市场分钟线同步 */}
+      <MarketSyncPanel />
 
       {/* 推荐初始化顺序 + 当前任务 */}
       <div className="row g-3">
@@ -757,6 +764,101 @@ const PIPELINE_STEP_LABELS: Record<string, string> = {
 }
 
 // ================= 存储治理 =================
+
+// ================= 全市场分钟线同步 =================
+
+function MarketSyncPanel() {
+  const [progress, setProgress] = useState<MinuteMarketSyncProgress | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = async () => {
+    try {
+      const r = await fetchMinuteMarketSyncStatus()
+      setProgress(r.data)
+    } catch (e) {
+      setMsg(`状态查询失败：${extractApiError(e)}`)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    const timer = setInterval(load, 15000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const run = async (mode: 'incremental' | 'backfill') => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = await runMinuteMarketSync(mode)
+      setMsg(r.message)
+      await load()
+    } catch (e) {
+      setMsg(`启动失败：${extractApiError(e)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pct = progress && progress.total > 0 ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 0
+  const modeLabel = progress?.mode === 'backfill' ? '回填' : '增量'
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h6 className="panel-title">
+          <span className="kicker" />
+          全市场分钟线同步
+          <span className={`badge ${progress?.running ? 'text-bg-primary' : progress?.cooldown ? 'text-bg-warning' : 'text-bg-secondary'}`}>
+            {progress?.running ? '同步中' : progress?.cooldown ? '冷却待续传' : '空闲'}
+          </span>
+        </h6>
+        <div className="d-flex gap-2">
+          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load}>
+            刷新
+          </button>
+          <button type="button" className="btn btn-outline-primary btn-sm" disabled={busy || !!progress?.running} onClick={() => run('incremental')}>
+            {busy ? '…' : '启动增量'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-warning btn-sm"
+            disabled={busy || !!progress?.running}
+            title="回填约 6 个月（每只 ~8 页），全市场需数小时，支持断点续传"
+            onClick={() => run('backfill')}
+          >
+            启动 6 个月回填
+          </button>
+        </div>
+      </div>
+      <div className="panel-body">
+        <div className="d-flex gap-2 flex-wrap">
+          <span className="chip">数据源 · pytdx（主机自动探测）</span>
+          <span className="chip">
+            进度 · {progress?.done ?? '--'} / {progress?.total ?? '--'} 只
+          </span>
+          <span className="chip">失败 · {progress?.failed ?? '--'}</span>
+          <span className="chip">模式 · {progress?.mode ? modeLabel : '--'}</span>
+          {progress?.updated_at && <span className="chip">心跳 · {formatDateTime(progress.updated_at)}</span>}
+        </div>
+        {progress && progress.total > 0 && (
+          <div className="progress mt-2" style={{ height: 8 }}>
+            <div
+              className={`progress-bar ${progress.running ? 'progress-bar-striped progress-bar-animated' : ''} ${progress.cooldown ? 'bg-warning' : 'bg-primary'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+        {progress?.last_message && <div className="mt-2 text-body-secondary small">{progress.last_message}</div>}
+        {msg && <div className="mt-2 small">{msg}</div>}
+        <div className="mt-2 text-body-secondary small">
+          每交易日 18:30 盘后链路末尾自动增量同步；手动触发走上方按钮。全市场约 5500 只，增量约 30-60 分钟，回填数小时；中断后重新启动会自动断点续传。
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function GovernancePanel() {
   const [overview, setOverview] = useState<StorageOverview | null>(null)

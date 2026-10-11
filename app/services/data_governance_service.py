@@ -193,6 +193,70 @@ class DataGovernanceService:
         logger.info(f"factor_values 清理完成：删除 {len(deleted)} 个分区，回收 {result['reclaim_bytes']} 字节")
         return result
 
+    def cleanup_minute_partitions(self, retention_days: int = 185, timeframe: str = "5min", confirm: bool = False) -> Dict[str, Any]:
+        """删除早于保留窗口的 stock_minute 日分区（滚动窗口，默认约 6 个月）。
+
+        与 factor_values 清理同口径：以该周期最新分区日期为锚计算 cutoff，
+        默认 dry-run，逐分区校验名称格式后才 rmtree。
+        """
+        base = self.data_dir / "stock_minute" / timeframe
+        if not base.is_dir():
+            return {"success": False, "message": f"stock_minute/{timeframe} 不存在"}
+
+        candidates: List[Dict[str, Any]] = []
+        latest_date: Optional[str] = None
+        for day_dir in sorted(base.glob("year=*/*=*/*=*")):
+            if not day_dir.is_dir():
+                continue
+            date_text = f"{day_dir.parent.parent.name[5:]}-{day_dir.parent.name[6:]}-{day_dir.name[4:]}"
+            try:
+                datetime.strptime(date_text, "%Y-%m-%d")
+            except ValueError:
+                logger.warning(f"跳过非法分钟分区目录: {day_dir}")
+                continue
+            latest_date = max(latest_date, date_text) if latest_date else date_text
+            size, _file_count = self._dir_size(day_dir)
+            candidates.append({"partition": str(day_dir.relative_to(base)), "trade_date": date_text, "size_bytes": size})
+
+        if not candidates:
+            return {"success": False, "message": f"stock_minute/{timeframe} 无分区"}
+
+        cutoff = (
+            datetime.strptime(latest_date, "%Y-%m-%d") - timedelta(days=retention_days)
+        ).strftime("%Y-%m-%d")
+        stale = [c for c in candidates if c["trade_date"] < cutoff]
+
+        result: Dict[str, Any] = {
+            "success": True,
+            "timeframe": timeframe,
+            "retention_days": retention_days,
+            "cutoff": cutoff,
+            "latest": latest_date,
+            "dry_run": not confirm,
+            "candidates": stale,
+            "candidate_count": len(stale),
+            "reclaim_bytes": sum(c["size_bytes"] for c in stale),
+            "remaining_partitions": len(candidates) - len(stale),
+        }
+        if not confirm or not stale:
+            return result
+
+        deleted: List[str] = []
+        for cand in stale:
+            path = base / cand["partition"]
+            if cand["trade_date"] >= cutoff:
+                logger.warning(f"跳过非法清理目标: {cand}")
+                continue
+            shutil.rmtree(path, ignore_errors=False)
+            deleted.append(cand["partition"])
+
+        result["deleted"] = deleted
+        result["deleted_count"] = len(deleted)
+        result["executed_at"] = datetime.now().isoformat(timespec="seconds")
+        self._append_op_log(result)
+        logger.info(f"分钟分区清理完成（{timeframe}）：删除 {len(deleted)} 天，回收 {result['reclaim_bytes']} 字节")
+        return result
+
     @property
     def _op_log_path(self) -> Path:
         return self.data_dir / "ml_factor_state" / "cleanup_log.json"

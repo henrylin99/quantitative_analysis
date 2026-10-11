@@ -311,6 +311,25 @@ class DailyAlertScheduler:
                     logger.info(f"自选股价格提醒触发 {len(checked['triggered'])} 条")
             except Exception:
                 logger.warning("自选股价格提醒检查失败", exc_info=True)
+            # 全市场 5min 分钟线同步放最后：耗时长（全量约 1 小时）且预警不依赖它；
+            # 非交易日/限流冷却时跳过或断点续传，异常不阻塞次日调度
+            try:
+                self._run_minute_market_sync()
+            except Exception:
+                logger.warning("全市场分钟线同步失败", exc_info=True)
+
+    @staticmethod
+    def _run_minute_market_sync(now: Optional[datetime] = None) -> None:
+        if os.getenv("MINUTE_MARKET_SYNC_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+            logger.info("全市场分钟线同步已通过 MINUTE_MARKET_SYNC_ENABLED=0 关闭")
+            return
+        if (now or datetime.now()).weekday() >= 5:
+            logger.info("非交易日（周末），跳过全市场分钟线同步")
+            return
+        from app.services.minute_market_sync_service import MinuteMarketSyncService
+
+        result = MinuteMarketSyncService().sync_market(period_type="5min", mode="incremental")
+        logger.info(f"全市场分钟线同步：{result.get('message', '')}")
 
     @staticmethod
     def _seconds_until_next_run() -> float:
