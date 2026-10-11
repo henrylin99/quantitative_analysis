@@ -250,6 +250,19 @@ export interface FinancialAnomalyData {
   counts: Record<string, number>
   rows: FinancialAnomalyRow[]
   total_flagged: number
+  /** 异动名单 × 基本面 PIT 因子联动标注：ts_code → { factor_id: z_score } */
+  pit_z?: Record<string, Record<string, number>>
+  pit_z_date?: string | null
+}
+
+/** PIT 因子展示名（与 fundamental_pit_service.FUNDAMENTAL_PIT_FACTOR_IDS 对应） */
+export const PIT_FACTOR_LABELS: Record<string, string> = {
+  ocf_to_ni: '现金流/净利',
+  accrual_ratio: '应计',
+  gross_margin_chg: '毛利率Δ',
+  leverage_chg: '杠杆Δ',
+  asset_turnover_chg: '周转Δ',
+  roe_chg: 'ROEΔ',
 }
 
 export const fetchFinancialAnomalies = () => apiGet<FinancialAnomalyData>('/trial/financial-anomalies', undefined, 120_000)

@@ -39,7 +39,9 @@ PIPELINE_JOBS = (
     "cyq_perf",
     "wide_table_builder",
     "stock_partition_rebuild",
+    "financial_fuyao",
     "factor_compute",
+    "fundamental_pit_compute",
 )
 
 # 新鲜度巡检的表：名称 → daily 日期分区相对路径
