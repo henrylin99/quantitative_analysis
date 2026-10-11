@@ -1079,3 +1079,149 @@ body {
   .hero-meta { gap: 13px; flex-wrap: wrap; }
   .hero h1 { font-size: 31px; }
 }
+
+/* ============ K线详情（/analysis）：工具栏 + 图表 ============ */
+
+.kbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.kbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kgroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+
+.kbtn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.kbtn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+
+.kbtn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.kbtn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.kbtn.primary:disabled { opacity: 0.55; cursor: default; }
+
+.kchk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.kchk input[type='checkbox'] { accent-color: var(--accent); cursor: pointer; }
+
+.kinput {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+
+.kinput:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.kinput-err { border-color: #ef5350; outline-color: #ef5350; }
+
+.kmuted { color: var(--text-faint); }
+.kpos, .pos { color: #ef5350; }
+.kneg, .neg { color: #26a69a; }
+
+.klast {
+  margin-left: auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kstats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.kstat {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.kstat .kv {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.kchart-box {
+  position: relative;
+  width: 100%;
+}
+
+.kchart-legend {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  z-index: 5;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+}
+
+.kchart-legend .kcl-title { font-weight: 700; color: var(--text); }
+.kchart-legend .kcl-date { font-weight: 400; color: var(--text-faint); margin-left: 4px; }
+.kchart-legend .kcl-ohlcv { margin: 3px 0; }
+.kchart-legend .kcl-line { margin-right: 10px; }
+.kchart-legend .kcl-line i {
+  display: inline-block;
+  width: 8px;
+  height: 2px;
+  vertical-align: middle;
+  margin-right: 3px;
+}
