@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Flame, RefreshCw, Zap } from 'lucide-react'
 import {
   fetchAnomalyAnalysis,
+  fetchEventResearch,
   fetchLimitBreakPool,
   fetchLimitDownPool,
   fetchLimitUpLadder,
@@ -12,6 +13,7 @@ import {
   type LimitBreakStock,
   type LimitDownStock,
   type LimitUpStock,
+  type PromotionRow,
 } from '../api/market'
 import { StockLink } from '../components/stock/StockLink'
 import { Badge, Card, Delta, EmptyState, KpiCell, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
@@ -323,6 +325,47 @@ function BreakPoolTable({ items }: { items: LimitBreakStock[] }) {
   )
 }
 
+/** 连板高度 → 次日晋级率（本地事件归档统计） */
+function PromotionTable({ rows, overall, days }: { rows: PromotionRow[]; overall: number | null; days: number }) {
+  return (
+    <div className="px-3 pb-3">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b border-line text-left text-2xs text-fg-muted">
+            <th className="px-2 py-1.5 font-medium">连板高度</th>
+            <th className="px-2 py-1.5 text-right font-medium">样本数</th>
+            <th className="px-2 py-1.5 text-right font-medium">次日晋级</th>
+            <th className="px-2 py-1.5 text-right font-medium">晋级率</th>
+            <th className="px-2 py-1.5 text-right font-medium">覆盖天数</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const rate = row.promotion_rate * 100
+            return (
+              <tr key={row.height} className="border-t border-line/60">
+                <td className="px-2 py-1.5">{row.height >= 7 ? '7板+' : `${row.height}板`}</td>
+                <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.n_obs}</td>
+                <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.n_promoted}</td>
+                <td className="num px-2 py-1.5 text-right font-medium">
+                  <span className={rate >= 45 ? 'text-emerald-500' : rate >= 30 ? 'text-fg-primary' : 'text-rose-500'}>
+                    {rate.toFixed(1)}%
+                  </span>
+                </td>
+                <td className="num px-2 py-1.5 text-right text-fg-muted">{row.days}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="pt-1.5 text-2xs text-fg-muted">
+        近 {days} 个交易日归档 · 整体晋级率 {overall != null ? `${(overall * 100).toFixed(1)}%` : '--'} ·
+        seal_nextday 口径（天梯自带标记），归档自 2026-10-11 起持续累积
+      </p>
+    </div>
+  )
+}
+
 export default function LimitUpLadderPage() {
   const [date, setDate] = useState('')
   const [tab, setTab] = useState<LadderTabKey>('up')
@@ -331,6 +374,11 @@ export default function LimitUpLadderPage() {
     queryKey: ['market', 'limit-up-ladder'],
     queryFn: fetchLimitUpLadder,
     refetchInterval: 300_000,
+  })
+  const researchQuery = useQuery({
+    queryKey: ['market', 'event-research'],
+    queryFn: () => fetchEventResearch(5),
+    staleTime: 600_000,
   })
   // 三池全部预取：KPI 行需要跌停/炸板总数，切换 tab 无需等待
   const upQuery = useQuery({
@@ -438,6 +486,25 @@ export default function LimitUpLadderPage() {
             />
           ) : (
             <LadderMatrix days={ladderQuery.data?.days ?? []} />
+          )}
+        </Card>
+
+        {/* 连板晋级率统计（事件归档） */}
+        <Card>
+          <SectionTitle icon={<Flame size={13} />} title="连板晋级率（次日封板）" hint="连板高度 → 次日晋级率 · 本地事件归档" />
+          {researchQuery.isLoading ? (
+            <SkeletonRows rows={5} />
+          ) : researchQuery.data?.promotion && !researchQuery.data.promotion.error ? (
+            <PromotionTable
+              rows={researchQuery.data.promotion.by_height}
+              overall={researchQuery.data.promotion.overall_promotion_rate}
+              days={researchQuery.data.promotion.n_days}
+            />
+          ) : (
+            <EmptyState
+              title="晋级率统计暂不可用"
+              description={researchQuery.data?.promotion?.error ?? '事件归档积累中'}
+            />
           )}
         </Card>
 

@@ -137,6 +137,47 @@ def get_limit_up_ladder():
         return _error(f"连板天梯获取失败: {exc}")
 
 
+@market_bp.route("/event-archive/summary", methods=["GET"])
+def get_event_archive_summary():
+    """事件归档概要：各数据集已归档天数/最新日期 + 近期市场情绪。"""
+    try:
+        from app.services.event_archive_service import EventArchiveService
+
+        service = EventArchiveService()
+        return _ok({
+            "datasets": {
+                name: {"days": len(service.archived_dates(name)),
+                       "latest": (service.archived_dates(name) or [None])[-1]}
+                for name in ("dragon_tiger", "limit_up", "limit_down",
+                             "limit_break", "ladder", "mood")
+            },
+            "mood": service.mood_summary(),
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"事件归档概要API错误: {exc}")
+        return _error(f"事件归档概要获取失败: {exc}")
+
+
+@market_bp.route("/event-research", methods=["GET"])
+def get_event_research():
+    """事件研究统计：连板高度→次日晋级率 + 龙虎榜上榜后 N 日超额。"""
+    try:
+        horizon = min(20, max(1, int(request.args.get("horizon", 5))))
+    except ValueError:
+        return _error("horizon 须为整数", 400)
+    try:
+        from app.services.event_archive_service import EventArchiveService
+
+        service = EventArchiveService()
+        return _ok({
+            "promotion": service.promotion_stats(),
+            "dragon_tiger": service.dragon_tiger_forward(horizon),
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"事件研究API错误: {exc}")
+        return _error(f"事件研究获取失败: {exc}")
+
+
 def _pool_endpoint(fetch):
     date = (request.args.get("date") or "").strip() or None
     if date and not _DATE_RE.fullmatch(date):

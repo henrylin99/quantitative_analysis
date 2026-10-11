@@ -1,9 +1,15 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Flame, Ticket } from 'lucide-react'
-import { fetchAuctionBenchmark, fetchDragonTiger, type DragonTigerStock } from '../api/market'
+import {
+  fetchAuctionBenchmark,
+  fetchDragonTiger,
+  fetchEventResearch,
+  type DragonTigerStock,
+  type DragonTigerForwardSummary,
+} from '../api/market'
 import { StockLink } from '../components/stock/StockLink'
-import { Badge, Card, Delta, EmptyState, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
+import { Badge, Card, Delta, EmptyState, KpiCell, PageHeader, SectionTitle, SkeletonRows } from '../components/ui'
 import { cn } from '../lib/cn'
 
 const BOARDS = [
@@ -36,6 +42,27 @@ function reasonOf(row: DragonTigerStock): string {
   return concepts.join(' / ')
 }
 
+/** 上榜后 N 日分组统计卡（净买额中位数分组，本地事件归档） */
+function ForwardGroupCells({ label, summary }: { label: string; summary?: DragonTigerForwardSummary }) {
+  if (!summary) return null
+  return (
+    <>
+      <KpiCell label={`${label}·样本`} value={summary.n} tone="neutral" />
+      <KpiCell
+        label={`${label}·N日均收`}
+        value={summary.avg_fwd_ret != null ? `${(summary.avg_fwd_ret * 100).toFixed(2)}%` : '—'}
+        tone={(summary.avg_fwd_ret ?? 0) >= 0 ? 'bull' : 'bear'}
+      />
+      <KpiCell
+        label={`${label}·超额`}
+        value={summary.avg_excess != null ? `${(summary.avg_excess * 100).toFixed(2)}%` : '—'}
+        sub="vs 沪深300"
+        tone={(summary.avg_excess ?? 0) >= 0 ? 'bull' : 'bear'}
+      />
+    </>
+  )
+}
+
 export default function DragonTigerPage() {
   const [board, setBoard] = useState<BoardKey>('all')
   const [date, setDate] = useState('')
@@ -47,6 +74,11 @@ export default function DragonTigerPage() {
   const auctionQuery = useQuery({
     queryKey: ['market', 'auction', date],
     queryFn: () => fetchAuctionBenchmark(date || undefined),
+  })
+  const researchQuery = useQuery({
+    queryKey: ['market', 'event-research', 'dragon'],
+    queryFn: () => fetchEventResearch(5),
+    staleTime: 600_000,
   })
 
   const payload = dragonQuery.data as Record<string, unknown> | undefined
@@ -169,6 +201,28 @@ export default function DragonTigerPage() {
                 ))}
               </tbody>
             </table>
+          )}
+        </Card>
+
+        {/* 上榜后 N 日超额（事件归档研究） */}
+        <Card>
+          <SectionTitle
+            icon={<Flame size={13} />}
+            title="上榜后 5 日表现（净买额分组）"
+            hint={researchQuery.data?.dragon_tiger.note ?? '本地事件归档 · T 日收盘入场（乐观上界）'}
+          />
+          {researchQuery.isLoading ? (
+            <SkeletonRows rows={3} />
+          ) : researchQuery.data?.dragon_tiger && !researchQuery.data.dragon_tiger.error ? (
+            <div className="grid grid-cols-3 gap-1.5 p-3 md:grid-cols-6">
+              <ForwardGroupCells label="净买高" summary={researchQuery.data.dragon_tiger.net_buy_high} />
+              <ForwardGroupCells label="净买低" summary={researchQuery.data.dragon_tiger.net_buy_low} />
+            </div>
+          ) : (
+            <EmptyState
+              title="上榜后统计暂不可用"
+              description={researchQuery.data?.dragon_tiger?.error ?? '事件归档积累中（含出场窗口需约 2 周）'}
+            />
           )}
         </Card>
 

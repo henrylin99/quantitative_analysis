@@ -115,7 +115,8 @@ class DailyAlertService:
 
     def _collect(self) -> Dict[str, Any]:
         snapshot: Dict[str, Any] = {"regime": None, "signals": None,
-                                    "rotation": None, "anomaly": None}
+                                    "rotation": None, "anomaly": None,
+                                    "mood": None}
         from app.services.chip_signal_service import ChipSignalService
         from app.services.market_regime_service import MarketRegimeService
 
@@ -165,6 +166,13 @@ class DailyAlertService:
                 }
         except Exception as e:
             logger.warning(f"每日扫描-财务异动失败: {e}")
+
+        try:
+            from app.services.event_archive_service import EventArchiveService
+
+            snapshot["mood"] = EventArchiveService().mood_summary() or None
+        except Exception as e:
+            logger.warning(f"每日扫描-市场情绪失败: {e}")
 
         try:
             from app.services.data_jobs.pipeline import DataFreshnessService
@@ -224,6 +232,32 @@ class DailyAlertService:
         if prev_top and cur_top and prev_top != cur_top:
             alerts.append({"type": "rotation_top", "level": "info",
                            "message": f"行业轮动榜首变化：{prev_top} → {cur_top}"})
+
+        # 市场情绪极值（基于近 20 日归档统计；历史不足 10 日不判，避免小样本误报）
+        mood = record.get("mood") or {}
+        mean_up = mood.get("mean_limit_up")
+        std_up = mood.get("std_limit_up")
+        count_up = mood.get("limit_up_count")
+        if mean_up is not None and std_up is not None and count_up is not None \
+                and (mood.get("n_days") or 0) >= 10 and std_up > 0:
+            if count_up >= mean_up + 2 * std_up:
+                alerts.append({
+                    "type": "mood_overheat", "level": "warn",
+                    "message": f"市场情绪过热：涨停 {count_up} 家"
+                               f"（近20日均值 {mean_up}，+2σ={round(mean_up + 2 * std_up)}）",
+                })
+            elif count_up <= mean_up - 2 * std_up:
+                alerts.append({
+                    "type": "mood_freeze", "level": "warn",
+                    "message": f"市场情绪冰点：涨停 {count_up} 家"
+                               f"（近20日均值 {mean_up}，-2σ={round(mean_up - 2 * std_up)}）",
+                })
+        break_rate = mood.get("break_rate")
+        if break_rate is not None and break_rate >= 0.45:
+            alerts.append({
+                "type": "mood_break_high", "level": "warn",
+                "message": f"炸板率 {break_rate:.0%} 偏高（≥45%），分歧加大",
+            })
 
         # 财务异动覆盖变化（年报换届时）
         prev_an = prev.get("anomaly") or {}
@@ -289,6 +323,11 @@ class DailyAlertScheduler:
                                 f"{pipeline.get('message', '')}")
             except Exception:
                 logger.error("盘后数据链路失败", exc_info=True)
+            # 事件归档排在预警扫描之前：预警的情绪极值读当日 mood 归档
+            try:
+                self._run_event_archive()
+            except Exception:
+                logger.warning("事件数据归档失败", exc_info=True)
             try:
                 record = DailyAlertService().run_scan()
                 logger.info(f"每日预警扫描完成 {record['scan_date']}："
@@ -322,6 +361,24 @@ class DailyAlertScheduler:
                 self._run_intraday_factors()
             except Exception:
                 logger.warning("日内因子计算失败", exc_info=True)
+
+    @staticmethod
+    def _run_event_archive(now: Optional[datetime] = None) -> None:
+        """龙虎榜/涨停池/天梯归档 + 个股事件因子落库（周末跳过）。"""
+        if os.getenv("EVENT_ARCHIVE_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+            logger.info("事件归档已通过 EVENT_ARCHIVE_ENABLED=0 关闭")
+            return
+        if (now or datetime.now()).weekday() >= 5:
+            logger.info("非交易日（周末），跳过事件归档")
+            return
+        from app.services.event_archive_service import EventArchiveService
+
+        service = EventArchiveService()
+        result = service.archive_day()
+        errors = result.get("errors") or []
+        logger.info(f"事件归档完成：{result.get('datasets')}，错误 {len(errors)} 项")
+        factors = service.compute_and_save()
+        logger.info(f"事件因子：{factors}")
 
     @staticmethod
     def _run_minute_market_sync(now: Optional[datetime] = None) -> None:
