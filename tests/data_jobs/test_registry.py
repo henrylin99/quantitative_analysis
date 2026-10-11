@@ -27,7 +27,7 @@ def test_registry_visible_jobs_follow_whitelist():
     jobs = registry.list_visible_jobs()
     job_types = [job.job_type for job in jobs]
 
-    assert len(job_types) == 14
+    assert len(job_types) == 15
     assert job_types == [
         "trade_calendar",
         "stock_basic",
@@ -43,6 +43,7 @@ def test_registry_visible_jobs_follow_whitelist():
         "wide_table_builder",
         "factor_compute",
         "minute_market_sync",
+        "intraday_factor_compute",
     ]
 
 

@@ -121,10 +121,15 @@ Date: 2026-10-11
   - 治理：`DataGovernanceService.cleanup_minute_partitions`（保留窗口锚定最新分区、dry-run 默认）+ `POST /api/datasources/minute-cleanup`。
 - 回填状态：2026-10-11 已通过 API 启动全市场 6 个月回填（~5300 只 A 股含北交所，预计数小时，断点可续，进度见数据管理页）。滚动保留窗口清理待回填完成后按需执行。
 
-### 3.3 日内因子库
+### 3.3 日内因子库 ✅ 2026-10-11
 
 - 改动：新增 `services/intraday_factors.py`（或并入 factor_engine）：VWAP 乖离、开盘 30min 动量、日内动量/反转、尾盘收益、日内波动占比等 ~10 个因子，走既有 factor_values 落库与 percentile_rank/z_score 标准化管线。
 - 验收：日内因子可被 IC 分析/分位回测/因子体检直接消费；体检（覆盖率/共线性）通过后进入生命周期管理。
+- 实施：
+  - `app/services/intraday_factor_service.py`：10 个日内因子（vwap_dev / open_mom_30 / tail_ret_30 / intraday_mom / morning_reversal / vol_concentration_pm / amount_cv / close_pos_intraday / gap_strength / min5_vol_std），单日 5min 截面向量化计算；验收约定与内置因子一致（bars<12 跳过、一字板 close_pos 缺失、零成交缺失不造假 0）。
+  - 落库复用 FactorEngine（_calculate_factor_stats 截面标准化 + save_factor_values 整因子替换），实测 20261009 真实数据 269 只 × 10 因子落库，get_values 消费端直读标准化列。
+  - 数据作业 `intraday_factor_compute`（单日/区间模式，区间只扫有 5min 分区的日子）；晚间链路第六步（分钟同步之后，`INTRADAY_FACTOR_ENABLED` 可关）；前端无需新增（走因子通用消费页）。
+  - 坑位记录：MinuteParquetReader 的行级时间过滤是闭区间，end_time 必须传当日 23:59，否则当日 bar 全被滤掉。
 
 ### 3.4 分钟级回测
 
