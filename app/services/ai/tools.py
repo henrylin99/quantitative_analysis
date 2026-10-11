@@ -20,6 +20,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import pandas as pd
+
 from flask import current_app
 
 logger = logging.getLogger(__name__)
@@ -818,6 +820,130 @@ def _tool_get_backtest_status(args: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+def _tool_discover_factor_combo(args: Dict[str, Any]) -> Dict[str, Any]:
+    """因子组合自动发现（5.4）：体检排名 → 贪心去冗余 → 分位回测 → 报告。
+
+    单工具内完成全链路（不占额外对话轮次）；报告自动存为看板可收藏复跑。
+    """
+    from app.services.factor_analyzer import FactorAnalyzer
+    from app.services.factor_screening import FactorScreeningService
+    from app.services.ai.saved_items import AiSavedStore
+
+    factor_ids = args.get('factor_ids') or None
+    top_k = max(1, min(int(args.get('top_k', 3)), 8))
+    forward_period = max(1, int(args.get('forward_period', 5)))
+    holding_days = max(1, int(args.get('holding_days', 20)))
+    cost_bps = max(0.0, float(args.get('cost_bps', 10.0)))
+    corr_threshold = min(0.99, max(0.1, float(args.get('max_correlation', 0.6))))
+    start_date = args.get('start_date') or None
+    end_date = args.get('end_date') or None
+
+    # 1) 批量体检（结果入库，走既有生命周期管线）
+    screening = FactorScreeningService()
+    report = screening.screen_factors(
+        factor_ids=factor_ids, start_date=start_date, end_date=end_date,
+        forward_period=forward_period, save=True)
+    if report.get('error'):
+        raise ToolError(f"因子体检失败: {report['error']}")
+    live = [(fid, m) for fid, m in report['factors'].items() if 'error' not in m]
+    if not live:
+        raise ToolError('体检无有效因子（可能因子值或行情缺失）')
+
+    # 2) 排名：|IC|×ICIR（方向不敏感，负 IC 因子反向使用）
+    live.sort(key=lambda kv: abs(kv[1].get('ic_mean') or 0)
+              * max(abs(kv[1].get('ic_ir') or 0), 0.0), reverse=True)
+    candidates = [fid for fid, _ in live][:20]
+
+    # 3) 贪心去冗余：与已选因子 |相关| > 阈值则跳过
+    selected: list = []
+    corr_note: Dict[str, Any] = {}
+    if len(candidates) > 1:
+        corr = FactorAnalyzer().correlation_matrix(
+            candidates, start_date=report['start_date'],
+            end_date=report['end_date'])
+        matrix = corr.get('matrix') or {}
+        for fid in candidates:
+            blocked = None
+            for s in selected:
+                c = matrix.get(fid, {}).get(s)
+                if c is not None and abs(float(c)) > corr_threshold:
+                    blocked = {'partner': s, 'corr': round(float(c), 3)}
+                    break
+            if blocked:
+                corr_note[fid] = blocked
+                continue
+            selected.append(fid)
+            if len(selected) >= top_k:
+                break
+    else:
+        selected = candidates[:top_k]
+
+    if not selected:
+        raise ToolError('去冗余后无因子入选，请放宽 max_correlation 或扩大候选集')
+
+    # 4) 分位多空回测（含成本，双腿各计）
+    backtests = {}
+    for fid in selected:
+        bt = FactorAnalyzer().quantile_portfolio_backtest(
+            fid, start_date=report['start_date'], end_date=report['end_date'],
+            holding_days=holding_days, cost_bps=cost_bps)
+        if 'error' in bt:
+            backtests[fid] = {'error': bt['error']}
+            continue
+        backtests[fid] = {
+            'n_periods': bt['n_periods'],
+            'long_short': bt['long_short_summary'],
+            'top_group': bt['groups_summary'].get('g5') or bt['groups_summary'].get(
+                max(bt['groups_summary'], key=lambda g: int(g[1:]))),
+            'avg_turnover': bt.get('avg_turnover'),
+        }
+
+    # 5) 报告 + 存看板
+    lines = [
+        f"# 因子组合自动发现（{report['start_date']} ~ {report['end_date']}）",
+        '',
+        f"- 体检因子 {report['n_factors']} 个，有效 {len(live)} 个，"
+        f"去冗余阈值 |ρ|>{corr_threshold}，入选 {len(selected)} 个",
+        f"- 排名口径 |IC|×ICIR（forward {forward_period} 日）；回测口径 "
+        f"{holding_days} 日非重叠持有，单边 {cost_bps:g} bps",
+        '',
+        '| 因子 | IC | ICIR | 方向 | 多空年化 | 多空夏普 | 多空最大回撤 |',
+        '| --- | --- | --- | --- | --- | --- | --- |',
+    ]
+    for fid in selected:
+        m = report['factors'][fid]
+        bt = backtests.get(fid) or {}
+        ls = bt.get('long_short') or {}
+        ic = m.get('ic_mean')
+        direction = '反向（低值做多）' if ic is not None and ic < 0 else '正向'
+        fmt = lambda v, pct=False: ('--' if v is None else
+                                    (f'{v * 100:.2f}%' if pct else f'{v:.3f}'))
+        lines.append(
+            f"| {fid} | {fmt(ic)} | {fmt(m.get('ic_ir'))} | {direction} "
+            f"| {fmt(ls.get('annualized_return'), True)} "
+            f"| {fmt(ls.get('sharpe'))} | {fmt(ls.get('max_drawdown'), True)} |")
+    skipped = [f"{k}（与 {v['partner']} ρ={v['corr']}）" for k, v in corr_note.items()]
+    if skipped:
+        lines += ['', '去冗余剔除：' + '、'.join(skipped[:8])]
+    lines += ['', '> 多空口径为研究级（A股融券不可得），详见分位回测 ls_caveats。']
+    content = '\n'.join(lines)
+
+    saved = AiSavedStore().save_board(
+        f"因子组合发现 {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}",
+        content, meta={'source': 'ai_tool', 'tool': 'discover_factor_combo'})
+
+    return {
+        'selected_factors': selected,
+        'n_screened': report['n_factors'],
+        'ranking_metric': '|IC| x ICIR',
+        'skipped_redundant': corr_note,
+        'backtests': backtests,
+        'screening_report_dates': [report['start_date'], report['end_date']],
+        'saved_board': {'id': saved['id'], 'title': saved['title']},
+        'report_markdown': content,
+    }
+
+
 def _tool_create_custom_factor(args: Dict[str, Any]) -> Dict[str, Any]:
     factor_id = (args.get('factor_id') or '').strip()
     factor_name = (args.get('factor_name') or '').strip()
@@ -1157,6 +1283,28 @@ AI_TOOLS: List[AiTool] = [
         },
         'action',
         _tool_calculate_factors_range,
+    ),
+    AiTool(
+        'discover_factor_combo',
+        '因子组合自动发现：一键完成 因子体检排名（|IC|×ICIR）→ 贪心去冗余（|ρ|>max_correlation 剔除）'
+        '→ 分位多空回测（含成本，研究级口径）→ 研究报告。报告自动存为看板（可收藏复跑）。'
+        '适合"帮我找最近一年最有效的 3 个低相关因子并回测"类请求。耗时分钟级。',
+        {
+            'type': 'object',
+            'properties': {
+                'factor_ids': {'type': 'array', 'items': {'type': 'string'},
+                               'description': '可选候选因子列表；缺省体检全部活跃因子（耗时更长）'},
+                'top_k': {'type': 'integer', 'description': '入选因子数，默认 3'},
+                'start_date': {'type': 'string', 'description': '可选，YYYY-MM-DD'},
+                'end_date': {'type': 'string', 'description': '可选，YYYY-MM-DD'},
+                'forward_period': {'type': 'integer', 'description': 'IC 前瞻期，默认 5 日'},
+                'holding_days': {'type': 'integer', 'description': '回测持有天数，默认 20'},
+                'cost_bps': {'type': 'number', 'description': '单边费率 bps，默认 10'},
+                'max_correlation': {'type': 'number', 'description': '去冗余相关阈值，默认 0.6'},
+            },
+        },
+        'action',
+        _tool_discover_factor_combo,
     ),
     AiTool(
         'create_custom_factor',
