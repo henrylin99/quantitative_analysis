@@ -54,6 +54,7 @@ const ResearchReportsPage = lazy(() => import('./pages/ResearchReportsPage'))
 const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
 const FundCenterPage = lazy(() => import('./pages/FundCenterPage'))
 const FundsListPage = lazy(() => import('./pages/FundsListPage'))
+const PaperTradingPage = lazy(() => import('./pages/PaperTradingPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -120,6 +121,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: Trophy },
       { to: '/funds', label: '基金列表', icon: Wallet },
       { to: '/research', label: '研报中心', icon: Newspaper },
+      { to: '/paper-trading', label: '模拟盘', icon: Bot },
     ],
   },
   {
@@ -339,6 +341,14 @@ function Shell() {
               element={
                 <LazyRoute>
                   <FundsListPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/paper-trading"
+              element={
+                <LazyRoute>
+                  <PaperTradingPage />
                 </LazyRoute>
               }
             />

@@ -342,6 +342,11 @@ class DailyAlertScheduler:
                     logger.info(f"预测跟踪归档完成 {archived['track_date']}")
             except Exception:
                 logger.warning("预测跟踪归档失败", exc_info=True)
+            # 模拟盘：结算今日挂单（今日开盘价）→ 盯市（今日收盘）→ 生成明日挂单（今日信号）
+            try:
+                self._run_paper_trading()
+            except Exception:
+                logger.warning("Paper trading 模拟盘日度运行失败", exc_info=True)
             try:
                 from app.services.watchlist_service import WatchlistAlertService
 
@@ -379,6 +384,25 @@ class DailyAlertScheduler:
         logger.info(f"事件归档完成：{result.get('datasets')}，错误 {len(errors)} 项")
         factors = service.compute_and_save()
         logger.info(f"事件因子：{factors}")
+
+    @staticmethod
+    def _run_paper_trading(now: Optional[datetime] = None) -> None:
+        """纯虚拟记账模拟盘（无券商接口）。PAPER_TRADING_ENABLED=0 可关闭。"""
+        if os.getenv("PAPER_TRADING_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+            logger.info("Paper trading 模拟盘已通过 PAPER_TRADING_ENABLED=0 关闭")
+            return
+        if (now or datetime.now()).weekday() >= 5:
+            logger.info("非交易日（周末），跳过模拟盘")
+            return
+        from app.services.paper_trading_service import PaperTradingService
+
+        result = PaperTradingService().run_daily()
+        settle = result.get("settle") or {}
+        logger.info(f"模拟盘结算：filled={settle.get('filled')} "
+                    f"skipped={settle.get('skipped')} expired={settle.get('expired')}")
+        orders = result.get("orders") or {}
+        if orders.get("ok"):
+            logger.info(f"模拟盘挂单：{orders.get('orders_created')} 笔（信号日 {orders.get('signal_date')}）")
 
     @staticmethod
     def _run_minute_market_sync(now: Optional[datetime] = None) -> None:
