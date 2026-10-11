@@ -16,7 +16,6 @@ SCRIPT_PATHS = [
     "app/utils/moneyflow_ths.py",
     "app/utils/cyq_perf.py",
     "app/utils/stk_factor.py",
-    "app/utils/ma_calculator.py",
     "app/utils/baostock_daily.py",
     "app/utils/daily_history_by_code.py",
     "app/utils/min5.py",

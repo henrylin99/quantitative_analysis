@@ -308,10 +308,11 @@ class QueryExecutor:
             'net_mf_amount': 'moneyflow_net_amount',
             'net_mf_vol': 'moneyflow_net_vol',
         },
-        'stock_ma_data': {
-            'ts_code': 'ts_code',
-            'ma5': 'ma5', 'ma10': 'ma10', 'ma20': 'ma20',
-            'ma30': 'ma30', 'ma60': 'ma60', 'ma120': 'ma120',
+        'index_basic': {
+            'ts_code': 'ts_code', 'name': 'name', 'fullname': 'fullname',
+            'market': 'market', 'publisher': 'publisher',
+            'index_type': 'index_type', 'category': 'category',
+            'base_date': 'base_date', 'list_date': 'list_date',
         },
     }
 
@@ -320,7 +321,7 @@ class QueryExecutor:
         'stock_business':  'stock_business.parquet',
         'stock_factor':    'stock_business.parquet',   # 宽表已含因子数据
         'stock_moneyflow': 'stock_business.parquet',   # 宽表已含资金流数据
-        'stock_ma_data':   'stock_ma_data.parquet',
+        'index_basic':     'index_basic.parquet',      # 指数目录（无 trade_date 列）
     }
 
     # ---- public ----

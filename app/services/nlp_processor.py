@@ -626,7 +626,6 @@ class BusinessDictionaryManager:
             '市净率': {'table': 'stock_business', 'field': 'pb'},
             'MACD': {'table': 'stock_factor', 'field': 'macd'},
             'RSI': {'table': 'stock_factor', 'field': 'rsi_6'},
-            '均线': {'table': 'stock_ma_data', 'field': 'ma5'}
         }
         
         return field_mappings.get(field_name) 
