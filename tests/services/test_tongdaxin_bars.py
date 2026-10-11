@@ -25,7 +25,8 @@ def test_tdx_minute_payload_normalizes_to_minute_parquet_schema():
 
     frame = normalize_tdx_minute_bars(payload, market=1, code="600000", period_type="5min")
 
-    assert frame["ts_code"].tolist() == ["sh.600000", "sh.600000"]
+    # 2026-10 存储规范统一 tushare 风格：通达信链路产出也归一为 600000.SH
+    assert frame["ts_code"].tolist() == ["600000.SH", "600000.SH"]
     assert frame["period_type"].tolist() == ["5min", "5min"]
     assert "pre_close" in frame.columns
     assert frame.iloc[0]["change"] == 0

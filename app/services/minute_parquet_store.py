@@ -16,6 +16,7 @@ from app.utils.parquet_writer import (
     parquet_file_lock,
     quarantine_corrupt_parquet,
 )
+from app.services.minute_code_style import is_tushare_style, normalize_minute_code
 
 
 class MinuteParquetStore:
@@ -45,6 +46,14 @@ class MinuteParquetStore:
         if "period_type" not in df.columns:
             df["period_type"] = period_type
 
+        # 存储规范统一 tushare 风格（000001.SZ）：Baostock/通达信链路产出的
+        # sz.000001 风格在此归一，避免同一天分区里两种风格并存
+        if "ts_code" in df.columns:
+            df["ts_code"] = df["ts_code"].astype(str).map(normalize_minute_code)
+            non_canonical = df.loc[~df["ts_code"].map(is_tushare_style), "ts_code"].unique()
+            for code in non_canonical:
+                logger.warning(f"分钟数据代码风格无法识别，按原样存储: {code}")
+
         total_rows = 0
         # 按 (日期, period_type) 分组：一天内混入多周期数据时，
         # 旧实现取 iloc[0] 的 period_type 决定分区路径，其余周期会被写错目录
@@ -70,6 +79,11 @@ class MinuteParquetStore:
                 combined = pd.concat([existing, day_df], ignore_index=True)
             else:
                 combined = day_df.copy()
+
+            # 存量分区可能是迁移前的旧风格（sz.000001）：合并后统一归一，
+            # 去重键一致才能把同一根 bar 的双风格记录合并掉
+            if "ts_code" in combined.columns:
+                combined["ts_code"] = combined["ts_code"].astype(str).map(normalize_minute_code)
 
             if "datetime" in combined.columns:
                 combined["datetime"] = pd.to_datetime(combined["datetime"], errors="coerce")

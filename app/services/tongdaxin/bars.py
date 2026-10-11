@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from app.services.tongdaxin.code_mapping import tdx_market_code_to_bs_style
+from app.services.minute_code_style import normalize_minute_code
 
 
 TDX_CATEGORY_MAP = {
@@ -44,7 +45,7 @@ def normalize_tdx_minute_bars(payload, market: int, code: str, period_type: str)
     df = df.dropna(subset=["datetime"]).sort_values("datetime").reset_index(drop=True)
     for column in ["open", "high", "low", "close", "vol", "amount"]:
         df[column] = pd.to_numeric(df[column], errors="coerce")
-    df["ts_code"] = tdx_market_code_to_bs_style(market, code)
+    df["ts_code"] = normalize_minute_code(tdx_market_code_to_bs_style(market, code))
     df["period_type"] = period_type
     df["volume"] = df["vol"]
     df["pre_close"] = df["close"].shift(1)
