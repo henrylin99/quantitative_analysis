@@ -5,6 +5,7 @@ import {
   fetchAnomalyForward,
   fetchFinancialAnomalies,
   fetchFinancialHealth,
+  PIT_FACTOR_LABELS,
   type AnomalyForwardData,
   type FinancialAnomalyData,
 } from '../api/trial'
@@ -235,6 +236,10 @@ function AnomalyPanel() {
   if (error) return null
   if (!anomalies) return null
 
+  const pitZ = anomalies.pit_z ?? {}
+  const pitZActive = Object.keys(pitZ).length > 0
+  const pitZof = (code: string) => pitZ[code]
+
   return (
     <div className="panel mt-3">
       <div className="panel-head d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -261,6 +266,7 @@ function AnomalyPanel() {
               <th className="num">存货YoY</th>
               <th className="num">毛利率</th>
               <th className="num">现金流/净利</th>
+              {pitZActive && <th>PIT 因子 z（{anomalies.pit_z_date}）</th>}
             </tr>
           </thead>
           <tbody>
@@ -281,10 +287,22 @@ function AnomalyPanel() {
                 <td className={`num ${pctClass(r.inventory_yoy ?? 0)}`}>{r.inventory_yoy != null ? `${r.inventory_yoy}%` : '--'}</td>
                 <td className="num">{r.gross_margin != null ? `${r.gross_margin}%` : '--'}</td>
                 <td className="num">{r.cash_to_profit != null ? formatNumber(r.cash_to_profit, 2) : '--'}</td>
+                {pitZActive && (
+                  <td style={{ fontSize: 11 }}>
+                    {pitZof(r.ts_code)
+                      ? Object.entries(pitZof(r.ts_code)!).map(([fid, z]) => (
+                          <span key={fid} className="me-2" title={PIT_FACTOR_LABELS[fid] ?? fid}>
+                            {PIT_FACTOR_LABELS[fid] ?? fid}
+                            <span className={z >= 0 ? 'text-danger' : 'text-success'}>{z >= 0 ? `+${z}` : z}</span>
+                          </span>
+                        ))
+                      : '--'}
+                  </td>
+                )}
               </tr>
             ))}
             {anomalies.rows.length === 0 && (
-              <tr><td colSpan={8}><EmptyState icon="✅" text="无异动" /></td></tr>
+              <tr><td colSpan={pitZActive ? 9 : 8}><EmptyState icon="✅" text="无异动" /></td></tr>
             )}
           </tbody>
         </table>

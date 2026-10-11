@@ -276,7 +276,39 @@ class FinancialQualityService:
             "counts": {k: int(v.sum()) for k, v in flags.items()},
             "rows": rows,
             "total_flagged": int(any_flag.sum()),
+            **self._pit_z_annotation([row["ts_code"] for row in rows]),
         }
+
+    @staticmethod
+    def _pit_z_annotation(ts_codes: List[str]) -> Dict[str, Any]:
+        """异动名单 × 基本面 PIT 因子联动标注：命中股最新截面 z-score。
+
+        因子值缺失（未落库/当日无值）的股票不标注，不造假 0。
+        """
+        if not ts_codes:
+            return {"pit_z": {}, "pit_z_date": None}
+        try:
+            from app.services.factor_engine import FactorEngine
+            from app.services.fundamental_pit_service import FUNDAMENTAL_PIT_FACTOR_IDS
+
+            engine = FactorEngine()
+            values = engine.factor_repo.get_values(
+                factor_ids=list(FUNDAMENTAL_PIT_FACTOR_IDS),
+                ts_codes=[str(c) for c in ts_codes],
+            )
+            if values.empty:
+                return {"pit_z": {}, "pit_z_date": None}
+            latest_date = str(values["trade_date"].astype(str).max())
+            latest = values[values["trade_date"].astype(str) == latest_date]
+            pit_z: Dict[str, Dict[str, float]] = {}
+            for row in latest.itertuples(index=False):
+                if row.z_score is None or pd.isna(row.z_score):
+                    continue
+                pit_z.setdefault(str(row.ts_code), {})[str(row.factor_id)] = round(float(row.z_score), 2)
+            return {"pit_z": pit_z, "pit_z_date": latest_date}
+        except Exception as e:
+            logger.warning(f"PIT 因子联动标注失败（不影响异动名单）: {e}")
+            return {"pit_z": {}, "pit_z_date": None}
 
     # ------------------------------------------------------------------
     def _read_recent_years(self, table: str) -> pd.DataFrame:

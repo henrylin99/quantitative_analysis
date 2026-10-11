@@ -26,6 +26,8 @@ class JobRegistry:
             "factor_compute",         # 因子计算（打分/回测的前置作业）
             "minute_market_sync",     # 全市场 5min 分钟线（东财源，断点续传）
             "intraday_factor_compute",  # 日内因子（5min → factor_values）
+            "fundamental_pit_compute",  # 基本面 PIT 因子（公告日打点）
+            "financial_fuyao",          # 财务三表刷新（fuyao 源；tushare VIP 无权限）
         }
 
         # 注意：baostock_daily / min5 / min15 / min30 / min60 已从注册表摘除：
@@ -150,7 +152,7 @@ class JobRegistry:
             "financial_fuyao": JobDefinition(
                 "financial_fuyao", "财务三表", "app/utils/financial_fuyao.py", display_name="财务三表（扶摇源）",
                 description="从扶摇数据源下载利润表/资产负债表/现金流量表（单标的接口逐只拉取，免费 key 可用），与 tushare VIP 版写入同一组表。",
-                dependencies=["stock_basic"], source_name="fuyao", source_mode="incremental", supports_incremental=True
+                dependencies=["stock_basic"], recommended_order=10, source_name="fuyao", source_mode="incremental", supports_incremental=True
             ),
             "moneyflow": JobDefinition("moneyflow", "资金流与扩展因子", "app/utils/moneyflow.py", display_name="资金流向", description="下载主力、大单、中单和小单资金流数据。", recommended_order=7, source_name="tushare", source_mode="incremental", supports_incremental=True),
             "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。", source_name="ths", source_mode="incremental", supports_incremental=True),
@@ -231,6 +233,22 @@ class JobRegistry:
                 source_name="derived",
                 source_mode="derived",
                 dependencies=["minute_market_sync"],
+            ),
+            "fundamental_pit_compute": JobDefinition(
+                "fundamental_pit_compute",
+                "衍生计算",
+                "app/utils/fundamental_pit_compute.py",
+                display_name="基本面 PIT 因子",
+                description=(
+                    "三大报表按公告日打点计算 6 个基本面因子（现金流/净利润、应计质量、"
+                    "毛利率/杠杆/周转/ROE 同比变化），PIT 无前视，写入 factor_values。"
+                ),
+                recommended_order=14,
+                source_name="derived",
+                source_mode="derived",
+                # financial_fuyao 是三表的事实生产者（tushare VIP 接口无权限），
+                # PIT 打点必须吃最新披露，依赖它而非三个 tushare 版作业
+                dependencies=["financial_fuyao", "trade_calendar"],
             ),
         }
 
