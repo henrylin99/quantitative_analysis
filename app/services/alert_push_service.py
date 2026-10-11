@@ -112,6 +112,25 @@ class AlertPushService:
         self._append_log(record.get("scan_date") or "", results)
         return results
 
+    def push_text(self, title: str, text: str,
+                  channels: Optional[List[Dict[str, Any]]] = None,
+                  log_tag: str = "custom") -> List[Dict[str, Any]]:
+        """把任意文本推到指定渠道（复用预警渠道参数）；返回逐渠道结果。
+
+        channels 省略时用全局配置中已启用的渠道；调用方（如报告分发）
+        自己决定是否过滤 / 记录结果。结果同样追加到 push_log 便于排查。
+        """
+        if channels is None:
+            cfg = self.get_config()
+            channels = cfg["channels"] if cfg["enabled"] else []
+        results = []
+        for ch in channels:
+            ok, message = self._send(ch, title, text, {"scan_date": None})
+            results.append({"type": ch.get("type"), "ok": ok, "message": message})
+        if results:
+            self._append_log(log_tag, results)
+        return results
+
     @staticmethod
     def _digest(record: Dict[str, Any]) -> tuple:
         scan_date = record.get("scan_date") or datetime.now().strftime("%Y-%m-%d")

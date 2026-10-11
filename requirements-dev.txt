@@ -1,3 +1,6 @@
 # 开发/测试环境：CI 与本地跑 pytest 用这一份（全新 venv 可复现安装）
 -r requirements_minimal.txt
 pytest>=7.0
+# 报告导出 PDF（可选）：pip 可装，但需要系统级 pango（macOS: brew install pango；
+# Debian: apt install libpango-1.0-0 libpangocairo-1.0-0）。缺失时报告导出自动降级为 HTML。
+weasyprint>=60

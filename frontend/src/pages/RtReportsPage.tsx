@@ -4,6 +4,7 @@ import {
   createReportSubscription,
   createReportTemplate,
   dispatchSubscriptions,
+  exportReport,
   fetchReportStatistics,
   fetchReportSubscriptions,
   fetchReportTemplates,
@@ -322,6 +323,32 @@ export default function RtReportsPage() {
                 </div>
                 {expanded === r.id && (
                   <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                    <div className="d-flex gap-2 mb-3 justify-content-end">
+                      <button
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          exportReport(r.id, 'pdf').catch((err) => {
+                            // weasyprint 未安装（501）时引导改走 HTML 导出
+                            setMsg(err instanceof Error ? err.message : 'PDF 导出失败')
+                            exportReport(r.id, 'html').catch(() => {})
+                          })
+                        }}
+                      >
+                        导出 PDF
+                      </button>
+                      <button
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          exportReport(r.id, 'html').catch((err) =>
+                            setMsg(err instanceof Error ? err.message : 'HTML 导出失败'),
+                          )
+                        }}
+                      >
+                        导出 HTML
+                      </button>
+                    </div>
                     {(r.report_content?.sections ?? []).map((sec, i) => (
                       <SectionRenderer section={sec} key={i} />
                     ))}

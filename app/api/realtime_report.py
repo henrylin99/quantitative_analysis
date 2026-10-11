@@ -3,6 +3,8 @@
 提供报告生成、模板管理和订阅功能
 """
 
+from io import BytesIO
+
 from flask import Blueprint, request, jsonify
 from app.utils.request_parsing import parse_int_arg
 import logging
@@ -84,6 +86,52 @@ def get_report_by_id(report_id):
         
     except Exception as e:
         logger.error(f"获取报告API错误: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@realtime_report_bp.route('/reports/<int:report_id>/export', methods=['GET'])
+def export_report(report_id):
+    """导出报告为文件（?format=pdf|html）。
+
+    pdf 依赖可选的 weasyprint，未安装时返回 501 并说明（前端可引导
+    改走 html 导出，浏览器打印为 PDF）；html 永远可用。
+    """
+    from flask import send_file
+
+    from app.services.report_export_service import (
+        WeasyprintUnavailable,
+        export_filename,
+        export_pdf,
+        render_report_html,
+    )
+
+    fmt = (request.args.get('format') or 'pdf').lower()
+    if fmt not in ('pdf', 'html'):
+        return jsonify({'success': False, 'message': 'format 仅支持 pdf 或 html'}), 400
+
+    try:
+        report = RealtimeReport.get_by_id(report_id)
+        if not report:
+            return jsonify({'success': False, 'message': '报告不存在'}), 404
+
+        filename = export_filename(report, fmt)
+        if fmt == 'html':
+            html = render_report_html(report)
+            return send_file(
+                BytesIO(html.encode('utf-8')),
+                mimetype='text/html', as_attachment=True, download_name=filename,
+            )
+
+        try:
+            pdf_bytes = export_pdf(report)
+        except WeasyprintUnavailable as exc:
+            return jsonify({'success': False, 'code': 501, 'message': str(exc)}), 501
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype='application/pdf', as_attachment=True, download_name=filename,
+        )
+    except Exception as e:
+        logger.error(f"报告导出API错误: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
