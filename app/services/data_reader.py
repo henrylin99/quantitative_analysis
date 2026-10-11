@@ -323,7 +323,8 @@ class ParquetDataReader:
                 | df["name"].str.contains(kw.replace("%", ""), case=False, na=False)
             )
             df = df[mask]
-        return df
+        # 股票列表默认按代码升序（000001.SZ → 300xxx.SZ → 600xxx.SH → 688xxx.SH）
+        return df.sort_values("ts_code", kind="mergesort").reset_index(drop=True)
 
     def get_industry_list(self) -> List[str]:
         """获取行业列表。"""
