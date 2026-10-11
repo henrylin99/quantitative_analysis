@@ -32,7 +32,7 @@ Date: 2026-10-11
 | 二 | 断头路闭环 | 报告导出与真实外发、新闻/研报推送、ml_factor_state 治理 | M | 无 | ✅ 2026-10-11 |
 | 三 | 分钟数据升级 | 代码规范统一、全市场 5min 覆盖、日内因子、分钟级回测 | L | 无 | ✅ 2026-10-11 |
 | 四 | 数据补全与因子扩展 | 指数数据补全、龙虎榜事件因子、财务 PIT 因子库 | M | 批次一部分 | ✅ 2026-10-11 |
-| 五 | 研究能力升级 | 回测多空化、paper trading、寻优扩展、AI 因子组合发现 | L | 部分依赖批次三/四 | ⬜ |
+| 五 | 研究能力升级 | 回测多空化、paper trading、寻优扩展、AI 因子组合发现 | L | 部分依赖批次三/四 | ✅ 2026-10-11 |
 
 ---
 
@@ -248,3 +248,37 @@ Date: 2026-10-11
 - 存储：`data/ml_factor_state/` 9.1GB 无清理；`parquet_state_store.py` 无 TTL。
 - 回测：`backtest_engine.py:763-828` long-only；`:169` 滑点、`:448-514` 分红送转、`:1027-1090` 基准降级均已支持。
 - 实盘：全库无 broker/下单/easytrader/miniQMT 代码（**按用户决策永久不做**）。
+
+### 批次五实施记录（2026-10-11 完成）
+
+- **5.1 多空回测**（cb044e63）：`factor_analyzer.quantile_portfolio_backtest` 新增
+  `industry_neutral`（截面行业去均值后排名）/ `vol_target`（事前杠杆，近 12 期
+  历史波动，上限 leverage_cap）/ 等名义本金对冲净值 `nav_long_short_hedged`
+  （= 杠杆×spread/2）；成本双腿各计（沿用分组净收益）；`ls_caveats` 显式研究级
+  口径声明（融券不可得/涨跌停停牌未建模/行业中性为近似）。前端因子实验室分位
+  回测 tab 新增行业中性复选、波动率目标输入、对冲净值曲线与口径警告。
+- **5.2 Paper trading**（48b8fbf5）：`paper_trading_service.py` 虚拟账户
+  （data/paper_trading/account.json，现金/持仓/流水/挂单/盯市历史，原子写）；
+  信号 = 筹码 resonance 优先 squeeze 补足 top-N 等权；18:30 链挂载
+  （PAPER_TRADING_ENABLED 开关）run_daily = 结算（当日开盘价虚拟成交，停牌/
+  开盘涨停不买/开盘跌停不卖，3 个交易日未成过期）→ 盯市（收盘净值 + 信号篮子
+  close-close 等权基准）→ 生成次日挂单。对齐报告：日跟踪误差、净值相关性、
+  买卖成交价差（开盘 vs 信号收盘）、成本拖累、未成交计数。API
+  /api/paper-trading/*（status/history/alignment/run/reset）；前端模拟盘页
+  /paper-trading（净值对比曲线/对齐归因/挂单/持仓/流水/重置）。
+- **5.3 寻优扩展**（16f7315f）：`signal_optimizer_service.py` 两类网格寻优 + 
+  walk-forward OOS：① 筹码阈值（复用 ChipSignalBacktestService._load_panels
+  一次性建面板，H 日非重叠锚点链式超额 vs universe 等权）；② 轮动评分权重
+  （w_mom/w_flow/w_val，top-N 行业净值比 vs 全行业等权，调仓段链式承接）。
+  apply 写回单一源：data/config/signal_thresholds.json（signal_defs.current_
+  thresholds/save_threshold_override，merge_thresholds 供 API 实验叠加）与
+  rotation_weights.json（IndustryRotationService 评分即时按新权重合成）——
+  写回后扫描/回测/评分读到同一份参数。API：POST /ml-factor/signal-optimize/*
+  与 GET /ml-factor/signal-thresholds/current。
+- **5.4 AI 因子组合发现**（bbdd7428）：ai/tools 新增 discover_factor_combo
+  工具（单轮完成）：FactorScreeningService 体检 → |IC|×ICIR 排名 → correlation_
+  matrix 贪心去冗余（|ρ|>阈值剔除）→ quantile_portfolio_backtest 逐因子多空
+  回测 → markdown 报告自动 save_board 收藏可复跑。
+- 验收：pytest 964 passed（tests/ui 另 111 passed）；tsc 无错误；浏览器实测
+  模拟盘页（KPI/挂单/对齐报告）与因子实验室多空回测（行业中性+波动率目标+
+  对冲净值+研究级口径警告）渲染正常。
