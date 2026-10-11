@@ -52,6 +52,8 @@ cvxpy>=1.4.0
 baostock>=0.8.9
 tushare>=1.3.0
 pytdx>=1.72
+# 申万一级行业指数日线（tushare sw_daily 需高积分，改走 akshare 申万研究源）
+akshare>=1.19.0
 
 # 研报中心：PDF 正文提取（tests/services/test_research_report_service.py 也依赖）
 PyMuPDF>=1.24.0

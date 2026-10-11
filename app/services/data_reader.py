@@ -361,6 +361,20 @@ class ParquetDataReader:
         """读取指数基本信息。"""
         return self._read_single("index_basic.parquet")
 
+    def get_index_members(self, active_only: bool = True) -> pd.DataFrame:
+        """读取申万一级行业成分（data/index_members.parquet，index_daily 作业维护）。
+
+        active_only=True 只保留 out_date 为空的当前成分；False 返回含历史
+        进出的全量记录（in_date/out_date 可做 PIT 成分还原）。
+        """
+        df = self._read_single("index_members.parquet")
+        if df.empty or not active_only:
+            return df
+        if "out_date" in df.columns:
+            df = df[df["out_date"].isna()
+                    | (df["out_date"].astype(str).isin(("", "None", "nan")))]
+        return df
+
     @classmethod
     def invalidate_stock_business_cache(cls):
         """清除 stock_business 缓存条目。

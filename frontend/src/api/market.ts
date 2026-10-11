@@ -363,6 +363,7 @@ export interface IndustryRotationRow {
   n_members: number
   mom_5d: number | null
   mom_20d: number | null
+  idx_mom20: number | null
   flow_5d: number | null
   flow_20d: number | null
   pe_med: number | null
@@ -382,6 +383,8 @@ export interface IndustryRotationData {
     n_days: number
     has_moneyflow: boolean
     has_valuation: boolean
+    has_sw_index?: boolean
+    sw_cross_rank_corr?: number | null
     min_members: number
   }
   score_formula: string

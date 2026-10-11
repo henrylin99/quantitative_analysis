@@ -33,6 +33,69 @@ def _zscore(series: pd.Series) -> pd.Series:
     return (series - series.mean()) / std
 
 
+# 申万一级行业指数代码（2021 版 31 个，与 index_daily 下载作业同一清单）
+_SW_L1_CODES = [
+    "801010", "801030", "801040", "801050", "801080", "801110", "801120",
+    "801130", "801140", "801150", "801160", "801170", "801180", "801200",
+    "801210", "801230", "801710", "801720", "801730", "801740", "801750",
+    "801760", "801770", "801780", "801790", "801880", "801890", "801950",
+    "801960", "801970", "801980",
+]
+
+# Tushare 行业 → 申万一级映射的最小重叠要求：至少 5 只成分且覆盖行业
+# 成分的 30%，两者取大——避免小行业被偶然重叠 1-2 只股票的错误归类
+_MAP_MIN_OVERLAP = 5
+_MAP_MIN_COVERAGE = 0.3
+
+
+def _sw_l1_context(data_reader: ParquetDataReader,
+                   last_date: pd.Timestamp):
+    """申万一级近 20 日动量（按 ts_code）+ 活跃成分集。
+
+    指数日线或成分表任一缺失返回 (None, {})，交叉验证维度静默缺席
+    （与资金流维度同纪律）。
+    """
+    try:
+        codes = [f"{c}.SI" for c in _SW_L1_CODES]
+        idx = data_reader.get_index_daily(
+            codes, (last_date - timedelta(days=60)).strftime("%Y-%m-%d"),
+            last_date.strftime("%Y-%m-%d"))
+        members = data_reader.get_index_members(active_only=True)
+    except Exception as e:
+        logger.warning(f"行业轮动读取申万指数/成分失败（交叉验证维度缺失）: {e}")
+        return None, {}
+    if idx.empty or members.empty:
+        return None, {}
+
+    idx = idx.copy()
+    idx["trade_date"] = pd.to_datetime(idx["trade_date"])
+    close = idx.pivot_table(index="trade_date", columns="ts_code",
+                            values="close", aggfunc="last").sort_index()
+    if len(close) < 21:
+        return None, {}
+    mom20 = (close.iloc[-1] / close.iloc[-21] - 1).to_dict()
+    members_by_code = {
+        str(code): set(g["con_code"].astype(str))
+        for code, g in members.groupby("index_code")
+    }
+    return mom20, members_by_code
+
+
+def _map_industry_to_sw(stocks: set, members_by_code: Dict[str, set]) -> Optional[str]:
+    """按成分重叠把 Tushare 行业映射到申万一级指数代码。
+
+    Tushare 行业口径（~110 细分）与申万一级（31 个）不同名且粒度不同，
+    名称匹配只能对上零星几个；成分重叠是数据驱动的稳健映射。
+    """
+    best_code, best_overlap = None, 0
+    for code, members in members_by_code.items():
+        overlap = len(stocks & members)
+        if overlap > best_overlap:
+            best_code, best_overlap = code, overlap
+    threshold = max(_MAP_MIN_OVERLAP, int(len(stocks) * _MAP_MIN_COVERAGE))
+    return best_code if best_overlap >= threshold else None
+
+
 class IndustryRotationService:
     def __init__(self, data_reader: Optional[ParquetDataReader] = None):
         self.data_reader = data_reader or ParquetDataReader()
@@ -173,6 +236,29 @@ class IndustryRotationService:
             score_df["flow_z"] = np.nan
         score_df["value_z"] = -_zscore(score_df["pe_hist_pct"]) if "pe_hist_pct" in score_df else np.nan
 
+        # 申万行业指数动量交叉验证：成分股等权口径 vs 真实指数口径，
+        # 两者动量秩相关高 ⇒ 本地行业收益口径可信；只作参照列，不进评分
+        sw_mom, sw_members = _sw_l1_context(self.data_reader, last)
+        score_df["idx_mom20"] = np.nan
+        cross_corr = None
+        n_mapped = 0
+        if sw_mom and sw_members:
+            stocks_by_ind = {
+                str(name): set(g.index)
+                for name, g in ind_map.groupby(ind_map)
+            }
+            code_by_ind = {
+                name: _map_industry_to_sw(stocks, sw_members)
+                for name, stocks in stocks_by_ind.items()
+            }
+            mapped = score_df.index.map(
+                lambda n: sw_mom.get(code_by_ind.get(n), np.nan))
+            score_df["idx_mom20"] = list(mapped)
+            n_mapped = int(sum(1 for c in code_by_ind.values() if c))
+            both = score_df[["mom20", "idx_mom20"]].dropna()
+            if len(both) >= 5:
+                cross_corr = float(both["mom20"].rank().corr(both["idx_mom20"].rank()))
+
         parts = [score_df["mom_z"]]
         for col in ("flow_z", "value_z"):
             if col in score_df.columns and score_df[col].notna().any():
@@ -196,6 +282,7 @@ class IndustryRotationService:
                 "n_members": int(r["n_members"]),
                 "mom_5d": num(r["mom5"], pct=True),
                 "mom_20d": num(r["mom20"], pct=True),
+                "idx_mom20": num(r.get("idx_mom20", np.nan), pct=True),
                 "flow_5d": num(r["flow5"], 0),
                 "flow_20d": num(r["flow20"], 0),
                 "pe_med": num(r.get("pe_med", np.nan), 1),
@@ -223,6 +310,9 @@ class IndustryRotationService:
                 "n_days": len(eval_dates),
                 "has_moneyflow": flow5 is not None,
                 "has_valuation": pe_pct is not None,
+                "has_sw_index": bool(score_df["idx_mom20"].notna().any()),
+                "sw_mapped_industries": n_mapped,
+                "sw_cross_rank_corr": round(cross_corr, 3) if cross_corr is not None else None,
                 "min_members": _MIN_MEMBERS,
             },
             "score_formula": "总评分 = z(20日动量) + z(5日主力净额) + z(20日主力净额) − z(PE历史分位)，均为行业截面 z-score",
