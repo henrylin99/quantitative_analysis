@@ -308,3 +308,49 @@ def get_datasource_status():
     except Exception as exc:  # noqa: BLE001
         logger.error(f"数据源状态API错误: {exc}")
         return _error(f"数据源状态获取失败: {exc}")
+
+
+@datasources_bp.route("/storage-overview", methods=["GET"])
+def get_storage_overview():
+    """存储看板：data/ 各子目录体积排行 + factor_values 分区统计。"""
+    try:
+        from app.services.data_governance_service import get_data_governance_service
+
+        return _ok(get_data_governance_service().get_storage_overview())
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"存储看板API错误: {exc}")
+        return _error(f"存储看板获取失败: {exc}")
+
+
+@datasources_bp.route("/factor-values-audit", methods=["GET"])
+def get_factor_values_audit():
+    """factor_values 分区审计：分区概览 + 最新分区逐因子行数与退化因子。"""
+    try:
+        from app.services.data_governance_service import get_data_governance_service
+
+        min_coverage = request.args.get("min_coverage", type=int) or 2000
+        return _ok(get_data_governance_service().audit_factor_values(min_coverage=min_coverage))
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"factor_values 审计API错误: {exc}")
+        return _error(f"factor_values 审计失败: {exc}")
+
+
+@datasources_bp.route("/factor-values-cleanup", methods=["POST"])
+def cleanup_factor_values():
+    """factor_values 保留窗口清理（默认 dry-run；confirm=true 才执行删除）。"""
+    try:
+        from app.services.data_governance_service import get_data_governance_service
+
+        payload = request.get_json(silent=True) or {}
+        retention_days = int(payload.get("retention_days", 800))
+        if retention_days < 90:
+            return _error("retention_days 不得小于 90（因子研究默认回看两年）", 400)
+        confirm = bool(payload.get("confirm", False))
+        return _ok(
+            get_data_governance_service().cleanup_factor_values_partitions(
+                retention_days=retention_days, confirm=confirm
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"factor_values 清理API错误: {exc}")
+        return _error(f"factor_values 清理失败: {exc}")

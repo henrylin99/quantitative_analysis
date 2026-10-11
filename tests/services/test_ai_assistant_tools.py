@@ -1,5 +1,6 @@
 """AI 智能工作台工具层测试：只读约束、数据查询、任务触发、因子与模式控制。"""
 
+import dataclasses
 from types import SimpleNamespace
 
 import pandas as pd
@@ -8,6 +9,7 @@ from flask import Flask
 
 import app.services.ai.tools as ai_tools
 from app.services.ai.tools import execute_tool, get_tool_specs, list_tool_summaries
+from app.services.data_jobs.registry import JobRegistry
 
 
 @pytest.fixture()
@@ -71,7 +73,7 @@ def test_list_data_tables_reports_tables_and_wide_status(app, tmp_path):
     outcome = execute_tool('list_data_tables', {})
     assert outcome['ok'] is True
     tables = {t['table']: t for t in outcome['result']['query_tables']}
-    assert set(tables) == {'stock_business', 'stock_factor', 'stock_moneyflow', 'stock_ma_data'}
+    assert set(tables) == {'stock_business', 'stock_factor', 'stock_moneyflow', 'index_basic'}
     assert tables['stock_business']['exists'] is True
     assert tables['stock_business']['latest_trade_date'] == '20260601'
     assert 'wide_table' in outcome['result']
@@ -199,9 +201,20 @@ def test_run_data_jobs_batch_executes_sequentially_and_tolerates_failure(app, mo
 def test_run_data_job_rejects_dangerous_and_unknown_and_wide_table(app, monkeypatch):
     monkeypatch.setenv('TUSHARE_TOKEN', 'real-token')
 
-    dangerous = execute_tool('run_data_job', {'job_type': 'ma_calculator'})
+    # ma_calculator 已下线，无真实 dangerous 作业；monkeypatch 一个验证拦截分支仍在
+    original_get = JobRegistry.get_job
+
+    def fake_get_job(self, job_type):
+        definition = original_get(self, job_type)
+        if job_type == 'daily_basic':
+            return dataclasses.replace(definition, dangerous=True)
+        return definition
+
+    monkeypatch.setattr(JobRegistry, 'get_job', fake_get_job)
+    dangerous = execute_tool('run_data_job', {'job_type': 'daily_basic'})
     assert dangerous['ok'] is False
     assert '危险' in dangerous['error']
+    monkeypatch.undo()
 
     unknown = execute_tool('run_data_job', {'job_type': 'not_exists'})
     assert unknown['ok'] is False

@@ -87,3 +87,16 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   link.click()
   URL.revokeObjectURL(url)
 }
+
+export function formatBytes(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '--'
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let v = value / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i += 1
+  }
+  return `${v.toFixed(1)} ${units[i]}`
+}

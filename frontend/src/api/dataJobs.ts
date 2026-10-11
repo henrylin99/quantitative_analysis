@@ -205,3 +205,60 @@ export const fetchMinuteStockList = async (): Promise<string[]> => {
   const r = await rawGet<{ success: boolean; data: string[]; count: number }>('/realtime-analysis/data/stock-list')
   return r.data ?? []
 }
+
+// ================= 存储治理（存储看板 / factor_values 审计与清理） =================
+export interface StorageDirInfo {
+  name: string
+  size_bytes: number
+  files: number
+}
+
+export interface StorageOverview {
+  data_dir: string
+  total_bytes: number
+  dirs: StorageDirInfo[]
+  factor_values: {
+    partitions: number
+    oldest?: string
+    latest?: string
+    size_bytes?: number
+    avg_partition_bytes?: number
+    growth_per_month_bytes?: number
+  }
+}
+
+export interface FactorValuesAudit {
+  partitions_total: number
+  oldest?: string
+  latest?: string
+  latest_size_bytes?: number
+  factor_rows: { factor_id: string; rows: number }[]
+  degenerate: { factor_id: string; rows: number }[]
+}
+
+export interface FactorValuesCleanupResult {
+  success: boolean
+  message?: string
+  dry_run: boolean
+  retention_days: number
+  cutoff: string
+  latest: string
+  candidate_count: number
+  reclaim_bytes: number
+  remaining_partitions?: number
+  deleted_count?: number
+  deleted?: string[]
+  candidates: { partition: string; trade_date: string; size_bytes: number }[]
+}
+
+export const fetchStorageOverview = () =>
+  rawGet<{ data: StorageOverview }>('/datasources/storage-overview')
+
+export const fetchFactorValuesAudit = () =>
+  rawGet<{ data: FactorValuesAudit }>('/datasources/factor-values-audit')
+
+export const runFactorValuesCleanup = (retentionDays: number, confirm: boolean) =>
+  rawPost<{ data: FactorValuesCleanupResult }>('/datasources/factor-values-cleanup', {
+    retention_days: retentionDays,
+    confirm,
+  })
