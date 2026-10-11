@@ -131,10 +131,15 @@ Date: 2026-10-11
   - 数据作业 `intraday_factor_compute`（单日/区间模式，区间只扫有 5min 分区的日子）；晚间链路第六步（分钟同步之后，`INTRADAY_FACTOR_ENABLED` 可关）；前端无需新增（走因子通用消费页）。
   - 坑位记录：MinuteParquetReader 的行级时间过滤是闭区间，end_time 必须传当日 23:59，否则当日 bar 全被滤掉。
 
-### 3.4 分钟级回测
+### 3.4 分钟级回测 ✅ 2026-10-11
 
 - 改动：轻量 `intraday_backtest`（日内出场、T+1 开仓约束、涨跌停不可成交沿用现有 tradability 逻辑），或扩展 `signal_backtest_service` 支持分钟粒度。
 - 验收：日内策略回测净值/逐笔可查；同一信号在日线与分钟口径交叉验证无系统性趋势偏差。
+- 实施：
+  - `app/services/intraday_backtest_service.py`：3 类 5min 时点信号（ret_30m 动量 / vwap_dev / price_pos），每信号时点取前/后 top_n；t+1 根 bar 开盘入场（无前视）；**A 股约束内建**：T+1 当日买入不可卖（respect_t1 可关为研究口径）、开盘触涨停放弃入场、出场触跌停顺延下一根可成交 bar、止损/止盈逐 bar 扫描（同 bar 双触保守判止损）；净值按入场日等权合成逐日复利（与 signal_backtest 同纪律）。
+  - API：`POST /api/realtime-analysis/data/intraday-backtest/run`（summary/nav/trades 三段返回，trades 上限 200 条）；实测真实数据 20260922-20261009 窗口 21 笔成交、T+1 生效。
+  - 内存护栏：分钟面板 > 2000 万行拒绝并提示缩小区间。
+  - 待办（回填完成后）：全市场 6 个月窗口的策略研究跑批；前端回测页接入日内回测入口（当前 API 可用，UI 待接）。
 
 ---
 

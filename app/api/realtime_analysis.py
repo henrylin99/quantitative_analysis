@@ -536,3 +536,42 @@ def run_market_sync():
     except Exception as e:
         logger.error(f"分钟同步触发API错误: {str(e)}")
         return jsonify({'success': False, 'message': f'触发失败: {str(e)}'}), 500
+
+
+@realtime_analysis_bp.route('/data/intraday-backtest/run', methods=['POST'])
+def run_intraday_backtest():
+    """分钟级（日内）回测：5min 信号 → 逐笔模拟 → 逐日复利净值。
+
+    Body: {start_date, end_date, signal, direction, top_n, signal_time,
+           horizon_bars, stop_loss_pct, take_profit_pct, respect_t1}
+    """
+    try:
+        from app.services.intraday_backtest_service import IntradayBacktestService
+
+        payload = request.get_json(silent=True) or {}
+        start_date = str(payload.get('start_date') or '').replace('-', '')
+        end_date = str(payload.get('end_date') or '').replace('-', '')
+        if len(start_date) != 8 or len(end_date) != 8:
+            return jsonify({'success': False, 'message': 'start_date/end_date 必填（YYYYMMDD）'}), 400
+
+        result = IntradayBacktestService().run(
+            start_date=start_date,
+            end_date=end_date,
+            signal=payload.get('signal', 'ret_30m'),
+            direction=payload.get('direction', 'high'),
+            top_n=payload.get('top_n', 5),
+            signal_time=payload.get('signal_time'),
+            horizon_bars=payload.get('horizon_bars', 12),
+            stop_loss_pct=payload.get('stop_loss_pct'),
+            take_profit_pct=payload.get('take_profit_pct'),
+            respect_t1=bool(payload.get('respect_t1', True)),
+            initial_capital=float(payload.get('initial_capital', 1_000_000)),
+        )
+        if "error" in result:
+            return jsonify({'success': False, 'message': result["error"]}), 400
+        return jsonify({'success': True, 'data': result})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as e:
+        logger.error(f"日内回测API错误: {str(e)}")
+        return jsonify({'success': False, 'message': f'回测失败: {str(e)}'}), 500
