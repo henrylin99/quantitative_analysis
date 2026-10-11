@@ -9,6 +9,8 @@ from datetime import timezone
 import pandas as pd
 from loguru import logger
 
+from app.services.minute_code_style import is_tushare_style, minute_code_aliases
+
 
 class MinuteParquetReader:
     """Read minute-level stock data from partitioned parquet files."""
@@ -48,7 +50,10 @@ class MinuteParquetReader:
                 result["datetime"] = result["datetime"].dt.tz_localize(None)
             result = result.dropna(subset=["datetime"])
         if ts_code is not None and "ts_code" in result.columns:
-            candidate_codes = _minute_code_aliases(ts_code)
+            candidate_codes = minute_code_aliases(ts_code)
+            if not is_tushare_style(str(ts_code)):
+                # 存储已统一 tushare 风格，旧风格查询靠别名兼容，属过渡态
+                logger.debug(f"分钟数据查询使用非规范代码风格: {ts_code}（规范为 {candidate_codes}）")
             result = result[result["ts_code"].astype(str).isin(candidate_codes)]
         if period_type is not None and "period_type" in result.columns:
             result = result[result["period_type"] == period_type]
@@ -164,25 +169,3 @@ def _normalize_dt(value: str | datetime) -> datetime:
         return datetime.strptime(text, "%Y%m%d")
     dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
     return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
-
-
-def _minute_code_aliases(value: str) -> set[str]:
-    text = str(value).strip()
-    lower_text = text.lower()
-    aliases = {text, lower_text}
-
-    # 兼容前端直接传入的 6 位纯数字代码（例如 300502）
-    if lower_text.isdigit() and len(lower_text) == 6:
-        market = 'SH' if lower_text.startswith('6') else 'SZ'
-        aliases.add(f"{lower_text}.{market}")
-        aliases.add(f"{market.lower()}.{lower_text}")
-
-    if lower_text.startswith(("sh.", "sz.")):
-        market, symbol = lower_text.split(".", 1)
-        aliases.add(f"{symbol}.{market.upper()}")
-    elif lower_text.endswith(".sh") or lower_text.endswith(".sz"):
-        symbol, market = lower_text.split(".", 1)
-        aliases.add(f"{market}.{symbol}")
-        aliases.add(f"{symbol}.{market.upper()}")
-
-    return aliases

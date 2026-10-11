@@ -30,7 +30,10 @@ def test_readme_reflects_portfolio_and_model_cleanup_progress():
 def test_readme_avoids_full_demo_and_full_report_backend_claims():
     readme = Path("README.md").read_text(encoding="utf-8")
 
-    assert "报告列表与生成功能入口" in readme
+    # 报告中心已落地导出/派发（2026-10），README 需如实描述且不夸大为后台系统
+    assert "报告列表与生成" in readme
+    assert "订阅派发" in readme
+    assert "导出 PDF" in readme
     assert "运行当前已接通功能入口" in readme
     assert "完整报告管理后台" not in readme
     assert "完整功能演示" not in readme

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Dict, Optional
 from app.services.minute_parquet_store import MinuteParquetStore
+from app.services.minute_code_style import normalize_minute_code
 import time
 
 logger = logging.getLogger(__name__)
@@ -172,8 +173,8 @@ class MinuteDataSyncService:
             # 添加周期类型
             df['period_type'] = period_type
 
-            # 分钟线链路统一存储 Baostock 代码格式
-            df['ts_code'] = df['code'].apply(self.convert_ts_code_to_bs_code)
+            # 分钟线链路统一存储 tushare 代码风格（与全项目数据一致）
+            df['ts_code'] = df['code'].apply(lambda c: normalize_minute_code(self.convert_ts_code_to_bs_code(c)))
 
             # 计算涨跌幅等字段
             df = self._calculate_technical_fields(df)

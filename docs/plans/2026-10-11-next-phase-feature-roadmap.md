@@ -98,11 +98,12 @@ Date: 2026-10-11
 
 ## 批次三：分钟数据升级（最大杠杆）
 
-### 3.1 分钟数据代码规范统一（前置）
+### 3.1 分钟数据代码规范统一（前置）✅ 2026-10-11
 
 - 现状：`data/stock_minute/` 仅 8 只不同代码、无 1min；`sz.000001`（通达信风格）与 `000001.SZ`（tushare 风格）是同一只股票存了两份，消费方按 ts_code 精确匹配会漏读一半数据。
 - 改动：统一为 tushare 风格 ts_code；存量迁移脚本（合并双份、重命名分区）；`minute_parquet_store` 写入侧入口归一；读取层临时兼容旧风格并打 deprecation 日志。
 - 验收：迁移后无双份代码；`realtime_indicator_engine` 等消费方读数与迁移前一致（抽样对账）。
+- 实施：新增 `app/services/minute_code_style.py`（normalize_minute_code / minute_code_aliases 单一来源）；`MinuteParquetStore.write_frame` 对新帧与存量分区统一归一（同 bar 双风格自动去重 keep=last）；Baostock 同步与通达信 `normalize_tdx_minute_bars` 产出端同步归一；读侧别名兼容 + 非规范查询 debug 日志。迁移脚本 `scripts/migrate_minute_codes.py`（dry-run 默认 / `--execute` / 幂等）：真实数据 272 个分区 14286 行全部规范，二次执行零改动。全量测试 994 通过；实测指标计算链路 MA/RSI 正常出值并落库。
 
 ### 3.2 全市场 5min 覆盖
 
