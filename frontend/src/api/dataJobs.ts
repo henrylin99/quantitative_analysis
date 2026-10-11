@@ -262,3 +262,25 @@ export const runFactorValuesCleanup = (retentionDays: number, confirm: boolean) 
     retention_days: retentionDays,
     confirm,
   })
+
+// ================= 全市场分钟线同步 /api/realtime-analysis/data/market-sync =================
+
+export interface MinuteMarketSyncProgress {
+  mode: 'incremental' | 'backfill' | null
+  run_id: string | null
+  total: number
+  done: number
+  failed: number
+  running: boolean
+  cooldown: boolean
+  started_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+  last_message: string | null
+}
+
+export const fetchMinuteMarketSyncStatus = () =>
+  rawGet<{ data: MinuteMarketSyncProgress }>('/realtime-analysis/data/market-sync/status')
+
+export const runMinuteMarketSync = (mode: 'incremental' | 'backfill') =>
+  rawPost<{ success: boolean; message: string }>('/realtime-analysis/data/market-sync/run', { mode })

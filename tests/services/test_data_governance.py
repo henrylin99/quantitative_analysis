@@ -1,6 +1,7 @@
 """数据治理（批次 2.3）：存储看板、factor_values 审计、保留窗口清理。"""
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -113,4 +114,56 @@ def test_cleanup_anchor_is_latest_partition_not_today(gov, tmp_path):
 
 def test_cleanup_no_partitions_returns_failure(gov):
     result = gov.cleanup_factor_values_partitions(retention_days=300)
+    assert result["success"] is False
+
+
+# ================= 分钟分区清理（批次 3.2） =================
+
+def _write_minute_day(tmp_path, ymd: str, timeframe: str = "5min", rows: int = 2) -> Path:
+    year, month, day = ymd.split("-")
+    day_dir = tmp_path / "stock_minute" / timeframe / f"year={year}" / f"month={month}" / f"day={day}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [{"ts_code": "000001.SZ", "period_type": timeframe, "datetime": f"{ymd} 09:35:00", "close": 10.0}] * rows
+    ).to_parquet(day_dir / "data.parquet", index=False)
+    return day_dir
+
+
+def test_minute_cleanup_dry_run_reports_without_deleting(gov, tmp_path):
+    _write_minute_day(tmp_path, "2026-01-05")
+    _write_minute_day(tmp_path, "2026-10-09")
+
+    result = gov.cleanup_minute_partitions(retention_days=185, confirm=False)
+
+    assert result["success"] is True
+    assert result["dry_run"] is True
+    assert result["latest"] == "2026-10-09"
+    assert result["candidate_count"] == 1
+    assert result["candidates"][0]["trade_date"] == "2026-01-05"
+    assert (tmp_path / "stock_minute" / "5min" / "year=2026" / "month=01" / "day=05").exists()
+
+
+def test_minute_cleanup_execute_deletes_stale_only(gov, tmp_path):
+    stale_dir = _write_minute_day(tmp_path, "2026-01-05")
+    fresh_dir = _write_minute_day(tmp_path, "2026-10-09")
+
+    result = gov.cleanup_minute_partitions(retention_days=185, confirm=True)
+
+    assert result["deleted_count"] == 1
+    assert not stale_dir.exists()
+    assert fresh_dir.exists()
+
+
+def test_minute_cleanup_anchor_is_latest_partition(gov, tmp_path):
+    _write_minute_day(tmp_path, "2025-06-02")
+
+    result = gov.cleanup_minute_partitions(retention_days=185, confirm=False)
+
+    # 锚定最新分区（2025-06-02）而非今天，停更不误删
+    assert result["cutoff"] == "2024-11-29"
+    assert result["candidate_count"] == 0
+
+
+def test_minute_cleanup_missing_dir_fails_gracefully(gov):
+    result = gov.cleanup_minute_partitions(timeframe="15min")
     assert result["success"] is False
