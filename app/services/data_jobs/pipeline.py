@@ -33,6 +33,7 @@ PIPELINE_JOBS = (
     "trade_calendar",
     "daily_history_by_date",
     "daily_basic",
+    "index_daily",
     "moneyflow",
     "stk_factor",
     "cyq_perf",

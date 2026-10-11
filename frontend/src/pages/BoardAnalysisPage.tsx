@@ -261,6 +261,9 @@ function RotationCard() {
         hint={
           rotationQuery.data
             ? `${rotationQuery.data.meta.eval_start} ~ ${rotationQuery.data.meta.eval_end} · ${rotationQuery.data.meta.n_industries} 个行业 · 每小时缓存`
+              + (rotationQuery.data.meta.sw_cross_rank_corr != null
+                ? ` · 申万指数动量秩相关 ${rotationQuery.data.meta.sw_cross_rank_corr}`
+                : '')
             : '计算中…'
         }
       />
@@ -290,6 +293,9 @@ function RotationCard() {
                   <th className="px-2 py-1.5 font-medium">行业</th>
                   <th className="px-2 py-1.5 text-right font-medium">成分</th>
                   <th className="px-2 py-1.5 text-right font-medium">20日动量</th>
+                  {rotationQuery.data.meta.has_sw_index && (
+                    <th className="px-2 py-1.5 text-right font-medium">申万指数20日</th>
+                  )}
                   <th className="px-2 py-1.5 text-right font-medium">5日主力净额</th>
                   <th className="px-2 py-1.5 text-right font-medium">20日主力净额</th>
                   <th className="px-2 py-1.5 text-right font-medium">PE中位</th>
@@ -306,6 +312,11 @@ function RotationCard() {
                     <td className="num px-2 py-1.5 text-right">
                       <Delta value={row.mom_20d} />
                     </td>
+                    {rotationQuery.data.meta.has_sw_index && (
+                      <td className="num px-2 py-1.5 text-right text-fg-secondary">
+                        <Delta value={row.idx_mom20} />
+                      </td>
+                    )}
                     <td className="num px-2 py-1.5 text-right">{flowCell(row.flow_5d)}</td>
                     <td className="num px-2 py-1.5 text-right">{flowCell(row.flow_20d)}</td>
                     <td className="num px-2 py-1.5 text-right text-fg-secondary">{row.pe_med ?? '--'}</td>

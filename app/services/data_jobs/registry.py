@@ -17,6 +17,7 @@ class JobRegistry:
             "daily_history_by_date",  # 5
             "daily_history_fuyao",    # 5b（扶摇源日线）
             "daily_basic",            # 6
+            "index_daily",            # 6b（宽基+申万一级指数日线）
             "moneyflow",              # 15
             "stk_factor",             # 17
             "cyq_perf",               # 18
@@ -104,6 +105,22 @@ class JobRegistry:
                 "app/utils/daily_basic.py",
                 display_name="日线基本指标",
                 description="下载换手率、市盈率、市值等日线基本面指标。",
+                recommended_order=6,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
+            ),
+            "index_daily": JobDefinition(
+                "index_daily",
+                "日频行情与基本面",
+                "app/utils/index_daily.py",
+                display_name="指数日线",
+                description=(
+                    "下载主要宽基（上证/沪深300/中证500/1000/科创50等，tushare）"
+                    "与申万一级行业指数（akshare 申万研究源）日线，"
+                    "供回测基准、市场状态与行业轮动交叉验证消费。"
+                ),
+                dependencies=["trade_calendar"],
                 recommended_order=6,
                 source_name="tushare",
                 source_mode="incremental",
