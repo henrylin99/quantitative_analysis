@@ -19,7 +19,7 @@ _TABLE_DESCRIPTIONS = {
     ),
     'stock_factor': '技术指标视图（MACD、KDJ、RSI 等，源自大宽表）。',
     'stock_moneyflow': '资金流视图（net_mf_amount 净流入额、net_mf_vol 净流入量，源自大宽表）。',
-    'stock_ma_data': '均线数据（MA5/MA10/MA20/MA30/MA60/MA120）。',
+    'index_basic': '指数目录（全部指数的代码、名称、市场、发布机构、基日等元数据；无行情列）。',
 }
 
 _SQLITE_DIALECT_NOTES = """目标数据库是 SQLite，SQL 必须使用 SQLite 方言：

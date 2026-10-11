@@ -392,15 +392,31 @@ class ParquetDataReader:
             return None
         return pd.to_datetime(df["trade_date"]).max().strftime("%Y-%m-%d")
 
+    # get_ma_data 使用的 stk_factor 前复权均线列（ma_qfq_5 → ma5）
+    _MA_PERIODS = (5, 10, 20, 30, 60, 90, 250)
+    _MA_KINDS = ("ma", "ema")
+
     def get_ma_data(self, ts_code: str) -> Optional[pd.Series]:
-        """读取单只股票的最新均线数据。"""
-        df = self._read_single_cached("stock_ma_data.parquet")
-        if df.empty:
+        """读取单只股票的最新均线数据（取自 stk_factor 股票分区的前复权 MA/EMA）。"""
+        path = os.path.join(self.data_dir, "stk_factor", "stock", f"ts_code={ts_code}", "data.parquet")
+        if not os.path.isfile(path):
             return None
-        row = df[df["ts_code"] == ts_code]
-        if row.empty:
+        try:
+            ma_cols = [f"{kind}_qfq_{p}" for kind in self._MA_KINDS for p in self._MA_PERIODS]
+            df = pd.read_parquet(path)
+        except Exception as e:
+            logger.warning(f"读取均线数据失败 {path}: {e}")
             return None
-        return row.iloc[0]
+        if df.empty or "trade_date" not in df.columns:
+            return None
+        row = df.sort_values("trade_date").iloc[-1]
+        out = {"ts_code": ts_code, "trade_date": row["trade_date"]}
+        for kind in self._MA_KINDS:
+            for period in self._MA_PERIODS:
+                col = f"{kind}_qfq_{period}"
+                if col in df.columns and pd.notna(row[col]):
+                    out[f"{kind}{period}"] = float(row[col])
+        return pd.Series(out)
 
     def get_latest_close(self, ts_code: str) -> Optional[float]:
         """获取指定股票最新收盘价。"""

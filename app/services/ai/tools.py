@@ -191,7 +191,13 @@ def _describe_source_parquet(filename: str) -> Dict[str, Any]:
         if not dates.empty:
             info['latest_trade_date'] = str(dates['trade_date'].max())
     except Exception as exc:  # 元数据读取失败不影响目录返回
-        info['error'] = str(exc)
+        # 无 trade_date 列的目录型表（如 index_basic）退回读总行数
+        try:
+            import pandas as pd
+
+            info['row_count'] = int(len(pd.read_parquet(path)))
+        except Exception:
+            info['error'] = str(exc)
     return info
 
 
@@ -991,7 +997,7 @@ class AiTool:
 AI_TOOLS: List[AiTool] = [
     AiTool(
         'query_data',
-        '对本地行情数据库执行只读 SQL 查询（SQLite 方言）。可查表：stock_business（最新交易日全市场快照，含估值/换手/涨跌幅/技术指标/资金流）、stock_factor（技术指标）、stock_moneyflow（资金流）、stock_ma_data（均线）。仅允许单条 SELECT，结果最多返回 30 行。',
+        '对本地行情数据库执行只读 SQL 查询（SQLite 方言）。可查表：stock_business（最新交易日全市场快照，含估值/换手/涨跌幅/技术指标/资金流）、stock_factor（技术指标）、stock_moneyflow（资金流）、index_basic（指数目录，按名称/代码检索指数）。仅允许单条 SELECT，结果最多返回 30 行。',
         {
             'type': 'object',
             'properties': {
@@ -1015,7 +1021,7 @@ AI_TOOLS: List[AiTool] = [
         {
             'type': 'object',
             'properties': {
-                'table': {'type': 'string', 'enum': ['stock_business', 'stock_factor', 'stock_moneyflow', 'stock_ma_data']},
+                'table': {'type': 'string', 'enum': ['stock_business', 'stock_factor', 'stock_moneyflow', 'index_basic']},
             },
             'required': ['table'],
         },

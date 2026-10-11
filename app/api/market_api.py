@@ -62,6 +62,46 @@ def get_indices():
         return _error(f"指数行情获取失败: {exc}")
 
 
+@market_bp.route("/indices/search", methods=["GET"])
+def search_indices():
+    """指数目录检索（本地 index_basic：按代码/名称/全称模糊匹配，q 省略返回境内主要指数）。"""
+    query = (request.args.get("q") or "").strip()
+    try:
+        limit = min(max(int(request.args.get("limit", 20)), 1), 100)
+    except ValueError:
+        return _error("limit 参数非法", 400)
+    try:
+        from app.services.data_reader import ParquetDataReader
+
+        df = ParquetDataReader().get_index_basic()
+        if df.empty:
+            return _ok({"indices": [], "total": 0})
+        # 优先境内交易所/中证/申万指数；无关键词时避免把 MSCI 等海外指数全部倒出来
+        domestic = df[df["ts_code"].str.endswith((".SH", ".SZ", ".CSI", ".CIC", ".SI", ".CI"))]
+        pool = domestic if not domestic.empty else df
+        if query:
+            text = pool["ts_code"].fillna("") + "|" + pool["name"].fillna("") + "|" + pool["fullname"].fillna("")
+            pool = pool[text.str.contains(re.escape(query), na=False)]
+        items = []
+        for _, row in pool.head(limit).iterrows():
+            items.append(
+                {
+                    "ts_code": row.get("ts_code"),
+                    "name": row.get("name"),
+                    "fullname": row.get("fullname"),
+                    "market": row.get("market"),
+                    "publisher": row.get("publisher"),
+                    "category": row.get("category"),
+                    "base_date": row.get("base_date"),
+                    "list_date": row.get("list_date"),
+                }
+            )
+        return _ok({"indices": items, "total": int(len(pool))})
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"指数目录检索API错误: {exc}")
+        return _error(f"指数目录检索失败: {exc}")
+
+
 @market_bp.route("/dragon-tiger", methods=["GET"])
 def get_dragon_tiger():
     """龙虎榜（board: all/org/hot_money；date 格式 YYYYMMDD，可空=最近发布日）。"""

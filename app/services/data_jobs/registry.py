@@ -137,17 +137,6 @@ class JobRegistry:
             "moneyflow_ths": JobDefinition("moneyflow_ths", "资金流与扩展因子", "app/utils/moneyflow_ths.py", display_name="同花顺资金流", description="下载同花顺口径资金流数据。", source_name="ths", source_mode="incremental", supports_incremental=True),
             "stk_factor": JobDefinition("stk_factor", "资金流与扩展因子", "app/utils/stk_factor.py", display_name="扩展技术因子", description="下载或计算扩展因子字段。", recommended_order=8, source_name="tushare", source_mode="incremental", supports_incremental=True),
             "cyq_perf": JobDefinition("cyq_perf", "资金流与扩展因子", "app/utils/cyq_perf.py", display_name="筹码分布", description="下载筹码成本、胜率等筹码分布指标。", recommended_order=9, source_name="tushare", source_mode="incremental", supports_incremental=True),
-            "ma_calculator": JobDefinition(
-                "ma_calculator",
-                "衍生计算",
-                "app/utils/ma_calculator.py",
-                display_name="均线衍生计算",
-                description="基于日线行情生成均线结果，属于衍生计算任务。",
-                dangerous=True,
-                dependencies=["daily_history_by_code"],
-                source_name="derived",
-                source_mode="derived",
-            ),
             "wide_table_builder": JobDefinition(
                 "wide_table_builder",
                 "衍生计算",

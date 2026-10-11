@@ -634,7 +634,6 @@ class QueryBuilder:
             '市净率': {'table': 'stock_business', 'field': 'pb'},
             'MACD': {'table': 'stock_factor', 'field': 'macd'},
             'RSI': {'table': 'stock_factor', 'field': 'rsi_6'},
-            '均线': {'table': 'stock_ma_data', 'field': 'ma5'},
             '资金流': {'table': 'stock_moneyflow', 'field': 'net_mf_amount'}
         }
     
@@ -758,8 +757,6 @@ class QueryBuilder:
                 from_clause += f"\nJOIN {join_table} sf ON {main_table}.ts_code = sf.ts_code"
             elif join_table == 'stock_moneyflow' and main_table == 'stock_business':
                 from_clause += f"\nJOIN {join_table} sm ON {main_table}.ts_code = sm.ts_code"
-            elif join_table == 'stock_ma_data' and main_table == 'stock_business':
-                from_clause += f"\nJOIN {join_table} sma ON {main_table}.ts_code = sma.ts_code"
         
         return from_clause
     
