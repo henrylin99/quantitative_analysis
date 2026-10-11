@@ -24,6 +24,7 @@ class JobRegistry:
             "stock_partition_rebuild",  # 21（个股查询提速：日期分区 → 股票分区）
             "factor_compute",         # 因子计算（打分/回测的前置作业）
             "minute_market_sync",     # 全市场 5min 分钟线（东财源，断点续传）
+            "intraday_factor_compute",  # 日内因子（5min → factor_values）
         }
 
         # 注意：baostock_daily / min5 / min15 / min30 / min60 已从注册表摘除：
@@ -190,14 +191,29 @@ class JobRegistry:
                 "app/utils/minute_market_sync.py",
                 display_name="全市场分钟线同步",
                 description=(
-                    "东财源逐股同步全市场 5min 分钟线（约 5500 只，串行限速约 1 小时）。"
-                    "默认增量（近 12 个交易日）；DATA_JOB_MINUTE_MODE=backfill 回填至"
-                    " DATA_JOB_START_DATE（缺省 6 个月滚动窗口）；中断自动断点续传。"
+                    "pytdx 源逐股同步全市场 5min 分钟线（约 5500 只含北交所，"
+                    "主机自动探测、串行限速约 1 小时）。默认增量（近 12 个交易日）；"
+                    "DATA_JOB_MINUTE_MODE=backfill 回填至 DATA_JOB_START_DATE"
+                    "（缺省 6 个月滚动窗口）；中断自动断点续传。"
                 ),
                 recommended_order=12,
-                source_name="eastmoney",
+                source_name="pytdx",
                 source_mode="incremental",
                 supports_incremental=True,
+            ),
+            "intraday_factor_compute": JobDefinition(
+                "intraday_factor_compute",
+                "分钟数据",
+                "app/utils/intraday_factor_compute.py",
+                display_name="日内因子计算",
+                description=(
+                    "从 5min 分钟线计算 ~10 个日内因子（VWAP 乖离/开盘动量/尾盘收益/"
+                    "日内反转等），截面标准化后写入 factor_values。依赖 minute_market_sync。"
+                ),
+                recommended_order=13,
+                source_name="derived",
+                source_mode="derived",
+                dependencies=["minute_market_sync"],
             ),
         }
 

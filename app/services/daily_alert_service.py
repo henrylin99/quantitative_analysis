@@ -317,6 +317,11 @@ class DailyAlertScheduler:
                 self._run_minute_market_sync()
             except Exception:
                 logger.warning("全市场分钟线同步失败", exc_info=True)
+            # 日内因子依赖当日 5min 数据，排在分钟同步之后；空数据/异常只记日志
+            try:
+                self._run_intraday_factors()
+            except Exception:
+                logger.warning("日内因子计算失败", exc_info=True)
 
     @staticmethod
     def _run_minute_market_sync(now: Optional[datetime] = None) -> None:
@@ -330,6 +335,19 @@ class DailyAlertScheduler:
 
         result = MinuteMarketSyncService().sync_market(period_type="5min", mode="incremental")
         logger.info(f"全市场分钟线同步：{result.get('message', '')}")
+
+    @staticmethod
+    def _run_intraday_factors(now: Optional[datetime] = None) -> None:
+        if os.getenv("INTRADAY_FACTOR_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+            logger.info("日内因子计算已通过 INTRADAY_FACTOR_ENABLED=0 关闭")
+            return
+        if (now or datetime.now()).weekday() >= 5:
+            logger.info("非交易日（周末），跳过日内因子计算")
+            return
+        from app.services.intraday_factor_service import IntradayFactorService
+
+        result = IntradayFactorService().compute_and_save(datetime.now().strftime("%Y%m%d"))
+        logger.info(f"日内因子计算：{result.get('message', '')}")
 
     @staticmethod
     def _seconds_until_next_run() -> float:
