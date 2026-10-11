@@ -199,7 +199,10 @@ class FactorAnalyzer:
                                     end_date: str = None, holding_days: int = 20,
                                     n_quantiles: int = 5, cost_bps: float = 0.0,
                                     min_stocks: int = 50,
-                                    cost_bps_list: List[float] = None
+                                    cost_bps_list: List[float] = None,
+                                    industry_neutral: bool = False,
+                                    vol_target: float = None,
+                                    leverage_cap: float = 1.5,
                                     ) -> Dict[str, Any]:
         """分位组合净值回测：非重叠调仓的分组净值 + 多空（GN−G1）曲线。
 
@@ -213,8 +216,19 @@ class FactorAnalyzer:
         - 非重叠：信号日按 holding_days 间隔取，末个信号日因无完整
           持有期而剔除（n_periods 为完整期数）；
         - 成本：cost_bps 为单边费率，每次调仓按单边换手率扣双边费用
-          （全换手 = 2×cost_bps）；
+          （全换手 = 2×cost_bps），多空两腿各计一次；
         - 换手率 = 1 − 与上期成员交集占比（等权满员口径）。
+
+        多空增强（5.1，研究级口径，非可交易口径）：
+        - industry_neutral=True：截面按行业去均值后再排名分组（近似行业中性约束，
+          组内行业暴露不再由因子行业载荷驱动；非带约束优化的精确行业暴露对齐）；
+        - vol_target（年化，如 0.15）：波动率目标仓位，杠杆只用截至上一期的
+          多空收益历史（事前口径，无前视），上限 leverage_cap；
+        - 等名义本金对冲净值 nav_long_short_hedged = (多头净收益 − 空头净收益)/2
+          × 当期杠杆——资金各 50% 分配多空两腿；
+        - ⚠️ 研究级声明：A 股个股融券长期不可得，空头腿不可真实复制；
+          涨跌停/停牌在 close-close 口径下未建模（两端缺价的股票直接剔除，
+          视作不可成交退出的近似）。结论只用于因子方向性判断。
         """
         n_quantiles = max(2, int(n_quantiles))
         holding_days = max(1, int(holding_days))
@@ -245,6 +259,16 @@ class FactorAnalyzer:
             index='trade_date', columns='ts_code', values='factor_value',
             aggfunc='first',
         ).sort_index()
+
+        # 行业中性：截面按行业去均值后再排名（ts_code → 行业名映射取一次）
+        industry_map = None
+        if industry_neutral:
+            try:
+                basic = self.data_reader.get_stock_basic()
+                ind = basic.dropna(subset=['industry']).set_index('ts_code')['industry']
+                industry_map = ind.to_dict() if len(ind) else None
+            except Exception as e:
+                logger.warning(f"行业中性化读取行业映射失败（退化为原始排名）: {e}")
 
         # 行情面板：从首个信号日到区间末 + 持有期缓冲，只需 close
         all_dates = factor_wide.index
@@ -307,6 +331,15 @@ class FactorAnalyzer:
             cross = factor_wide.loc[t].dropna()
             if len(cross) < min_stocks:
                 continue
+            if industry_map is not None:
+                ind_names = pd.Series(
+                    {c: industry_map.get(c) for c in cross.index}
+                )
+                resid = cross.groupby(ind_names).transform(
+                    lambda s: s - s.mean() if len(s) >= 2 else s)
+                # 无行业信息的股票保留原始值（不剔除，避免幸存者偏差）
+                resid[ind_names.isna()] = cross[ind_names.isna()]
+                cross = resid
             pct_rank = cross.rank(pct=True, method='average')
             bucket = np.minimum(
                 (pct_rank * n_quantiles).apply(np.ceil).astype(int), n_quantiles,
@@ -384,6 +417,23 @@ class FactorAnalyzer:
             )
         ls_summary = self._period_perf_summary(ls_returns, periods_per_year)
 
+        # 等名义本金对冲多空 + 可选波动率目标（5.1 研究级口径）：
+        # 资金各 50% 分配多/空两腿 → 期收益 = 杠杆 × spread / 2；
+        # 杠杆只用截至上一期的近 12 期多空历史（事前口径，无前视）
+        hedged_returns: List[float] = []
+        leverages: List[float] = []
+        for i, r in enumerate(ls_returns):
+            past = ls_returns[max(0, i - 12):i]
+            lev = 1.0
+            if vol_target and len(past) >= 4:
+                std = float(np.std(past, ddof=1))
+                if std > 0:
+                    lev = min(float(leverage_cap),
+                              float(vol_target) / (std * np.sqrt(periods_per_year)))
+            leverages.append(round(lev, 4))
+            hedged_returns.append(lev * r / 2.0)
+        hedged_summary = self._period_perf_summary(hedged_returns, periods_per_year)
+
         # 成本敏感性：净多空 = 毛多空 − 2×cost×(高组换手 + 低组换手)，逐期重算
         cost_grid = [c for c in (cost_bps_list or [])]
         if cost_bps not in cost_grid:
@@ -422,6 +472,17 @@ class FactorAnalyzer:
                 for q in range(1, n_quantiles + 1)
             },
             'nav_long_short': _nav_series(ls_returns),
+            'nav_long_short_hedged': _nav_series(hedged_returns),
+            'long_short_hedged_summary': hedged_summary,
+            'long_short_leverage': leverages,
+            'industry_neutral': bool(industry_neutral),
+            'vol_target': vol_target,
+            'ls_caveats': (
+                '研究级多空口径，非可交易口径：A股个股融券长期不可得，空头腿无法真实复制；'
+                '涨跌停/停牌未建模（两端缺价个股直接剔除）；行业中性为截面行业去均值的近似，'
+                '非带约束优化的精确行业暴露对齐；vol_target 杠杆为事前口径（仅用截至上一期历史），'
+                f'上限 {leverage_cap}。结论仅用于因子方向与强度判断。'
+            ),
             'groups_summary': groups_summary,
             'long_short_summary': ls_summary,
             'cost_sensitivity': cost_sensitivity,

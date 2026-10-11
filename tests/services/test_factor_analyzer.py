@@ -199,6 +199,75 @@ def test_quantile_portfolio_backtest_too_short_range():
     assert "error" in result
 
 
+# ----------------------------------------------------------------------
+# 5.1 多空增强：等名义本金对冲净值 / 行业中性 / 波动率目标
+# ----------------------------------------------------------------------
+
+class _ReaderWithIndustry(_FakeReader):
+    def __init__(self, prices, industry):
+        super().__init__(prices)
+        self._industry = industry
+
+    def get_stock_basic(self):
+        return pd.DataFrame(
+            [{"ts_code": c, "industry": ind} for c, ind in self._industry.items()]
+        )
+
+
+def test_long_short_hedged_half_spread_and_caveats():
+    """等名义本金对冲净值 = spread 的一半敞口（无 vol_target 时杠杆恒 1）。"""
+    result = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4,
+    )
+    assert result["nav_long_short_hedged"] == sorted(result["nav_long_short_hedged"])
+    assert result["long_short_hedged_summary"]["win_rate"] == 1.0
+    # hedged 期收益 = spread/2 → 累计收益低于全额 spread
+    assert result["long_short_hedged_summary"]["total_return"] < \
+        result["long_short_summary"]["total_return"]
+    assert all(lev == 1.0 for lev in result["long_short_leverage"])
+    assert "研究级" in result["ls_caveats"] and "融券" in result["ls_caveats"]
+    assert result["industry_neutral"] is False
+
+
+def test_long_short_industry_neutral_changes_membership():
+    """行业中性重排截面：A/B 同业、C/D 同业时，G2 成员从 {A,B} 变为 {B,D}。"""
+    prices, perfect, reversed_ = _build_frames()
+    repo = _FakeFactorRepo({"perfect": perfect})
+    # 原始排名：残差后 D(+0.00525) > B(+0.005) > A(-0.005) > C(-0.00525)
+    reader = _ReaderWithIndustry(
+        prices, {"A.SZ": "X", "B.SZ": "X", "C.SZ": "Y", "D.SZ": "Y"})
+    analyzer = FactorAnalyzer(factor_repo=repo, data_reader=reader)
+
+    result = analyzer.quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4,
+        industry_neutral=True,
+    )
+    assert result["industry_neutral"] is True
+    # 中性化后 G2 = {B, D}：日收益 2% 与 0.05% → 高组收益低于原始 {A,B}=1.5%/日
+    raw = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4)
+    assert result["groups_summary"]["g2"]["annualized_return"] < \
+        raw["groups_summary"]["g2"]["annualized_return"]
+
+
+def test_long_short_vol_target_leverage_capped_and_ex_ante():
+    """波动率目标：杠杆只用截至上一期的历史（首期恒 1），且封顶 leverage_cap。"""
+    result = _make_analyzer().quantile_portfolio_backtest(
+        "perfect", holding_days=2, n_quantiles=2, min_stocks=4,
+        vol_target=0.10, leverage_cap=1.5,
+    )
+    levs = result["long_short_leverage"]
+    assert levs[0] == 1.0  # 无历史 → 杠杆 1
+    assert all(0 < lev <= 1.5 for lev in levs)
+    assert result["vol_target"] == 0.10
+    # hedged 收益 = lev × spread / 2（首期 lev=1 与无目标口径一致）
+    assert result["nav_long_short_hedged"][0] == pytest.approx(
+        _make_analyzer().quantile_portfolio_backtest(
+            "perfect", holding_days=2, n_quantiles=2, min_stocks=4,
+        )["nav_long_short_hedged"][0]
+    )
+
+
 class _FakeStore:
     """带分区目录的假存储：验证无日期请求被限定到最近两年。"""
 
