@@ -195,6 +195,70 @@ export function fetchLimitUpLadder() {
   return apiGet<{ days: LadderDay[] }>('/market/limit-up/ladder')
 }
 
+// ================= 事件归档与研究（批次4.2） =================
+
+export interface EventDatasetSummary {
+  days: number
+  latest: string | null
+}
+
+export interface EventMoodSummary {
+  date: string
+  limit_up_count: number | null
+  limit_down_count: number | null
+  break_rate: number | null
+  max_streak: number | null
+  mean_limit_up: number | null
+  std_limit_up: number | null
+  n_days: number
+}
+
+export interface EventArchiveSummary {
+  datasets: Record<string, EventDatasetSummary>
+  mood: EventMoodSummary | null
+}
+
+export function fetchEventArchiveSummary() {
+  return apiGet<EventArchiveSummary>('/market/event-archive/summary')
+}
+
+export interface PromotionRow {
+  height: number
+  n_obs: number
+  n_promoted: number
+  promotion_rate: number
+  days: number
+}
+
+export interface DragonTigerForwardSummary {
+  n: number
+  avg_fwd_ret: number | null
+  win_rate: number | null
+  avg_excess: number | null
+}
+
+export interface EventResearchData {
+  promotion: {
+    window_days: number
+    by_height: PromotionRow[]
+    overall_promotion_rate: number | null
+    n_days: number
+    error?: string
+  }
+  dragon_tiger: {
+    horizon: number
+    n_days_archived?: number
+    net_buy_high?: DragonTigerForwardSummary
+    net_buy_low?: DragonTigerForwardSummary
+    error?: string
+    note?: string
+  }
+}
+
+export function fetchEventResearch(horizon = 5) {
+  return apiGet<EventResearchData>('/market/event-research', { horizon: String(horizon) })
+}
+
 export function fetchBoards(tag: 'industry' | 'cn_concept') {
   return apiGet<{ tag: string; items: ThsBoardRow[]; unavailable: string[] }>(
     '/market/boards',
