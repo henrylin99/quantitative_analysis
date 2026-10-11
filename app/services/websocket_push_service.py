@@ -3,7 +3,9 @@ WebSocket推送服务
 提供定时数据推送和事件触发推送功能
 """
 
+import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import pandas as pd
@@ -334,8 +336,90 @@ class WebSocketPushService:
             logger.error(f"推送新闻资讯失败: {e}")
 
     def _get_news_payload(self) -> List[Dict[str, Any]]:
-        """获取可推送的新闻数据。默认不生成模拟新闻。"""
-        return []
+        """拉取自选股的当日新研报作为新闻推送（东财研报中心）。
+
+        不生成任何模拟新闻：自选股为空 / 拉取失败时返回空列表。
+        已推送的研报按 info_code 去重（落盘 data/research_push/seen.json，
+        重启不重推）；news 渠道默认 enabled=False，配置开启后才会走到这里。
+        """
+        try:
+            codes = self._get_watchlist_codes()
+            if not codes:
+                return []
+            today = datetime.now().strftime('%Y%m%d')
+            seen = self._load_seen_report_ids()
+            items: List[Dict[str, Any]] = []
+            from app.services.research_report_service import get_research_report_service
+
+            service = get_research_report_service()
+            for code in codes[:20]:  # 限频保护：一次推送最多查 20 只
+                try:
+                    payload = service.search_reports(category='stock', code=code, begin=today, end=today)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(f"研报拉取失败 {code}: {exc}")
+                    continue
+                for row in payload.get('items') or []:
+                    info_code = row.get('info_code')
+                    if not info_code or info_code in seen:
+                        continue
+                    seen.add(info_code)
+                    items.append({
+                        'type': 'research_report',
+                        'ts_code': code,
+                        'stock_name': row.get('stock_name'),
+                        'title': row.get('title'),
+                        'org': row.get('org_name'),
+                        'rating': row.get('rating'),
+                        'publish_date': row.get('publish_date'),
+                        'url': row.get('detail_url'),
+                    })
+            if items:
+                self._save_seen_report_ids(seen)
+                logger.info(f"研报推送：自选股新增 {len(items)} 篇研报")
+            return items
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"拉取研报推送数据失败: {e}")
+            return []
+
+    def _get_watchlist_codes(self) -> List[str]:
+        """服务端自选股代码列表（为空时尝试迁移本地 localStorage 迁移结果）。"""
+        try:
+            from app.services.watchlist_service import WatchlistService
+
+            items = WatchlistService().list_items()
+            return [it['ts_code'] for it in items if it.get('ts_code')][:20]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"读取自选股失败: {exc}")
+            return []
+
+    @property
+    def _research_seen_path(self) -> str:
+        data_dir = os.getenv(
+            'DATA_DIR',
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data'),
+        )
+        return os.path.join(data_dir, 'research_push', 'seen.json')
+
+    def _load_seen_report_ids(self) -> set:
+        try:
+            with open(self._research_seen_path, encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return set(data[-500:])
+        except FileNotFoundError:
+            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"读取研报去重记录失败: {exc}")
+        return set()
+
+    def _save_seen_report_ids(self, seen: set) -> None:
+        try:
+            os.makedirs(os.path.dirname(self._research_seen_path), exist_ok=True)
+            # 只保留最近 500 条，防止文件无限增长
+            with open(self._research_seen_path, 'w', encoding='utf-8') as f:
+                json.dump(sorted(seen)[-500:], f)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"写入研报去重记录失败: {exc}")
     
     def _calculate_change_pct(self, latest_data) -> float:
         """计算涨跌幅，传入最近2条DataFrame记录"""
