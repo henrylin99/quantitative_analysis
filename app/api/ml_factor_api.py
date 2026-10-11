@@ -420,13 +420,13 @@ def get_chip_signals():
     """
     try:
         from app.services.chip_signal_service import ChipSignalService
-        from app.services.signal_defs import SignalThresholds
+        from app.services.signal_defs import merge_thresholds
 
         global chip_signal_service
         if chip_signal_service is None:
             chip_signal_service = ChipSignalService(_data_reader)
         force = request.args.get('refresh') == '1'
-        thresholds = SignalThresholds.from_params(request.args.to_dict())
+        thresholds = merge_thresholds(request.args.to_dict())
         result = chip_signal_service.scan(force_refresh=force, thresholds=thresholds)
         if 'error' in result:
             return jsonify(result), 500
@@ -444,11 +444,11 @@ def get_chip_signal_backtest():
     """
     try:
         from app.services.signal_backtest_service import ChipSignalBacktestService
-        from app.services.signal_defs import SignalThresholds
+        from app.services.signal_defs import merge_thresholds
 
         months = request.args.get('months', type=int) or 12
         force = request.args.get('refresh') == '1'
-        thresholds = SignalThresholds.from_params(request.args.to_dict())
+        thresholds = merge_thresholds(request.args.to_dict())
         result = ChipSignalBacktestService(_data_reader).run(
             months=months, force_refresh=force, thresholds=thresholds)
         if 'error' in result:
@@ -456,6 +456,70 @@ def get_chip_signal_backtest():
         return jsonify(result)
     except Exception as e:
         logger.error(f"筹码信号回测失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/signal-optimize/chip-thresholds', methods=['POST'])
+def optimize_chip_thresholds():
+    """筹码信号阈值网格寻优 + walk-forward OOS（apply=True 写回单一源）。"""
+    try:
+        from app.services.signal_optimizer_service import SignalOptimizerService
+
+        body = request.get_json(silent=True) or {}
+        result = SignalOptimizerService(_data_reader).chip_threshold_optimize(
+            months=int(body.get('months', 12)),
+            signal=str(body.get('signal', 'resonance')),
+            horizon=int(body.get('horizon', 10)),
+            grid=body.get('grid'),
+            is_days=int(body.get('is_days', 120)),
+            oos_days=int(body.get('oos_days', 60)),
+            apply=bool(body.get('apply', False)),
+        )
+        status = 500 if 'error' in result else 200
+        return jsonify(result), status
+    except Exception as e:
+        logger.error(f"筹码阈值寻优失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/signal-optimize/rotation-weights', methods=['POST'])
+def optimize_rotation_weights():
+    """行业轮动评分权重网格寻优 + walk-forward OOS（apply=True 写回单一源）。"""
+    try:
+        from app.services.signal_optimizer_service import SignalOptimizerService
+
+        body = request.get_json(silent=True) or {}
+        result = SignalOptimizerService(_data_reader).rotation_weight_optimize(
+            months=int(body.get('months', 12)),
+            top_n=int(body.get('top_n', 5)),
+            grid=body.get('grid'),
+            is_windows=int(body.get('is_windows', 6)),
+            oos_windows=int(body.get('oos_windows', 2)),
+            rebalance_days=int(body.get('rebalance_days', 20)),
+            apply=bool(body.get('apply', False)),
+        )
+        status = 500 if 'error' in result else 200
+        return jsonify(result), status
+    except Exception as e:
+        logger.error(f"轮动权重寻优失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/signal-thresholds/current', methods=['GET'])
+def get_current_signal_thresholds():
+    """当前生效的信号阈值与轮动权重（含寻优写回）。"""
+    try:
+        from app.services.signal_defs import current_thresholds
+        from app.services.signal_optimizer_service import SignalOptimizerService
+
+        t = current_thresholds()
+        import dataclasses
+        return jsonify({
+            'thresholds': {f.name: getattr(t, f.name)
+                           for f in dataclasses.fields(t)},
+            'rotation_weights': SignalOptimizerService().current_rotation_weights(),
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

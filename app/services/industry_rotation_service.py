@@ -263,7 +263,17 @@ class IndustryRotationService:
         for col in ("flow_z", "value_z"):
             if col in score_df.columns and score_df[col].notna().any():
                 parts.append(score_df[col].fillna(score_df[col].median()))
-        score_df["total_score"] = sum(parts)
+        # 5.3 寻优写回的权重（data/config/rotation_weights.json，无文件=默认 1/1/1）
+        try:
+            from app.services.signal_optimizer_service import SignalOptimizerService
+            weights = SignalOptimizerService().current_rotation_weights()
+        except Exception:
+            weights = {"w_mom": 1.0, "w_flow": 1.0, "w_val": 1.0}
+        score_df["total_score"] = (
+            weights["w_mom"] * parts[0]
+            + (weights["w_flow"] * parts[1] if len(parts) > 1 else 0.0)
+            + (weights["w_val"] * parts[2] if len(parts) > 2 else 0.0)
+        )
 
         score_df = score_df.sort_values("total_score", ascending=False)
         score_df["rank"] = range(1, len(score_df) + 1)
@@ -315,7 +325,11 @@ class IndustryRotationService:
                 "sw_cross_rank_corr": round(cross_corr, 3) if cross_corr is not None else None,
                 "min_members": _MIN_MEMBERS,
             },
-            "score_formula": "总评分 = z(20日动量) + z(5日主力净额) + z(20日主力净额) − z(PE历史分位)，均为行业截面 z-score",
+            "score_formula": (
+                f"总评分 = {weights['w_mom']:g}·z(20日动量) + {weights['w_flow']:g}·(z(5日主力净额)+z(20日主力净额)) "
+                f"+ {weights['w_val']:g}·(−z(PE历史分位))，均为行业截面 z-score"
+                + ("" if weights == {"w_mom": 1.0, "w_flow": 1.0, "w_val": 1.0}
+                   else "（寻优写回权重）")),
             "rows": [_row(name) for name in score_df.index],
             "nav_chart": nav_chart,
         }
