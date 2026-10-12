@@ -141,3 +141,10 @@ frontend/*.tsbuildinfo
 *.sqlite3-shm
 .playwright-mcp/
 .run/
+
+# 虚拟环境（曾误提交，已从历史清除）
+venv/
+.venv/
+# IDE 与杂项
+.idea/
+.cursor/
