@@ -96,6 +96,8 @@ def create_app(config_name='default'):
     from app.api.research_api import research_bp
     from app.api.fund_api import fund_bp
     from app.api.paper_trading_api import paper_trading_bp
+    from app.api.hk_stock_api import hk_stock_api
+    from app.api.us_stock_api import us_stock_api
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(ml_factor_bp)
     app.register_blueprint(text2sql_bp)
@@ -118,6 +120,8 @@ def create_app(config_name='default'):
     app.register_blueprint(research_bp)
     app.register_blueprint(fund_bp)
     app.register_blueprint(paper_trading_bp, url_prefix='/api/paper-trading')
+    app.register_blueprint(hk_stock_api)
+    app.register_blueprint(us_stock_api)
 
     from app.main import main_bp
     app.register_blueprint(main_bp)

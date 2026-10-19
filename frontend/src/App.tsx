@@ -2,8 +2,8 @@ import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect, Component, type ReactNode } from 'react'
 import {
   Activity, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
-  ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, HeartPulse, Home,
-  LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon,
+  ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, Globe, HeartPulse, Home,
+  LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon, DollarSign,
   Newspaper, PieChart, Plug, Radar, Radio, Search, Shield, Star, Sun, Timer,
   TrendingUp, Trophy, Wallet, Zap,
   type LucideIcon,
@@ -55,6 +55,10 @@ const DataSourceCenterPage = lazy(() => import('./pages/DataSourceCenterPage'))
 const FundCenterPage = lazy(() => import('./pages/FundCenterPage'))
 const FundsListPage = lazy(() => import('./pages/FundsListPage'))
 const PaperTradingPage = lazy(() => import('./pages/PaperTradingPage'))
+const HkStocksPage = lazy(() => import('./pages/HkStocksPage'))
+const HkStockDetailPage = lazy(() => import('./pages/HkStockDetailPage'))
+const UsStocksPage = lazy(() => import('./pages/UsStocksPage'))
+const UsStockDetailPage = lazy(() => import('./pages/UsStockDetailPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -120,6 +124,8 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/industries', label: '行业分析', icon: Factory },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: Trophy },
       { to: '/funds', label: '基金列表', icon: Wallet },
+      { to: '/hk', label: '港股行情', icon: Globe },
+      { to: '/us', label: '美股行情', icon: DollarSign },
       { to: '/research', label: '研报中心', icon: Newspaper },
       { to: '/paper-trading', label: '模拟盘', icon: Bot },
     ],
@@ -349,6 +355,38 @@ function Shell() {
               element={
                 <LazyRoute>
                   <PaperTradingPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/hk"
+              element={
+                <LazyRoute>
+                  <HkStocksPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/hk/:symbol"
+              element={
+                <LazyRoute>
+                  <HkStockDetailPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/us"
+              element={
+                <LazyRoute>
+                  <UsStocksPage />
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/us/:symbol"
+              element={
+                <LazyRoute>
+                  <UsStockDetailPage />
                 </LazyRoute>
               }
             />
