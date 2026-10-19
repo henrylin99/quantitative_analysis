@@ -1,0 +1,319 @@
+# scripts/us_stock/config.yaml
+# 美股股票池配置（股票池取自 us_stock_screener/scripts/config.yaml，行尾注释解析为 name_zh）
+stock_pool:
+  # ── 科技/半导体 (~55只) ──
+  tech:
+    - AAPL    # Apple
+    - MSFT    # Microsoft
+    - GOOGL   # Alphabet
+    - GOOG    # Alphabet Class C
+    - AMZN    # Amazon
+    - META    # Meta
+    - NVDA    # NVIDIA
+    - TSLA    # Tesla
+    - AVGO    # Broadcom
+    - AMD     # AMD
+    - ADI     # Analog Devices
+    - ARM     # ARM Holdings
+    - ASML    # ASML
+    - CRM     # Salesforce
+    - ORCL    # Oracle
+    - ADBE    # Adobe
+    - INTU    # Intuit
+    - NOW     # ServiceNow
+    - PYPL    # PayPal
+    - SHOP    # Shopify
+    - XYZ     # Block (原SQ，2025年更名)
+    - SNOW    # Snowflake
+    - PLTR    # Palantir
+    - DDOG    # Datadog
+    - NET     # Cloudflare
+    - ZS      # Zscaler
+    - CRWD    # CrowdStrike
+    - OKTA    # Okta
+    - TEAM    # Atlassian
+    - DOCS    # Docusign
+    - WDAY    # Workday
+    - SNPS    # Synopsys
+    - CDNS    # Cadence
+    - MRVL    # Marvell
+    - QCOM    # Qualcomm
+    - TXN     # Texas Instruments
+    - INTC    # Intel
+    - MU      # Micron
+    - LRCX    # Lam Research
+    - KLAC    # KLA
+    - AMAT    # Applied Materials
+    - ENPH    # Enphase Energy
+    - SEDG    # SolarEdge
+    - FSLR    # First Solar
+    - "ON"    # ON Semiconductor
+    - MDB     # MongoDB
+    - PANW    # Palo Alto Networks
+    - MSTR    # MicroStrategy
+    - FTNT    # Fortinet
+    - HUBS    # HubSpot
+    - BILL    # Bill Holdings
+    - PATH    # UiPath
+    - S       # SentinelOne (原ZI已退市)
+    - RPD     # Rapid7
+    - TSM     # 台积电 (晶圆代工龙头, AI芯片制造)
+    - SNDK    # SanDisk (存储, 2025年从WDC拆分)
+    - STX     # Seagate (HDD存储, AI数据中心需求)
+    - WDC     # Western Digital (存储)
+    - GLW     # Corning (光纤/玻璃, AI数据中心光通信)
+    - ANET    # Arista Networks (AI数据中心网络)
+    - CRDO    # Credo Technology (高速连接/光模块)
+    - VRT     # Vertiv (AI数据中心冷却/电源)
+    - SMCI    # Super Micro (AI服务器)
+    - DELL    # Dell (AI服务器)
+    - HPE     # HPE (AI服务器/网络)
+    - CIEN    # Ciena (光通信网络)
+    - LITE    # Lumentum (光模块/激光)
+    - COHR    # Coherent (光通信/激光)
+    - UMC     # 联电 (晶圆代工)
+    - GFS     # GlobalFoundries (晶圆代工)
+    - ASX     # 日月光 (封测)
+    - AMKR    # Amkor (封测)
+    - TER     # Teradyne (半导体测试)
+    - MKSI    # MKS Instruments (半导体设备)
+    - ENTG    # Entegris (半导体材料)
+    - ONTO    # Onto Innovation (半导体计量)
+    - FORM    # FormFactor (探针卡)
+    - ACMR    # ACM Research (清洗设备)
+    - AEHR    # Aehr Test (老化测试)
+    - FN      # Fabrinet (光模块代工)
+    - APH     # Amphenol (连接器/光通信)
+    - VIAV    # Viavi Solutions (光网络测试)
+    - MTSI    # MACOM (RF/光通信芯片)
+    - AAOI    # Applied Optoelectronics (光模块)
+    - POET    # POET Technologies (光电子)
+    - CSCO    # 思科
+
+  # ── 金融/保险/支付 (~30只) ──
+  finance:
+    - JPM     # JPMorgan Chase
+    - V       # Visa
+    - MA      # Mastercard
+    - BAC     # Bank of America
+    - WFC     # Wells Fargo
+    - GS      # Goldman Sachs
+    - MS      # Morgan Stanley
+    - BLK     # BlackRock
+    - SCHW    # Charles Schwab
+    - AXP     # American Express
+    - C       # Citigroup
+    - COIN    # Coinbase
+    - HOOD    # Robinhood
+    - CB      # Chubb
+    - AIG     # AIG
+    - MET     # MetLife
+    - PRU     # Prudential
+    - AFL     # Aflac
+    - PGR     # Progressive
+    - ALL     # Allstate
+    - BNY     # BNY Mellon（原代码 BK，2025 更名 BNY 后 Yahoo 旧代码已无数据，2026-08-22 实测切换）
+    - STT     # State Street
+    - ICE     # ICE (NYSE parent)
+    - CME     # CME Group
+    - NDAQ    # Nasdaq Inc
+    - RJF     # Raymond James
+    - AMP     # Ameriprise
+    - COF     # Capital One（Discover 已并入，原 DFS 2025 退市，2026-08-22 实测切换）
+    - ARES    # Ares Capital (替代已破产的SIVB)
+
+
+  # ── 医疗/生物科技 (~25只) ──
+  healthcare:
+    - LLY     # Eli Lilly
+    - UNH     # UnitedHealth
+    - JNJ     # Johnson & Johnson
+    - ABBV    # AbbVie
+    - MRK     # Merck
+    - PFE     # Pfizer
+    - TMO     # Thermo Fisher
+    - ABT     # Abbott Labs
+    - MRNA    # Moderna
+    - VRTX    # Vertex Pharma
+    - ISRG    # Intuitive Surgical
+    - MDT     # Medtronic
+    - SYK     # Stryker
+    - BSX     # Boston Scientific
+    - GILD    # Gilead
+    - AMGN    # Amgen
+    - BIIB    # Biogen
+    - REGN    # Regeneron
+    - HUM     # Humana
+    - CI      # Cigna
+    - ELV     # Elevance Health
+    - DXCM    # Dexcom
+    - IDXX    # IDEXX Labs
+    - VEEV    # Veeva Systems (正确代码)
+    - ZBH     # Zimmer Biomet
+
+  # ── 能源/资源 (~18只) ──
+  energy:
+    - XOM     # ExxonMobil
+    - CVX     # Chevron
+    - COP     # ConocoPhillips
+    - SLB     # Schlumberger
+    - EOG     # EOG Resources
+    - OXY     # Occidental
+    - MPC     # Marathon Petroleum
+    - PSX     # Phillips 66
+    - VST     # Vistra Energy
+    - CEG     # Constellation Energy
+    - NEM     # Newmont (gold)
+    - FCX     # Freeport-McMoRan (copper)
+    - NUE     # Nucor (steel)
+    - LIN     # Linde (industrial gas)
+    - APD     # Air Products
+    - SHW     # Sherwin-Williams
+    - DD      # DuPont
+    - ECL     # Ecolab
+
+  # ── 工业/航空/国防 (~20只) ──
+  industrial:
+    - CAT     # Caterpillar
+    - BA      # Boeing
+    - GE      # GE Aerospace
+    - HON     # Honeywell
+    - UPS     # UPS
+    - RTX     # RTX (Raytheon)
+    - LMT     # Lockheed Martin
+    - NOC     # Northrop Grumman
+    - DE      # John Deere
+    - MMM     # 3M
+    - EMR     # Emerson Electric
+    - ETN     # Eaton
+    - CMI     # Cummins
+    - UNP     # Union Pacific
+    - CSX     # CSX
+    - NSC     # Norfolk Southern
+    - FDX     # FedEx
+    - DAL     # Delta
+    - UAL     # United Airlines
+    - LULU    # Lululemon
+
+  # ── 消费/零售/餐饮 (~22只) ──
+  consumer:
+    - PG      # Procter & Gamble
+    - KO      # Coca-Cola
+    - PEP     # PepsiCo
+    - MCD     # McDonald's
+    - NKE     # Nike
+    - COST    # Costco
+    - WMT     # Walmart
+    - HD      # Home Depot
+    - DIS     # Disney
+    - NFLX    # Netflix
+    - CMCSA   # Comcast
+    - SBUX    # Starbucks
+    - ABNB    # Airbnb
+    - BKNG    # Booking Holdings
+    - MAR     # Marriott
+    - RCL     # Royal Caribbean
+    - CCL     # Carnival
+    - TJX     # TJX Companies
+    - LOW     # Lowe's
+    - TGT     # Target
+    - YUM     # Yum! Brands
+    - GM      # General Motors
+
+  # ── 通信/公用事业/REIT (~15只) ──
+  infra:
+    - T       # AT&T
+    - VZ      # Verizon
+    - TMUS    # T-Mobile
+    - NEE     # NextEra Energy
+    - SO      # Southern Company
+    - DUK     # Duke Energy
+    - AMT     # American Tower
+    - PLD     # Prologis
+    - EQIX    # Equinix
+    - SPG     # Simon Property
+    - "O"     # Realty Income
+    - DLR     # Digital Realty
+    - CCI     # Crown Castle
+    - WELL    # Welltower
+    - PSA     # Public Storage
+
+  # ── 太空/航空/国防 (~14只) ──
+  aerospace:
+    - RKLB    # Rocket Lab (火箭发射)
+    - ASTS    # AST SpaceMobile (卫星通信)
+    - PL      # Planet Labs (卫星遥感)
+    - LUNR    # Intuitive Machines (月球着陆器)
+    - RDW     # Redwire (太空基础设施)
+    - IRDM    # Iridium (卫星通信)
+    - BKSY    # BlackSky (卫星情报)
+    - KTOS    # Kratos (无人机/国防)
+    - AVAV    # AeroVironment (无人机)
+    - LHX     # L3Harris (国防电子)
+    - HEI     # HEICO (航空零部件)
+    - TDG     # TransDigm (航空零部件)
+    - LDOS    # Leidos (国防IT)
+    - BWXT    # BWX Technologies (核动力/国防)
+
+  # ── 汽车/交通/其他 (~15只) ──
+  other:
+    - F       # Ford
+    - RIVN    # Rivian
+    - IBM     # IBM
+    - ADP     # ADP
+    - UBER    # Uber
+    - LYFT    # Lyft
+    - DASH    # DoorDash
+    - RBLX    # Roblox
+    - SPOT    # Spotify
+    - SNAP    # Snap
+    - PINS    # Pinterest (非PINC)
+    - ETSY    # Etsy
+    - BIDU    # Baidu
+    - PDD     # PDD (Temu)
+    - SE      # Sea Ltd
+    - EXP     # Eagle Materials
+
+  # ── 研究扩展池（crypto perp 宇宙交集，2026-08-19 提出：25 只日线缺口）──
+  # 注意：get_stock_pool 遍历 stock_pool 全部分组，本组成员会进入生产
+  # 抓取/快照/实时宇宙——这是有意接线：目的是让增量构建为它们回填完整
+  # 日线历史（2026-08-20 审查确认保留此行为）。
+  research_expansion:
+    - GME     # GameStop
+    - DKNG    # DraftKings
+    - BABA    # Alibaba
+    - BX      # Blackstone
+    - TTWO    # Take-Two
+    - EBAY    # eBay
+    - NOK     # Nokia
+    - ZM      # Zoom
+    - CRCL    # Circle
+    - CRWV    # CoreWeave
+    - IREN    # IREN Limited
+    - SOFI    # SoFi
+    - HIMS    # Hims & Hers
+    - APP     # AppLovin
+    - FLNC    # Fluence
+    - FLEX    # Flex
+    - AXTI    # AXT, Inc.（注意：Axcelis 的代码是 ACLS）
+    - BMNR    # BitMine
+    - BRK-B   # Berkshire（宇宙名 BRKB，yfinance 用 BRK-B）
+    - NBIS    # Nebius
+    - NVO     # Novo Nordisk
+    - ONDS    # Ondas
+    - USAR    # USA Rare Earth
+    - WEN     # Wendy's
+
+# 数据获取配置
+fetch:
+  # 历史数据周期 (yfinance period 格式)
+  history_period: "2y"
+  batch_size: 20       # 每批20只股票
+  batch_delay: 2.0     # 批次间隔秒数
+  max_retries: 2       # 每批最大重试次数
+  retry_delay: 2.0     # 重试间隔秒数
+  request_timeout: 30  # 单次请求超时秒数
+
+# 财务数据配置
+financials:
+  enabled: true
