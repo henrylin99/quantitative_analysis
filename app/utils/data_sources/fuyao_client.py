@@ -300,6 +300,59 @@ class FuyaoClient:
             {"date": date},
         ) or {}
 
+    def auction_snapshot(
+        self, thscodes: Sequence[str], stage: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """A 股集合竞价快照（thscodes 单次 ≤100，去重前校验；stage: live/final）。
+
+        注意：文档写 finallive，实测合法值为 live（实时）/ final（终态）。
+
+        data: timestamp/auction_phase/data_status/total/item[]；
+        item 字段：thscode/ticker/name/auction_price/auction_pct（百分数原值）/
+        auction_volume/auction_amount/auction_unmatched/auction_turnover_pct/
+        auction_yesterday_ratio_pct/auction_volume_ratio/pre_close_price/
+        open_price/last_price/float_market_cap。
+        """
+        params: Dict[str, Any] = {"thscodes": ",".join(thscodes[:BATCH_LIMIT])}
+        if stage:
+            params["stage"] = stage
+        return self._get("/api/a-share/auction/snapshot", params) or {}
+
+    def auction_stock_opportunities(
+        self,
+        date: Optional[str] = None,
+        warn_types: Optional[Sequence[str]] = None,
+        market: Optional[str] = None,
+        exclude_st: Optional[bool] = None,
+        thscodes: Optional[Sequence[str]] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: int = 1,
+        size: int = 20,
+    ) -> Dict[str, Any]:
+        """集合竞价个股机会筛选（date yyyy-MM-dd 须在可用日期集合内；size 1~20）。
+
+        item 字段：thscode/ticker/name/warn_type/warn_name/warn_timestamp/
+        bid_price/bid_change_ratio（小数比例）/bid_amount/previous_amount/
+        bid_volume/previous_volume/explain/grade/related_block（json）。
+        """
+        params: Dict[str, Any] = {
+            "date": date,
+            "warn_types": ",".join(warn_types) if warn_types else None,
+            "market": market,
+            "exclude_st": None if exclude_st is None else ("true" if exclude_st else "false"),
+            "thscodes": ",".join(thscodes[:ANOMALY_BATCH_LIMIT]) if thscodes else None,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "size": size,
+        }
+        return self._get("/api/a-share/special-data/auction-stock-opportunities", params) or {}
+
+    def auction_opportunity_dates(self) -> Dict[str, Any]:
+        """集合竞价可选交易日期（dates 升序 yyyy-MM-dd；latest_date=默认查询日）。"""
+        return self._get("/api/a-share/special-data/auction-opportunity-dates") or {}
+
     def limit_up_pool(
         self,
         date_ms: Optional[int] = None,
@@ -432,6 +485,19 @@ class FuyaoClient:
             {"thscodes": ",".join(thscodes[:ANOMALY_BATCH_LIMIT])},
         )
         return data.get("item") or []
+
+    def abnormal_monitor_list(
+        self, state: str = "current", page: int = 1, size: int = 30
+    ) -> Dict[str, Any]:
+        """异动股票监控名单（state: current/history；size ≤30，分页从 1 起）。
+
+        item 字段：thscode/name/start_date_ms/end_date_ms（可空）/
+        monitor_type/monitor_label（1/2=严重异动，其它=重点监控）。
+        """
+        return self._get(
+            "/api/a-share/special-data/abnormal-monitor-list",
+            {"state": state, "page": page, "size": size},
+        ) or {}
 
     def ticker_search(
         self, query: str, asset_type: str = "a-share", limit: int = 10
