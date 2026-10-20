@@ -28,9 +28,11 @@ from loguru import logger
 from app.services.market_snapshot_service import evict_oldest
 from app.utils.data_sources.fuyao_client import (
     ANOMALY_BATCH_LIMIT,
+    BATCH_LIMIT,
     BEIJING_TZ,
     FuyaoClient,
     FuyaoError,
+    beijing_ms_to_ymd,
 )
 
 POOL_FRESH_SECONDS = 60.0
@@ -43,10 +45,17 @@ HOT_FRESH_SECONDS = 300.0
 SEARCH_FRESH_SECONDS = 60.0
 STALE_SERVE_SECONDS = 3600.0
 ANOMALY_FRESH_SECONDS = 60.0
+AUCTION_SNAPSHOT_FRESH_SECONDS = 30.0
+OPPORTUNITY_FRESH_SECONDS = 60.0
+OPPORTUNITY_DATES_FRESH_SECONDS = 600.0
+ABNORMAL_FRESH_SECONDS = 600.0
 #: 进程内缓存容量上限（按日期/检索词等键会随使用增长，防无界）
 POOL_CACHE_MAX_ENTRIES = 64
 SEARCH_CACHE_MAX_ENTRIES = 128
 CONSTITUENTS_CACHE_MAX_ENTRIES = 128
+
+#: 集合竞价机会筛选的 market 取值（扶摇 auction-stock-opportunities）
+AUCTION_MARKETS = ("a_share", "sh_sz_main", "sh_a", "sz_a", "gem", "star")
 
 #: 天梯矩阵的档位键 → 连板数
 LADDER_BOARD_KEYS = (
@@ -100,6 +109,12 @@ class BoardMarketService:
         self._hot_history_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._rank_trend_cache: Dict[Tuple[str, str, str], Tuple[float, Dict[str, Any]]] = {}
         self._anomaly_cache: Dict[Tuple[str, ...], Tuple[float, Dict[str, Any]]] = {}
+        self._auction_snapshot_cache: Dict[
+            Tuple[Tuple[str, ...], str], Tuple[float, Dict[str, Any]]
+        ] = {}
+        self._opportunity_cache: Dict[Tuple[str, ...], Tuple[float, Dict[str, Any]]] = {}
+        self._opportunity_dates_cache: Optional[Tuple[float, Dict[str, Any]]] = None
+        self._abnormal_cache: Dict[Tuple[str, int, int], Tuple[float, Dict[str, Any]]] = {}
         self._ladder_cache: Optional[Tuple[float, Dict[str, Any]]] = None
         self._catalog_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._boards_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
@@ -557,6 +572,260 @@ class BoardMarketService:
             }
             for row in items
         ]
+
+    # ---- 集合竞价 / 异动股票监控 ----
+
+    def get_auction_snapshot(
+        self, codes: Sequence[str], stage: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """集合竞价快照（codes ≤100，stage live/final 可空；缓存 30s）。"""
+        cleaned = [str(code).strip().upper() for code in codes if str(code).strip()]
+        if not cleaned:
+            raise ValueError("缺少 codes 参数")
+        if len(cleaned) > BATCH_LIMIT:
+            raise ValueError(f"codes 单次最多 {BATCH_LIMIT} 只")
+        # 文档写 finallive，实测上游合法值为 live/final
+        if stage not in (None, "", "live", "final"):
+            raise ValueError("stage 取值须为 live/final")
+        stage_key = stage or ""
+        key = (tuple(dict.fromkeys(cleaned)), stage_key)
+        with self._lock:
+            cached = self._auction_snapshot_cache.get(key)
+        if cached and time.monotonic() - cached[0] < AUCTION_SNAPSHOT_FRESH_SECONDS:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            data = self.client.auction_snapshot(list(key[0]), stage=stage or None)
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, AUCTION_SNAPSHOT_FRESH_SECONDS, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        payload = {
+            "codes": list(key[0]),
+            "stage": stage or None,
+            "auction_phase": data.get("auction_phase"),
+            "data_status": data.get("data_status"),
+            "items": [self._normalize_auction_item(row) for row in data.get("item") or []],
+            "server_ts": data.get("timestamp") or _now_ms(),
+        }
+        with self._lock:
+            evict_oldest(self._auction_snapshot_cache, POOL_CACHE_MAX_ENTRIES)
+            self._auction_snapshot_cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    @staticmethod
+    def _normalize_auction_item(row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "ts_code": row.get("thscode"),
+            "ticker": row.get("ticker"),
+            "name": row.get("name"),
+            "auction_price": row.get("auction_price"),
+            "auction_pct": row.get("auction_pct"),
+            "auction_volume": row.get("auction_volume"),
+            "auction_amount": row.get("auction_amount"),
+            "auction_unmatched": row.get("auction_unmatched"),
+            "auction_turnover_pct": row.get("auction_turnover_pct"),
+            "auction_yesterday_ratio_pct": row.get("auction_yesterday_ratio_pct"),
+            "auction_volume_ratio": row.get("auction_volume_ratio"),
+            "pre_close_price": row.get("pre_close_price"),
+            "open_price": row.get("open_price"),
+            "last_price": row.get("last_price"),
+            "float_market_cap": row.get("float_market_cap"),
+        }
+
+    def get_auction_opportunities(
+        self,
+        date: Optional[str] = None,
+        warn_types: Optional[Sequence[str]] = None,
+        market: Optional[str] = None,
+        exclude_st: bool = False,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: int = 1,
+        size: int = 20,
+    ) -> Dict[str, Any]:
+        """集合竞价个股机会筛选（date YYYYMMDD 可空=当日实时；size 1~20）。
+
+        历史日数据不再变化，缓存视为永久；当日缓存 60s。
+        """
+        resolved = self._validate_date(date)
+        if market and market not in AUCTION_MARKETS:
+            raise ValueError(f"market 取值须为 {'/'.join(AUCTION_MARKETS)}")
+        size = min(max(int(size), 1), 20)
+        page = max(int(page), 1)
+        if sort_by not in (None, "", "warn_time", "warn_type"):
+            raise ValueError("sort_by 取值须为 warn_time/warn_type")
+        if sort_order not in (None, "", "asc", "desc"):
+            raise ValueError("sort_order 取值须为 asc/desc")
+        warn_key = tuple(
+            dict.fromkeys(str(w).strip() for w in (warn_types or []) if str(w).strip())
+        )
+        key = (
+            resolved or "",
+            warn_key,
+            market or "",
+            bool(exclude_st),
+            sort_by or "",
+            sort_order or "",
+            page,
+            size,
+        )
+        with self._lock:
+            cached = self._opportunity_cache.get(key)
+        fresh = self._pool_fresh_seconds(resolved or self._today())
+        if cached and time.monotonic() - cached[0] < fresh:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            data = self.client.auction_stock_opportunities(
+                date=_ymd_to_iso(resolved) if resolved else None,
+                warn_types=list(warn_key) or None,
+                market=market or None,
+                exclude_st=bool(exclude_st) or None,
+                sort_by=sort_by or None,
+                sort_order=sort_order or None,
+                page=page,
+                size=size,
+            )
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, fresh, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        pagination = data.get("pagination") or {}
+        trade_date = str(data.get("trade_date") or "").replace("-", "")
+        payload = {
+            "date": resolved or trade_date or None,
+            "mode": data.get("mode"),
+            "total": int(pagination.get("total") or len(data.get("item") or [])),
+            "page": page,
+            "size": size,
+            "has_next": bool(pagination.get("has_next")),
+            "items": [
+                self._normalize_opportunity_item(row) for row in data.get("item") or []
+            ],
+            "server_ts": data.get("timestamp") or _now_ms(),
+        }
+        with self._lock:
+            evict_oldest(self._opportunity_cache, POOL_CACHE_MAX_ENTRIES)
+            self._opportunity_cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    @staticmethod
+    def _normalize_opportunity_item(row: Dict[str, Any]) -> Dict[str, Any]:
+        warn_ts = row.get("warn_timestamp")
+        try:
+            warn_time = (
+                datetime.fromtimestamp(float(warn_ts) / 1000.0, tz=BEIJING_TZ).strftime("%H:%M:%S")
+                if warn_ts is not None
+                else None
+            )
+        except (OverflowError, OSError, ValueError):
+            warn_time = None
+        ratio = row.get("bid_change_ratio")
+        return {
+            "ts_code": row.get("thscode"),
+            "ticker": row.get("ticker"),
+            "name": row.get("name"),
+            "warn_type": row.get("warn_type"),
+            "warn_name": row.get("warn_name"),
+            "warn_time": warn_time,
+            "bid_price": row.get("bid_price"),
+            # 扶摇 bid_change_ratio 为小数比例，统一转百分数原值展示
+            "bid_pct": round(float(ratio) * 100, 2) if isinstance(ratio, (int, float)) else None,
+            "bid_amount": row.get("bid_amount"),
+            "previous_amount": row.get("previous_amount"),
+            "explain": row.get("explain"),
+            "grade": row.get("grade"),
+            "related_block": row.get("related_block"),
+        }
+
+    def get_auction_opportunity_dates(self) -> Dict[str, Any]:
+        """集合竞价可选交易日期（YYYYMMDD 升序 + latest_date；缓存 10 分钟）。"""
+        with self._lock:
+            cached = self._opportunity_dates_cache
+        if cached and time.monotonic() - cached[0] < OPPORTUNITY_DATES_FRESH_SECONDS:
+            return copy.deepcopy(cached[1])
+        try:
+            data = self.client.auction_opportunity_dates()
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, OPPORTUNITY_DATES_FRESH_SECONDS, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        latest = str(data.get("latest_date") or "").replace("-", "") or None
+        payload = {
+            "dates": [
+                str(d).replace("-", "")
+                for d in (data.get("dates") or [])
+                if str(d).strip()
+            ],
+            "latest_date": latest,
+            "server_ts": data.get("timestamp") or _now_ms(),
+        }
+        with self._lock:
+            self._opportunity_dates_cache = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    def get_abnormal_monitor(self, state: str = "current", page: int = 1, size: int = 30) -> Dict[str, Any]:
+        """异动股票监控名单（state current/history；当日缓存 10 分钟，历史永久）。"""
+        if state not in ("current", "history"):
+            raise ValueError("state 取值须为 current/history")
+        size = min(max(int(size), 1), 30)
+        page = max(int(page), 1)
+        key = (state, page, size)
+        with self._lock:
+            cached = self._abnormal_cache.get(key)
+        fresh = ABNORMAL_FRESH_SECONDS if state == "current" else 24 * 3600.0
+        if cached and time.monotonic() - cached[0] < fresh:
+            payload = copy.deepcopy(cached[1])
+            payload["cached"] = True
+            return payload
+
+        try:
+            data = self.client.abnormal_monitor_list(state=state, page=page, size=size)
+        except FuyaoError as exc:
+            stale = self._serve_stale(cached, fresh, exc)
+            if stale is not None:
+                return stale
+            raise
+
+        pagination = data.get("pagination") or {}
+        payload = {
+            "state": state,
+            "page": page,
+            "size": size,
+            "total": int(pagination.get("total") or len(data.get("item") or [])),
+            "has_next": bool(pagination.get("has_next")),
+            "items": [self._normalize_abnormal_item(row) for row in data.get("item") or []],
+            "server_ts": _now_ms(),
+        }
+        with self._lock:
+            evict_oldest(self._abnormal_cache, POOL_CACHE_MAX_ENTRIES)
+            self._abnormal_cache[key] = (time.monotonic(), copy.deepcopy(payload))
+        return payload
+
+    @staticmethod
+    def _normalize_abnormal_item(row: Dict[str, Any]) -> Dict[str, Any]:
+        # 实测 monitor_label 直接返回「严重异动/重点监控」文案（文档为 1/2 码口径），两者都兼容
+        label = str(row.get("monitor_label") or "")
+        return {
+            "ts_code": row.get("thscode"),
+            "name": row.get("name"),
+            "start_date": beijing_ms_to_ymd(row.get("start_date_ms")),
+            "end_date": beijing_ms_to_ymd(row.get("end_date_ms")),
+            "monitor_type": row.get("monitor_type"),
+            "severe": "严重" in label or label in ("1", "2"),
+            "monitor_label": row.get("monitor_label"),
+        }
 
     # ---- 标的检索 ----
 

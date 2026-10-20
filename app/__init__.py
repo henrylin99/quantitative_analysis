@@ -107,6 +107,8 @@ def create_app(config_name='default'):
     app.register_blueprint(realtime_monitor_bp, url_prefix='/api/realtime-analysis/monitor')
     app.register_blueprint(realtime_risk_bp, url_prefix='/api/realtime-analysis/risk')
     app.register_blueprint(realtime_report_bp, url_prefix='/api/realtime-analysis/reports')
+    from app.api.realtime_auction import realtime_auction_bp
+    app.register_blueprint(realtime_auction_bp, url_prefix='/api/realtime-analysis/auction')
     app.register_blueprint(websocket_api_bp, url_prefix='/api/websocket')
     app.register_blueprint(data_jobs_bp)
     app.register_blueprint(ai_assistant_bp)

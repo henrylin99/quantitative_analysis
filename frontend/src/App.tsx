@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect, Component, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
+  Activity, AlarmClock, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
   ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, Globe, HeartPulse, Home,
   LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon, DollarSign,
   Newspaper, PieChart, Plug, Radar, Radio, Search, Shield, Star, Sun, Timer,
@@ -40,6 +40,7 @@ const RtMonitorPage = lazy(() => import('./pages/RtMonitorPage'))
 const RtRiskPage = lazy(() => import('./pages/RtRiskPage'))
 const RtReportsPage = lazy(() => import('./pages/RtReportsPage'))
 const RtWebsocketPage = lazy(() => import('./pages/RtWebsocketPage'))
+const RtAuctionPage = lazy(() => import('./pages/RtAuctionPage'))
 const AiWorkbenchPage = lazy(() => import('./pages/AiWorkbenchPage'))
 const Text2SqlPage = lazy(() => import('./pages/Text2SqlPage'))
 
@@ -108,6 +109,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/realtime-analysis/indicators', label: '技术指标', icon: Timer },
       { to: '/realtime-analysis/signals', label: '交易信号', icon: Zap },
       { to: '/realtime-analysis/monitor', label: '实时监控', icon: Radio },
+      { to: '/realtime-analysis/auction', label: '竞价与异动', icon: AlarmClock },
       { to: '/realtime-analysis/risk', label: '风险管理', icon: Shield },
       { to: '/realtime-analysis/reports', label: '报告管理', icon: FileText },
       { to: '/realtime-analysis/websocket', label: '推送管理', icon: Plug },
@@ -417,6 +419,7 @@ function Shell() {
             <Route path="/realtime-analysis/indicators" element={<LazyRoute><RtIndicatorsPage /></LazyRoute>} />
             <Route path="/realtime-analysis/signals" element={<LazyRoute><RtSignalsPage /></LazyRoute>} />
             <Route path="/realtime-analysis/monitor" element={<LazyRoute><RtMonitorPage /></LazyRoute>} />
+            <Route path="/realtime-analysis/auction" element={<LazyRoute><RtAuctionPage /></LazyRoute>} />
             <Route path="/realtime-analysis/risk" element={<LazyRoute><RtRiskPage /></LazyRoute>} />
             <Route path="/realtime-analysis/reports" element={<LazyRoute><RtReportsPage /></LazyRoute>} />
             <Route path="/realtime-analysis/websocket" element={<LazyRoute><RtWebsocketPage /></LazyRoute>} />
