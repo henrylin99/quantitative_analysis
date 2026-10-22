@@ -581,7 +581,7 @@ export default function StockDetailPage() {
             <h6 className="panel-title">
               <span className="kicker" />
               历史数据
-              <span className="chip">展示最新 20 条</span>
+              <span className="chip">展示最新 {historyLimit} 条</span>
             </h6>
             <div className="seg" role="group">
               {[30, 60, 120].map((n) => (
@@ -606,7 +606,7 @@ export default function StockDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {(history ?? []).slice(0, 20).map((row) => (
+                {(history ?? []).slice(0, historyLimit).map((row) => (
                   <tr key={row.trade_date}>
                     <td>{row.trade_date}</td>
                     <td className="num">{formatNumber(row.open, 2)}</td>
