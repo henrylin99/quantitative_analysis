@@ -8,18 +8,26 @@ alpha191 因子（alpha_001~alpha_191）走全市场宽面板批量计算
 （Alpha191FactorService.calculate_many：面板只加载一次），逐因子调用会
 各自重复加载 400 天预热面板，量级上不可行。
 
-区间模式（START/END 跨多日且未指定因子清单）的三个关键路径：
+区间模式（START/END 跨多日且未指定股票清单）的四个关键路径：
 
 1. 内置与自定义因子按「逐因子整段向量化」计算：每个数据源全区间只读
    一次（内置因子间共享 data_cache），而不是逐日重复读取滚动预热窗。
-2. 落库走 _BulkSaver 跨因子缓冲：factor_values 按交易日分区，分区读改写
-   的代价随分区行数线性增长（百万行级分区单次读改写约 0.2s，全区间
-   664 个分区 ≈ 2 分钟）；逐因子落库时 N 个因子就是 N 遍全分区读改写。
-   缓冲多个因子后一次 flush，读改写次数降到每缓冲组一遍。
+2. 落库走 _BulkSaver 跨因子缓冲 + staging：factor_values 按交易日分区，
+   分区读改写的代价随分区行数线性增长（百万行级分区单次读改写约
+   0.5s，全区间 670 个分区 ≈ 6 分钟）；逐因子落库时 N 个因子就是
+   N 遍全分区读改写，跨因子缓冲也只能降到每缓冲组一遍。区间模式下
+   flush 只写 staging 片段（不触碰线上分区），作业收尾
+   commit_staged_values 把每个分区一次性合并落盘——线上分区全程
+   只被读改写一次。
 3. alpha191 批量按「已有覆盖」跳过：189 个因子的全区间重算本身是
    十小时级计算；显式点名（DATA_JOB_PARAM_FACTOR_IDS）的因子不跳过。
+   单日模式同样跳过「当日 alpha 已全覆盖」的重跑（覆盖扫描只读
+   当日分区的 factor_id 列，代价可忽略）。
+4. 作业失败时 staging 片段留在原地（线上分区未被触碰），下次区间
+   回填启动时整体丢弃，不会混入过时数据。
 
-单日模式仍按日截面走 calculate_all_factors，行为不变。
+单日模式仍按日截面走 calculate_all_factors，行为不变（落库直接
+save_values，一到两个分区的读改写代价可忽略）。
 
 Usage:
     python app/utils/factor_compute.py
@@ -29,8 +37,9 @@ Usage:
     DATA_JOB_START_DATE/_END_DATE 区间模式：计算整个区间（推荐回填用）
     DATA_JOB_PARAM_FACTOR_IDS    逗号分隔的因子列表；缺省算全部因子
     DATA_JOB_PARAM_TS_CODES      逗号分隔的股票列表；缺省全市场
-    DATA_JOB_FLUSH_ROWS          批量落库缓冲行数阈值（默认 3000 万；
-                                 调小可更早落盘，测试用）
+    DATA_JOB_FLUSH_ROWS          批量落库缓冲行数阈值（默认 1000 万；
+                                 staging 模式下只影响内存峰值与片段
+                                 文件数，不影响线上分区写放大）
 """
 import os
 import sys
@@ -46,7 +55,7 @@ from app.services.alpha191_factor_service import ALPHA191_FACTORS, computable_fa
 from app.services.data_reader import ParquetDataReader
 from app.services.factor_engine import FactorEngine
 
-_DEFAULT_FLUSH_ROWS = 30_000_000
+_DEFAULT_FLUSH_ROWS = 10_000_000
 
 
 def _split_env(name):
@@ -62,18 +71,22 @@ class _BulkSaver:
     save_values 按交易日分区做读-改-写：逐因子落库时，每个因子都要把
     全部涉及分区各重写一遍（分区含 189 个 alpha 时约百万行/日，全区间
     单因子就要分钟级）。这里把多个因子的长表压成 category/datetime
-    紧凑 dtype 攒在内存里，攒够 FLUSH_ROWS 行后按「同因子整体替换」
-    一次落盘，每个分区的读改写次数从每因子一次降到每缓冲组一次。
+    紧凑 dtype 攒在内存里，攒够 FLUSH_ROWS 行后成组落盘。
 
-    flush 失败时抛 RuntimeError 并记录 last_failed_ids / last_failed_rows，
+    staged=True（区间全市场回填）：flush 只写 staging 片段文件，
+    线上分区完全不触碰；作业收尾 commit() 把每个分区一次性合并
+    落盘（同因子整体替换语义不变）。任何一个缓冲组失败都抛
+    RuntimeError 并记录 last_failed_ids / last_failed_rows，
     缓冲随即丢弃（调用方把对应因子记为 error），不重放。
     """
 
-    def __init__(self, engine, flush_rows: int = None):
+    def __init__(self, engine, flush_rows: int = None, staged: bool = False):
         self._engine = engine
         self._flush_rows = flush_rows or int(
             os.getenv("DATA_JOB_FLUSH_ROWS", _DEFAULT_FLUSH_ROWS)
         )
+        self._staged = staged
+        self._staged_factor_ids: set = set()
         self._parts: list = []
         self._buffered_ids: list = []
         self._rows = 0
@@ -86,7 +99,7 @@ class _BulkSaver:
             return
         compact = frame.copy()
         # 紧凑 dtype：3.6M 行的因子长表从 ~700MB 压到 ~100MB，
-        # 3000 万行缓冲约 1GB 内存
+        # 1000 万行缓冲约 300MB 内存
         compact["ts_code"] = compact["ts_code"].astype("category")
         compact["trade_date"] = pd.to_datetime(compact["trade_date"], format="mixed")
         compact["factor_id"] = compact["factor_id"].astype("category")
@@ -110,6 +123,17 @@ class _BulkSaver:
             f"批量落盘 {len(failed_ids)} 个因子 / {len(frame)} 行 "
             f"({failed_ids[0]}..{failed_ids[-1]})"
         )
+        if self._staged:
+            self._staged_factor_ids.update(str(x) for x in replace_ids)
+            try:
+                self._engine.stage_factor_values(frame)
+            except Exception as exc:
+                self.last_failed_ids = failed_ids
+                self.last_failed_rows = failed_rows
+                raise RuntimeError(f"staging 落盘失败: {len(failed_ids)} 个因子: {exc}")
+            self.written += failed_rows
+            self.last_failed_ids, self.last_failed_rows = [], 0
+            return
         ok = self._engine.save_factor_values(frame, replace_factor_ids=replace_ids)
         if not ok:
             self.last_failed_ids = failed_ids
@@ -117,6 +141,17 @@ class _BulkSaver:
             raise RuntimeError(f"批量落盘失败: {len(failed_ids)} 个因子")
         self.written += failed_rows
         self.last_failed_ids, self.last_failed_rows = [], 0
+
+    def commit(self) -> int:
+        """staged 模式收尾：片段一次性合并进线上分区，返回落盘行数。"""
+        if not self._staged or not self._staged_factor_ids:
+            return 0
+        replace_ids = sorted(self._staged_factor_ids)
+        committed = self._engine.commit_staged_factor_values(
+            replace_factor_ids=replace_ids
+        )
+        self._staged_factor_ids = set()
+        return committed
 
 
 def _scan_factor_coverage(engine, start_date: str, end_date: str):
@@ -259,9 +294,16 @@ def main():
     else:
         alpha_ids = sorted(computable_factors())
 
-    # 批量回填统一走缓冲落库：区间模式跨多日，单日模式只有一两个
-    # 分区、缓冲无收益，直接落库即可
-    saver = _BulkSaver(engine)
+    # 批量回填统一走缓冲落库：区间全市场模式 flush 只写 staging 片段、
+    # 收尾一次性合并（线上分区全程只读改写一次）；指定股票清单时替换
+    # 语义不成立（会删掉未入参股票的旧值），走直接落库。单日模式只有
+    # 一两个分区、读改写代价可忽略，也直接落库
+    staged_mode = ts_codes is None and start_date != end_date
+    saver = _BulkSaver(engine, staged=staged_mode)
+    if staged_mode:
+        # 上次失败回填的残留片段整体丢弃：片段没有线上可见性，
+        # 与本次数据混着提交可能带入过时值
+        engine.factor_repo.discard_staged_values()
 
     total_saved = 0
     per_factor_stats = {}
@@ -269,10 +311,11 @@ def main():
     attempted = 0
 
     if alpha_ids:
-        if factor_ids is None and ts_codes is None and start_date != end_date:
-            # 区间全市场回填：先扫已有覆盖，跳过已完成回填的 alpha——
-            # 189 个因子的全区间重算是十小时级计算，覆盖已达标时纯属重写。
-            # 单日/点名/部分股票清单不做跳过（扫描本身要遍历全部分区）。
+        if factor_ids is None and ts_codes is None:
+            # 先扫已有覆盖，跳过已完成回填的 alpha——189 个因子的全区间
+            # 重算是十小时级计算，覆盖已达标时纯属重写；单日模式同样
+            # 适用（当日 alpha 已全覆盖的重跑直接跳过，覆盖扫描只读
+            # 涉及分区的 factor_id 列）。点名因子/部分股票清单不跳过。
             factor_cov, date_counts = _scan_factor_coverage(
                 engine, start_date, end_date
             )
@@ -401,6 +444,18 @@ def main():
                 for fid in saver.last_failed_ids:
                     per_factor_stats[fid] = "error: 批量落盘失败"
             total_saved += saver.written - saved_before
+
+    if staged_mode and saver.written:
+        # staging 收尾：把片段一次性合并进线上分区。此前各阶段计数的
+        # total_saved 是「已 staged 行数」，提交成功后才真正落在线上
+        # 分区；提交失败必须整作业判失败（重跑会重建 staging）
+        try:
+            committed = saver.commit()
+            logger.info(f"staging 提交完成: {committed} 行落盘")
+        except Exception as e:
+            logger.error(f"staging 提交失败: {e}")
+            print(f"staging 提交失败: {e}")
+            sys.exit(1)
 
     print(f"因子计算完成: {start_date} ~ {end_date}, 共写入 {total_saved} 条")
     print(per_factor_stats)

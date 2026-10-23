@@ -56,6 +56,9 @@ def test_alpha_and_custom_factors_route_to_batch_and_per_factor(factor_compute, 
 
     fake_engine = SimpleNamespace(
         data_reader=object(),
+        factor_repo=SimpleNamespace(discard_staged_values=lambda: None),
+        stage_factor_values=lambda df: len(df),
+        commit_staged_factor_values=lambda replace_factor_ids=None: 2,
         save_factor_values=lambda df, replace_factor_ids=None: len(df),
         calculate_factor=lambda factor_id, ts_codes, start, end, data_cache=None: pd.DataFrame({
             'ts_code': ['000001.SZ'],
@@ -110,6 +113,9 @@ def test_all_factors_path_includes_alpha_batch(factor_compute, monkeypatch, caps
 
     fake_engine = SimpleNamespace(
         data_reader=object(),
+        factor_repo=SimpleNamespace(discard_staged_values=lambda: None),
+        stage_factor_values=lambda df: len(df),
+        commit_staged_factor_values=lambda replace_factor_ids=None: 0,
         save_factor_values=lambda df: 0,
         builtin_factors={'momentum_1d': object(), 'alpha_001': object()},
         factor_definitions={'custom_ma': object()},
@@ -162,6 +168,10 @@ def test_single_day_mode_keeps_cross_section_path(factor_compute, monkeypatch, c
 
     fake_engine = SimpleNamespace(
         data_reader=object(),
+        # 单日模式现在也扫当日覆盖（只读当日分区 factor_id 列）
+        factor_repo=SimpleNamespace(
+            TABLE_VALUES='factor_values',
+            store=SimpleNamespace(list_partitions=lambda name: [])),
         save_factor_values=lambda df, replace_factor_ids=None: True,
         builtin_factors={'momentum_1d': object()},
         factor_definitions={},
@@ -224,6 +234,9 @@ def test_range_backfill_skips_covered_alpha_factors(factor_compute, monkeypatch,
 
     fake_engine = SimpleNamespace(
         data_reader=object(),
+        factor_repo=SimpleNamespace(discard_staged_values=lambda: None),
+        stage_factor_values=lambda df: len(df),
+        commit_staged_factor_values=lambda replace_factor_ids=None: 0,
         save_factor_values=lambda df, replace_factor_ids=None: True,
         builtin_factors={},
         factor_definitions={},
