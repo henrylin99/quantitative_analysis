@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import datetime
 from app.utils.parquet_writer import parquet_file_lock
 from app.utils.time_utils import now_local_iso
@@ -202,9 +203,11 @@ class ParquetStateStore:
 class FactorRepository:
     TABLE_DEFINITIONS = "factor_definitions"
     TABLE_VALUES = "factor_values"
+    TABLE_STAGING = "factor_values_staging"
 
     def __init__(self, store: ParquetStateStore):
         self.store = store
+        self._frag_seq = 0
 
     def upsert_definition(self, record: Dict[str, Any]) -> Dict[str, Any]:
         now = _now_iso()
@@ -337,6 +340,164 @@ class FactorRepository:
                 )
             written += len(partition_frame)
         return written
+
+    # ------------------------------------------------------------------
+    # 批量回填的 staging 落库路径
+    # ------------------------------------------------------------------
+
+    def _staging_root(self) -> Path:
+        return self.store.base_dir / self.TABLE_STAGING
+
+    def stage_values(self, frame: pd.DataFrame) -> int:
+        """把因子值写入 staging 片段（不触碰线上分区）。
+
+        批量回填专用：一次全区间回填会缓冲上百个因子、覆盖全部分区，
+        若每次 flush 都走 save_values 的分区读-改-写，几百个百万行级
+        分区要被反复整读整写（数十次 × 每次分钟级，且被作业超时杀死）。
+        这里 flush 只把缓冲行写成 staging 片段文件（trade_date=.../
+        frag_<pid>_<seq>.parquet，文件名含 pid 与零填充序号，单写进程
+        天然无竞争、字典序即写入序），作业成功结束时由
+        commit_staged_values 把每个分区一次性合并落盘——线上分区从
+        「每缓冲组一遍读改写」降为「全程一遍」。
+
+        列规范化与 save_values 同口径（trade_date 归一化、数值列
+        float32），片段与最终分区之间不引入 dtype 漂移。约束：同一
+        时间只允许一个回填作业在 staging（factor_compute 作业天然串行；
+        并发回填会互相覆盖对方的 staging 目录）。
+        """
+        if frame is None or frame.empty:
+            return 0
+        required = {"ts_code", "trade_date", "factor_id", "factor_value"}
+        missing = required - set(frame.columns)
+        if missing:
+            raise ValueError(f"factor values missing columns: {sorted(missing)}")
+
+        df = frame.copy()
+        df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", format="mixed")
+        df = df.dropna(subset=["trade_date"])
+        if df.empty:
+            return 0
+        for column in ("factor_value", "z_score", "percentile_rank"):
+            if column in df.columns:
+                df[column] = pd.to_numeric(df[column], errors="coerce").astype("float32")
+        for column in ("ts_code", "factor_id"):
+            if column in df.columns:
+                df[column] = df[column].astype(str)
+
+        written = 0
+        self._frag_seq += 1
+        seq = self._frag_seq
+        for date_value, partition_frame in df.groupby(df["trade_date"].dt.normalize()):
+            partition_key = pd.Timestamp(date_value).strftime("%Y-%m-%d")
+            frag_dir = self._staging_root() / f"trade_date={partition_key}"
+            frag_dir.mkdir(parents=True, exist_ok=True)
+            frag_path = frag_dir / f"frag_{os.getpid()}_{seq:06d}.parquet"
+            tmp_path = frag_path.with_name(f"{frag_path.name}.tmp.{os.getpid()}")
+            try:
+                partition_frame.to_parquet(tmp_path, index=False)
+                os.replace(tmp_path, frag_path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            written += len(partition_frame)
+        return written
+
+    def _partition_factor_ids(self, partition_key: str) -> Optional[set]:
+        """只读分区的 factor_id 列（字典编码，百万行分区约 0.1s）。
+
+        返回 None 表示分区存在但读取失败，调用方应退回整读合并路径。
+        """
+        path = self.store._partition_path(self.TABLE_VALUES, "trade_date", partition_key)
+        if not path.is_file():
+            return set()
+        try:
+            table = pq.ParquetFile(path).read(columns=["factor_id"])
+            return {
+                str(v) for v in table.column("factor_id").unique().to_pylist()
+                if v is not None
+            }
+        except Exception as exc:  # noqa: BLE001 - 清单读不出时退回整读
+            logger.warning(f"读取分区因子清单失败 {partition_key}: {exc}")
+            return None
+
+    def commit_staged_values(self, replace_factor_ids=None) -> int:
+        """把 staging 片段合并进线上分区：每个分区只做一次读改写。
+
+        合并语义与 save_values 一致（replace_factor_ids 为被替换因子
+        集合，未入参因子的旧值保留）。额外优化：只读旧分区的 factor_id
+        列即可判定「旧分区因子全部让位」（全量重建形态），此时无须
+        整读旧分区，纯顺序写新分区。任何一个分区失败都抛
+        StateStoreError 中止——已提交分区保留，作业按失败整段重跑。
+        """
+        root = self._staging_root()
+        if not root.is_dir():
+            return 0
+        replace_ids = (
+            set(replace_factor_ids) if replace_factor_ids is not None else None
+        )
+        committed = 0
+        try:
+            partition_dirs = sorted(
+                d for d in root.iterdir()
+                if d.is_dir() and d.name.startswith("trade_date=")
+            )
+            for part_dir in partition_dirs:
+                partition_key = part_dir.name.split("=", 1)[1]
+                frag_paths = sorted(part_dir.glob("frag_*.parquet"))
+                if not frag_paths:
+                    shutil.rmtree(part_dir, ignore_errors=True)
+                    continue
+                staged = pd.concat(
+                    [pd.read_parquet(p) for p in frag_paths], ignore_index=True
+                )
+                with self.store.locked(self.TABLE_VALUES):
+                    skip_existing_read = False
+                    if replace_ids is not None:
+                        existing_ids = self._partition_factor_ids(partition_key)
+                        if existing_ids is not None and existing_ids <= replace_ids:
+                            skip_existing_read = True
+                    existing = (
+                        pd.DataFrame()
+                        if skip_existing_read
+                        else self.store.read_partition(
+                            self.TABLE_VALUES, "trade_date", partition_key
+                        )
+                    )
+                    if existing.empty:
+                        combined = staged
+                    elif replace_ids:
+                        # 整体替换路径：被替换因子的旧值直接让位，
+                        # 不做全分区排序去重（与 save_values 同口径）
+                        keep = ~existing["factor_id"].isin(replace_ids)
+                        combined = pd.concat(
+                            [existing[keep], staged], ignore_index=True
+                        )
+                    else:
+                        combined = pd.concat([existing, staged], ignore_index=True)
+                        combined = self._dedupe_values(combined)
+                    if replace_ids:
+                        key_cols = [c for c in ("ts_code", "trade_date", "factor_id")
+                                    if c in combined.columns]
+                        if key_cols:
+                            combined = combined.drop_duplicates(
+                                subset=key_cols, keep="last"
+                            )
+                    self.store.write_partition(
+                        self.TABLE_VALUES, "trade_date", partition_key, combined
+                    )
+                shutil.rmtree(part_dir, ignore_errors=True)
+                committed += len(staged)
+        finally:
+            # staging 根目录空了就移除；非空（本次有失败分区）保留待重试
+            try:
+                root.rmdir()
+            except OSError:
+                pass
+        return committed
+
+    def discard_staged_values(self) -> None:
+        """丢弃全部 staging 片段（清理上次失败回填的残留）。"""
+        shutil.rmtree(self._staging_root(), ignore_errors=True)
 
     def _migrate_legacy_values(self) -> None:
         """旧单文件 factor_values.parquet 一次性迁移到按日分区。

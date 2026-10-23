@@ -203,18 +203,24 @@ class Alpha191FactorService:
     def _finalize_factor(self, wide: pd.DataFrame, factor_id: str,
                          start_norm: str, end_norm: str,
                          ts_codes: Optional[List[str]]):
-        """±inf 清洗 → 长表 → 区间/股票过滤。无有效值返回 None。"""
-        # 除零/对数非正边界会产生 ±inf，统一置 NaN 后再落库，
-        # 否则 inf 会污染下游 z_score / percentile 统计
-        wide = wide.replace([np.inf, -np.inf], np.nan)
-        long_df = self._to_long(wide, factor_id)
-        # 预热窗数据只参与滚动计算，不进入结果
-        long_df = long_df[
-            (long_df["trade_date"] >= start_norm)
-            & (long_df["trade_date"] <= end_norm)
-        ]
+        """裁剪到输出区间 → 长表 → 截面统计。无有效值返回 None。
+
+        先按日期/股票裁剪宽面板再 _to_long：截面统计（percentile_rank/
+        z_score）只按 trade_date 分组、仅依赖当日截面，裁剪先后不影响
+        数值；但面板含 400 天预热窗，旧顺序在整段预热面板上做
+        stack+groupby 统计后再过滤，单日模式下这段统计全是白算。
+        ±inf 清洗在 _to_long 内完成（零方差滚动窗会产出 inf，入库会
+        污染下游 z_score 统计）。
+        """
+        date_mask = (wide.index >= start_norm) & (wide.index <= end_norm)
+        if not date_mask.any():
+            logger.warning(f"{factor_id}: 区间内无有效值")
+            return None
+        wide = wide.loc[date_mask]
         if ts_codes:
-            long_df = long_df[long_df["ts_code"].isin(set(ts_codes))]
+            wanted_codes = set(ts_codes)
+            wide = wide[[c for c in wide.columns if c in wanted_codes]]
+        long_df = self._to_long(wide, factor_id)
         long_df = long_df.reset_index(drop=True)
         if long_df.empty:
             logger.warning(f"{factor_id}: 区间内无有效值")

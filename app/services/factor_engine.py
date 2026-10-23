@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-from scipy import stats
 from loguru import logger
 
 from app.services.factor_expression_engine import FactorExpressionEngine
@@ -479,9 +478,12 @@ class FactorEngine:
             return pd.DataFrame()
 
         df = df.sort_values(['ts_code', 'trade_date'])
+        # rolling.rank 与 scipy percentileofscore(kind='rank') 同口径
+        # （窗口内平均名次 / 有效样本数），消除逐窗口 Python 回调——
+        # rolling.apply 回调在全市场 252 日窗口上是该因子的主要耗时
         df['factor_value'] = df.groupby('ts_code')[value_col].transform(
-            lambda s: s.rolling(252, min_periods=20).apply(
-                lambda x: stats.percentileofscore(x, x.iloc[-1]) / 100
+            lambda s: s.rolling(252, min_periods=20).rank(
+                method='average', pct=True
             )
         )
         return self._finalize_factor_result(df, 'factor_value', factor_id)
@@ -534,6 +536,21 @@ class FactorEngine:
         # 统一输出 YYYY-MM-DD，避免混合格式字符串参与后续比较
         return max(stamps).strftime("%Y-%m-%d")
 
+    def _load_open_trade_dates(self) -> np.ndarray:
+        """升序开市日数组（datetime64[ns]），读不到日历时返回空数组。"""
+        if self._open_trade_dates_cache is None:
+            try:
+                cal = self.data_reader.get_trade_calendar()
+                is_open = pd.to_numeric(cal.get("is_open"), errors="coerce") == 1
+                dates = pd.to_datetime(
+                    cal.loc[is_open, "cal_date"].astype(str), format="%Y%m%d", errors="coerce"
+                ).dropna()
+                self._open_trade_dates_cache = np.sort(dates.unique())
+            except Exception as e:
+                logger.warning(f"读取交易日历失败，公告日不对齐: {e}")
+                self._open_trade_dates_cache = np.array([], dtype="datetime64[ns]")
+        return self._open_trade_dates_cache
+
     def _snap_to_trade_date(self, date_text: str) -> Optional[str]:
         """把公告日向后对齐到第一个交易日。
 
@@ -547,19 +564,7 @@ class FactorEngine:
         if pd.isna(ts):
             return None
 
-        if self._open_trade_dates_cache is None:
-            try:
-                cal = self.data_reader.get_trade_calendar()
-                is_open = pd.to_numeric(cal.get("is_open"), errors="coerce") == 1
-                dates = pd.to_datetime(
-                    cal.loc[is_open, "cal_date"].astype(str), format="%Y%m%d", errors="coerce"
-                ).dropna()
-                self._open_trade_dates_cache = np.sort(dates.unique())
-            except Exception as e:
-                logger.warning(f"读取交易日历失败，公告日不对齐: {e}")
-                self._open_trade_dates_cache = np.array([], dtype="datetime64[ns]")
-
-        arr = self._open_trade_dates_cache
+        arr = self._load_open_trade_dates()
         if arr.size == 0:
             return ts.strftime("%Y-%m-%d")
 
@@ -570,6 +575,24 @@ class FactorEngine:
         if idx >= arr.size or ts < pd.Timestamp(arr[0]):
             return ts.strftime("%Y-%m-%d")
         return pd.Timestamp(arr[idx]).strftime("%Y-%m-%d")
+
+    def _snap_to_trade_dates(self, stamps: pd.Series) -> pd.Series:
+        """_snap_to_trade_date 的向量化版本：公告日序列批量对齐交易日。
+
+        边界口径与单值版本一致：日历为空、公告日早于日历首日或晚于
+        日历末日时保留原始日期。返回 YYYY-MM-DD 字符串序列。
+        """
+        ts = pd.to_datetime(stamps, errors="coerce")
+        arr = self._load_open_trade_dates()
+        if arr.size == 0 or ts.isna().all():
+            return ts.dt.strftime("%Y-%m-%d")
+        values = ts.to_numpy(dtype="datetime64[ns]")
+        notna = ~pd.isna(values)
+        idx = np.searchsorted(arr, values)
+        idx_clipped = np.minimum(idx, arr.size - 1)
+        in_range = notna & (values >= arr[0]) & (values <= arr[-1])
+        snapped = np.where(in_range, arr[idx_clipped], values)
+        return pd.Series(pd.to_datetime(snapped), index=ts.index).dt.strftime("%Y-%m-%d")
 
     def _prepare_quarterly_reports(self, df: pd.DataFrame, value_cols: List[str]) -> pd.DataFrame:
         """整理季度报表：按报告期升序去重，数值列转 numeric。
@@ -585,7 +608,12 @@ class FactorEngine:
             extra.append("report_type")
         out = df[list(dict.fromkeys(cols + extra))].copy()
         if "report_type" in out.columns:
-            out = out[out["report_type"].astype(str) == "1"]
+            # report_type=1 是合并报表累计值，2/4 等单季/调整表混算会污染
+            # TTM。fuyao 财务源的行不带 report_type（NaN）——它们同样是
+            # 报告期累计合并口径，缺失按 1 处理而不是整组丢弃，否则 fuyao
+            # 接管数据源后基本面因子会静默停在旧数据的末日
+            keep_type = out["report_type"].where(out["report_type"].notna(), "1")
+            out = out[keep_type.astype(str) == "1"]
         out["end_date"] = pd.to_datetime(out["end_date"], errors="coerce", format="mixed")
         out = out.dropna(subset=["end_date"])
         # 同一报表期存在多版本（修正公告）时按最新公告日取舍，
@@ -617,13 +645,47 @@ class FactorEngine:
             return None
         return self._snap_to_trade_date(max(stamps))
 
+    @staticmethod
+    def _effective_ann_date(df: pd.DataFrame) -> pd.Series:
+        """每行报表的生效公告日：max(f_ann_date, ann_date)，两者皆缺失时
+        退回 end_date——与 _point_in_time_stamp 的单行口径一致。
+
+        向量化路径用它配合 groupby-rolling 求「窗口内孰晚」，替代旧
+        逐窗口 Python 回调。end_date 经 _prepare_quarterly_reports
+        dropna 保证非空，因此结果不会是 NaT。
+        """
+        parts = [
+            pd.to_datetime(df[col], errors="coerce", format="mixed").dt.as_unit("ns")
+            for col in ("f_ann_date", "ann_date") if col in df.columns
+        ]
+        if parts:
+            eff = pd.concat(parts, axis=1).max(axis=1)
+        else:
+            eff = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+        end_ts = pd.to_datetime(df["end_date"], errors="coerce", format="mixed").dt.as_unit("ns")
+        return eff.fillna(end_ts)
+
+    @staticmethod
+    def _rolling_max_stamps(stamps: pd.Series, window: int) -> pd.Series:
+        """datetime 序列的 rolling max——pandas rolling 聚合不支持
+        datetime dtype，统一转 ns 整数刻度走 int 通道再回 datetime。"""
+        ticks = stamps.dt.as_unit("ns").astype("int64")
+        return pd.to_datetime(ticks.rolling(window).max(), unit="ns")
+
     def _ttm_level_factor(self, data: Dict[str, pd.DataFrame], factor_id: str,
                           income_col: str, balance_col: str) -> pd.DataFrame:
-        """ROE/ROA 类 TTM 水平因子：逐季度生成 point-in-time 快照。
+        """ROE/ROA 类 TTM 水平因子：逐季度生成 point-in-time 快照（向量化）。
 
         旧实现只对每股最新一期落库一条记录，导致历史任意日期都查不到
         基本面因子，历史选股实际退化成纯技术面。这里改为每期公告后
         生成一条快照，trade_date 取所用报表公告日（对齐到交易日）。
+
+        口径与旧逐股循环一致：TTM 取「去重后连续 4 条季报记录」求和
+        （任一缺失该期不成立）、分母取「end_date 不晚于当前报告期的
+        最近 2 条资产负债表记录」均值（任一缺失/非正不成立）、打点取
+        窗口内全部所用报表生效公告日的孰晚值。向量化用
+        groupby-rolling(4)/rolling(2) + merge_asof 实现，消除
+        5568 股 × 每股全表布尔过滤的 O(N²) 热点。
         """
         if data.get("income") is None or data["income"].empty:
             return pd.DataFrame()
@@ -634,89 +696,92 @@ class FactorEngine:
         balance_df = None
         if data.get("balance") is not None and not data["balance"].empty:
             balance_df = self._prepare_quarterly_reports(data["balance"], [balance_col])
-
-        results = []
-        for ts_code, inc in income_df.groupby("ts_code", sort=False):
-            bal = None
-            if balance_df is not None and not balance_df.empty:
-                bal = balance_df[balance_df["ts_code"] == ts_code].reset_index(drop=True)
-                if bal.empty:
-                    continue
-
-            for i in range(3, len(inc)):
-                window = inc.iloc[i - 3:i + 1]
-                if window[income_col].isna().any():
-                    continue  # 任一季度缺失则该期 TTM 不成立
-                ttm = float(window[income_col].sum())
-
-                cur_end = inc.iloc[i]["end_date"]
-                if bal is None or len(bal) == 0:
-                    continue
-                b_window = bal[bal["end_date"] <= cur_end].tail(2)
-                if len(b_window) < 2 or b_window[balance_col].isna().any():
-                    continue
-                avg_denom = float(b_window[balance_col].mean())
-                if avg_denom <= 0:
-                    continue
-
-                stamp = self._snapshot_stamp(list(window.itertuples()) + list(b_window.itertuples()))
-                if stamp is None:
-                    continue
-
-                results.append({
-                    "ts_code": ts_code,
-                    "trade_date": stamp,
-                    "factor_value": ttm / avg_denom,
-                })
-
-        if not results:
+        if balance_df is None or balance_df.empty or balance_col not in balance_df.columns:
             return pd.DataFrame()
-        result = pd.DataFrame(results)
+
+        inc = income_df.sort_values(["ts_code", "end_date"]).reset_index(drop=True)
+        inc["_eff_ann"] = self._effective_ann_date(inc)
+        grouped = inc.groupby("ts_code", sort=False)
+        inc["_ttm"] = grouped[income_col].transform(lambda s: s.rolling(4).sum())
+        inc["_inc_stamp"] = grouped["_eff_ann"].transform(
+            lambda s: self._rolling_max_stamps(s, 4)
+        )
+        inc = inc[inc["_ttm"].notna() & inc["_inc_stamp"].notna()]
+        if inc.empty:
+            return pd.DataFrame()
+
+        bal = balance_df.sort_values(["ts_code", "end_date"]).reset_index(drop=True)
+        bal["_denom"] = bal.groupby("ts_code", sort=False)[balance_col].transform(
+            lambda s: s.rolling(2).mean()
+        )
+        bal["_bal_stamp"] = self._effective_ann_date(bal)
+        bal["_bal_stamp"] = bal.groupby("ts_code", sort=False)["_bal_stamp"].transform(
+            lambda s: self._rolling_max_stamps(s, 2)
+        )
+        # merge_asof 要求 on 键全局有序（by 分组内匹配），按 end_date 排；
+        # direction="backward" 取 end_date <= 当前报告期的最近一条，
+        # 其 _denom/_bal_stamp 恰为「最近 2 条记录」的均值/孰晚公告日
+        merged = pd.merge_asof(
+            inc.sort_values("end_date")[["ts_code", "end_date", "_ttm", "_inc_stamp"]],
+            bal.sort_values("end_date")[["ts_code", "end_date", "_denom", "_bal_stamp"]],
+            on="end_date", by="ts_code", direction="backward",
+        )
+        merged = merged[
+            merged["_denom"].notna()
+            & (merged["_denom"] > 0)
+            & merged["_bal_stamp"].notna()
+        ]
+        if merged.empty:
+            return pd.DataFrame()
+
+        stamps = pd.concat(
+            [merged["_inc_stamp"], merged["_bal_stamp"]], axis=1
+        ).max(axis=1)
+        merged["trade_date"] = self._snap_to_trade_dates(stamps)
+        merged["factor_value"] = merged["_ttm"] / merged["_denom"]
+        result = merged[["ts_code", "trade_date", "factor_value"]]
         # 年报与一季报同日公告时同一 trade_date 会产生两条快照，
-        # 保留后者（报告期更新、信息集更完整）
+        # 保留报告期更新的一条（行序已按 end_date 升序，与旧循环的
+        # 迭代顺序一致）
         result = result.drop_duplicates(subset=["ts_code", "trade_date"], keep="last")
         result["factor_id"] = factor_id
-        return result[["ts_code", "trade_date", "factor_id", "factor_value"]]
+        return result[["ts_code", "trade_date", "factor_id", "factor_value"]].reset_index(drop=True)
 
     def _yoy_ttm_growth_factor(self, data: Dict[str, pd.DataFrame], factor_id: str,
                                income_col: str) -> pd.DataFrame:
-        """同比增长类因子：TTM vs 去年同期 TTM，逐期 point-in-time 快照。"""
+        """同比增长类因子：TTM vs 去年同期 TTM，逐期 point-in-time 快照
+        （向量化，口径与旧逐股循环一致）。"""
         if data.get("income") is None or data["income"].empty:
             return pd.DataFrame()
         income_df = self._prepare_quarterly_reports(data["income"], [income_col])
         if income_df.empty or income_col not in income_df.columns:
             return pd.DataFrame()
 
-        results = []
-        for ts_code, inc in income_df.groupby("ts_code", sort=False):
-            for i in range(7, len(inc)):
-                current = inc.iloc[i - 3:i + 1]
-                previous = inc.iloc[i - 7:i - 3]
-                if current[income_col].isna().any() or previous[income_col].isna().any():
-                    continue
-                prev_ttm = float(previous[income_col].sum())
-                if prev_ttm <= 0:
-                    continue
-                growth = (float(current[income_col].sum()) - prev_ttm) / prev_ttm
-
-                stamp = self._snapshot_stamp(list(current.itertuples()))
-                if stamp is None:
-                    continue
-
-                results.append({
-                    "ts_code": ts_code,
-                    "trade_date": stamp,
-                    "factor_value": growth,
-                })
-
-        if not results:
+        inc = income_df.sort_values(["ts_code", "end_date"]).reset_index(drop=True)
+        inc["_eff_ann"] = self._effective_ann_date(inc)
+        grouped = inc.groupby("ts_code", sort=False)
+        inc["_ttm"] = grouped[income_col].transform(lambda s: s.rolling(4).sum())
+        inc["_prev_ttm"] = grouped[income_col].transform(
+            lambda s: s.rolling(4).sum().shift(4)
+        )
+        inc["_stamp"] = grouped["_eff_ann"].transform(
+            lambda s: self._rolling_max_stamps(s, 4)
+        )
+        out = inc[
+            inc["_ttm"].notna()
+            & inc["_prev_ttm"].notna()
+            & (inc["_prev_ttm"] > 0)
+            & inc["_stamp"].notna()
+        ].copy()
+        if out.empty:
             return pd.DataFrame()
-        result = pd.DataFrame(results)
-        # 年报与一季报同日公告时同一 trade_date 会产生两条快照，
-        # 保留后者（报告期更新、信息集更完整）
+
+        out["factor_value"] = (out["_ttm"] - out["_prev_ttm"]) / out["_prev_ttm"]
+        out["trade_date"] = self._snap_to_trade_dates(out["_stamp"])
+        result = out[["ts_code", "trade_date", "factor_value"]]
         result = result.drop_duplicates(subset=["ts_code", "trade_date"], keep="last")
         result["factor_id"] = factor_id
-        return result[["ts_code", "trade_date", "factor_id", "factor_value"]]
+        return result[["ts_code", "trade_date", "factor_id", "factor_value"]].reset_index(drop=True)
 
     def _roe_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
         """ROE因子（TTM，按公告日逐期快照）"""
@@ -1015,6 +1080,21 @@ class FactorEngine:
         except Exception as e:
             logger.error(f"保存因子值失败: {e}")
             return False
+
+    def stage_factor_values(self, df: pd.DataFrame) -> int:
+        """因子值写入 staging 片段（批量回填缓冲 flush 专用）。
+
+        见 FactorRepository.stage_values：flush 不做线上分区的读-改-写，
+        作业收尾由 commit_staged_factor_values 一次性合并落盘。失败直接
+        抛错（调用方 _BulkSaver 按 RuntimeError 处理缓冲组失败）。
+        """
+        return self.factor_repo.stage_values(df)
+
+    def commit_staged_factor_values(self, replace_factor_ids=None) -> int:
+        """把 staging 片段一次性合并进线上分区（每分区一次读改写）。"""
+        return self.factor_repo.commit_staged_values(
+            replace_factor_ids=replace_factor_ids
+        )
     
     def get_factor_exposure(self, factor_id: str, trade_date: str) -> pd.DataFrame:
         """获取因子暴露度"""
