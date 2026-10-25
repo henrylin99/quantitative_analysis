@@ -583,7 +583,7 @@ export default function ScreenPage() {
                   {result.stocks.map((row) => (
                     <tr key={row.ts_code}>
                       <td>
-                        <code>{row.symbol}</code>
+                        <code>{row.ts_code}</code>
                       </td>
                       <td style={{ fontWeight: 600 }}>{row.name}</td>
                       <td>{row.industry ?? '--'}</td>

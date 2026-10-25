@@ -23,13 +23,14 @@ export default function StocksPage() {
   const [data, setData] = useState<StockListData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [includeDelisted, setIncludeDelisted] = useState(false)
 
   useEffect(() => {
     fetchIndustries().then(setIndustries).catch(() => setIndustries([]))
     fetchAreas().then(setAreas).catch(() => setAreas([]))
   }, [])
 
-  const load = useCallback(async (targetPage: number, targetFilters: Filters) => {
+  const load = useCallback(async (targetPage: number, targetFilters: Filters, targetIncludeDelisted: boolean) => {
     setLoading(true)
     setError(null)
     try {
@@ -39,6 +40,7 @@ export default function StocksPage() {
         industry: targetFilters.industry || undefined,
         area: targetFilters.area || undefined,
         search: targetFilters.search || undefined,
+        include_delisted: targetIncludeDelisted || undefined,
       })
       setData(result)
       setPage(targetPage)
@@ -51,19 +53,25 @@ export default function StocksPage() {
   }, [])
 
   useEffect(() => {
-    load(1, EMPTY_FILTERS)
-  }, [load])
+    load(1, EMPTY_FILTERS, includeDelisted)
+  }, [load, includeDelisted])
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault()
     setApplied(filters)
-    load(1, filters)
+    load(1, filters, includeDelisted)
   }
 
   const handleReset = () => {
     setFilters(EMPTY_FILTERS)
     setApplied(EMPTY_FILTERS)
-    load(1, EMPTY_FILTERS)
+    load(1, EMPTY_FILTERS, includeDelisted)
+  }
+
+  const toggleDelisted = (checked: boolean) => {
+    setIncludeDelisted(checked)
+    // 状态变化经 useEffect 自动重载回第一页
+    setPage(1)
   }
 
   const totalPages = data?.total_pages ?? 0
@@ -126,13 +134,23 @@ export default function StocksPage() {
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               />
             </div>
-            <div className="col-md-3 d-flex gap-2">
+            <div className="col-md-3 d-flex gap-2 align-items-center">
               <button type="submit" className="btn btn-primary" style={{ minWidth: 96 }}>
                 筛选
               </button>
               <button type="button" className="btn btn-outline-secondary" onClick={handleReset}>
                 重置
               </button>
+            </div>
+            <div className="col-12">
+              <label className="d-flex align-items-center gap-2" style={{ userSelect: 'none', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={includeDelisted}
+                  onChange={(e) => toggleDelisted(e.target.checked)}
+                />
+                显示已退市股票
+              </label>
             </div>
           </form>
         </div>
@@ -142,7 +160,7 @@ export default function StocksPage() {
         <div className="panel-body tight table-container">
           {error ? (
             <div className="p-3">
-              <ErrorState message={error} onRetry={() => load(page, applied)} />
+              <ErrorState message={error} onRetry={() => load(page, applied, includeDelisted)} />
             </div>
           ) : loading ? (
             <TableSkeleton rows={10} />
@@ -193,19 +211,19 @@ export default function StocksPage() {
                   <nav>
                     <ul className="pagination pagination-sm mb-0">
                       <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
-                        <button className="page-link" onClick={() => load(page - 1, applied)}>
+                        <button className="page-link" onClick={() => load(page - 1, applied, includeDelisted)}>
                           上一页
                         </button>
                       </li>
                       {pageButtons().map((p) => (
                         <li key={p} className={`page-item ${p === page ? 'active' : ''}`}>
-                          <button className="page-link" onClick={() => load(p, applied)}>
+                          <button className="page-link" onClick={() => load(p, applied, includeDelisted)}>
                             {p}
                           </button>
                         </li>
                       ))}
                       <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
-                        <button className="page-link" onClick={() => load(page + 1, applied)}>
+                        <button className="page-link" onClick={() => load(page + 1, applied, includeDelisted)}>
                           下一页
                         </button>
                       </li>

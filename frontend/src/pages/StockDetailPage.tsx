@@ -15,14 +15,13 @@ import {
   type FinancialStatements,
   type MoneyflowRow,
 } from '../api/stockExtra'
-import { fetchStockFactors, fetchStockHistory, fetchStockInfo } from '../api/stocks'
-import type { DailyBar, FactorRow, StockBasic } from '../api/types'
+import { fetchStockHistory, fetchStockInfo } from '../api/stocks'
+import type { DailyBar, StockBasic } from '../api/types'
 import { EmptyState, ErrorState, Loading } from '../components/StateViews'
 import { formatNumber, formatPercent, pctClass } from '../utils/format'
 
 const TABS = [
   { key: 'history', label: '历史数据' },
-  { key: 'factors', label: '技术因子' },
   { key: 'moneyflow', label: '资金流向' },
   { key: 'cyq', label: '筹码分布' },
   { key: 'financials', label: '财务数据' },
@@ -138,10 +137,6 @@ export default function StockDetailPage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
 
-  const [factors, setFactors] = useState<FactorRow[] | null>(null)
-  const [factorsLoading, setFactorsLoading] = useState(false)
-  const [factorsError, setFactorsError] = useState<string | null>(null)
-
   const [moneyflow, setMoneyflow] = useState<MoneyflowRow[] | null>(null)
   const [mfLoading, setMfLoading] = useState(false)
   const [mfError, setMfError] = useState<string | null>(null)
@@ -182,20 +177,6 @@ export default function StockDetailPage() {
         if (!isCancelled()) setHistoryLoading(false)
       })
   }, [activeTab, tsCode, historyLimit])
-
-  useLatestEffect((isCancelled) => {
-    if (activeTab !== 'factors') return
-    setFactorsLoading(true)
-    setFactorsError(null)
-    fetchStockFactors(tsCode, 20)
-      .then((d) => { if (!isCancelled()) setFactors(d) })
-      .catch((e) => {
-        if (!isCancelled()) setFactorsError(e instanceof Error ? e.message : '技术因子加载失败')
-      })
-      .finally(() => {
-        if (!isCancelled()) setFactorsLoading(false)
-      })
-  }, [activeTab, tsCode])
 
   useLatestEffect((isCancelled) => {
     if (activeTab !== 'moneyflow') return
@@ -266,54 +247,6 @@ export default function StockDetailPage() {
   }, [activeTab, tsCode])
 
   const latestClose = history && history.length > 0 ? history[0].close : null
-
-  // —— 技术因子图（DIF/DEA/MACD 左轴；RSI/KDJ 右轴 0-100） ——
-  const factorChartOption = useMemo(() => {
-    if (!factors || factors.length === 0) return null
-    const asc = sortByDateAsc(factors)
-    const dates = asc.map((r) => r.trade_date.slice(0, 10))
-    const line = (field: keyof FactorRow, name: string, yAxisIndex = 0) => ({
-      name,
-      type: 'line' as const,
-      yAxisIndex,
-      showSymbol: false,
-      connectNulls: false,
-      data: asc.map((r) => {
-        const v = r[field]
-        return typeof v === 'number' && !Number.isNaN(v) ? v : null
-      }),
-    })
-    const macdBar = {
-      name: 'MACD',
-      type: 'bar' as const,
-      yAxisIndex: 0,
-      data: asc.map((r) =>
-        typeof r.macd === 'number' && !Number.isNaN(r.macd)
-          ? { value: r.macd, itemStyle: { color: r.macd >= 0 ? palette.upSoft : palette.downSoft } }
-          : null,
-      ),
-    }
-    return {
-      dataZoom: [
-        { type: 'inside', start: 30, end: 100 },
-        { type: 'slider', start: 30, end: 100, height: 18, bottom: 6 },
-      ],
-      legend: { type: 'scroll', top: 0 },
-      grid: { left: 56, right: 52, top: 34, bottom: 52 },
-      tooltip: { trigger: 'axis' },
-      yAxis: [{ type: 'value' }, { type: 'value', min: 0, max: 100 }],
-      xAxis: { type: 'category', data: dates, boundaryGap: false },
-      series: [
-        line('macd_dif', 'DIF'),
-        line('macd_dea', 'DEA'),
-        macdBar,
-        line('rsi_6', 'RSI6', 1),
-        line('rsi_12', 'RSI12', 1),
-        line('kdj_k', 'KDJ-K', 1),
-        line('kdj_d', 'KDJ-D', 1),
-      ],
-    }
-  }, [factors, palette])
 
   // —— 资金流：最新一日分单买卖对撞 + 净流入趋势 ——
   const mfAsc = useMemo(() => (moneyflow ? sortByDateAsc(moneyflow) : null), [moneyflow])
@@ -507,8 +440,8 @@ export default function StockDetailPage() {
     return { latest, concentration, position }
   }, [cyqAsc, latestClose])
 
-  const tabBodyLoading = { history: historyLoading, factors: factorsLoading, moneyflow: mfLoading, cyq: cyqLoading, financials: finLoading, company: comLoading }[activeTab]
-  const tabBodyError = { history: historyError, factors: factorsError, moneyflow: mfError, cyq: cyqError, financials: finError, company: comError }[activeTab]
+  const tabBodyLoading = { history: historyLoading, moneyflow: mfLoading, cyq: cyqLoading, financials: finLoading, company: comLoading }[activeTab]
+  const tabBodyError = { history: historyError, moneyflow: mfError, cyq: cyqError, financials: finError, company: comError }[activeTab]
 
   return (
     <div>
@@ -516,7 +449,7 @@ export default function StockDetailPage() {
         <div>
           <h2>个股详情</h2>
           <p className="desc">
-            <code>{tsCode}</code> · 行情 / 因子 / 资金 / 筹码 / 财务 / 公司资料
+            <code>{tsCode}</code> · 行情 / 资金 / 筹码 / 财务 / 公司资料
           </p>
         </div>
       </div>
@@ -635,82 +568,6 @@ export default function StockDetailPage() {
             </table>
           </div>
         </div>
-      )}
-
-      {/* 技术因子 */}
-      {activeTab === 'factors' && !tabBodyLoading && !tabBodyError && (
-        <>
-          <div className="panel">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                技术指标趋势
-              </h6>
-            </div>
-            <div className="panel-body">
-              {factorChartOption ? <EChart option={factorChartOption} height={420} /> : <EmptyState icon="📉" text="暂无因子数据" />}
-            </div>
-          </div>
-          <div className="panel">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                因子明细
-                <span className="chip">{(factors ?? []).slice(0, 20).length} 条</span>
-              </h6>
-            </div>
-            <div className="panel-body tight table-container" style={{ maxHeight: 460 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th className="num">收盘</th>
-                    <th className="num">DIF</th>
-                    <th className="num">DEA</th>
-                    <th className="num">MACD</th>
-                    <th className="num">KDJ-K</th>
-                    <th className="num">KDJ-D</th>
-                    <th className="num">KDJ-J</th>
-                    <th className="num">RSI6</th>
-                    <th className="num">RSI12</th>
-                    <th className="num">RSI24</th>
-                    <th className="num">BOLL上</th>
-                    <th className="num">BOLL中</th>
-                    <th className="num">BOLL下</th>
-                    <th className="num">CCI</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(factors ?? []).slice(0, 20).map((row) => (
-                    <tr key={row.trade_date}>
-                      <td>{row.trade_date}</td>
-                      <td className="num">{formatNumber(row.close, 2)}</td>
-                      <td className="num">{formatNumber(row.macd_dif, 4)}</td>
-                      <td className="num">{formatNumber(row.macd_dea, 4)}</td>
-                      <td className={`num ${pctClass(row.macd)}`}>{formatNumber(row.macd, 4)}</td>
-                      <td className="num">{formatNumber(row.kdj_k, 2)}</td>
-                      <td className="num">{formatNumber(row.kdj_d, 2)}</td>
-                      <td className={`num ${row.kdj_j != null ? (row.kdj_j > 80 ? 'text-up' : row.kdj_j < 20 ? 'text-down' : '') : ''}`}>
-                        {formatNumber(row.kdj_j, 2)}
-                      </td>
-                      <td className={`num ${row.rsi_6 != null ? (row.rsi_6 > 70 ? 'text-up' : row.rsi_6 < 30 ? 'text-down' : '') : ''}`}>
-                        {formatNumber(row.rsi_6, 2)}
-                      </td>
-                      <td className="num">{formatNumber(row.rsi_12, 2)}</td>
-                      <td className="num">{formatNumber(row.rsi_24, 2)}</td>
-                      <td className="num">{formatNumber(row.boll_upper, 2)}</td>
-                      <td className="num">{formatNumber(row.boll_mid, 2)}</td>
-                      <td className="num">{formatNumber(row.boll_lower, 2)}</td>
-                      <td className={`num ${row.cci != null ? (row.cci > 100 ? 'text-up' : row.cci < -100 ? 'text-down' : '') : ''}`}>
-                        {formatNumber(row.cci, 2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
       )}
 
       {/* 资金流向 */}

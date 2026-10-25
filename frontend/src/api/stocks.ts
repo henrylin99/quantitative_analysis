@@ -7,6 +7,7 @@ export function fetchStocks(params: {
   industry?: string
   area?: string
   search?: string
+  include_delisted?: boolean
 }): Promise<StockListData> {
   return apiGet<StockListData>('/stocks', params)
 }
