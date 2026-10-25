@@ -14,14 +14,16 @@ def get_stocks():
         search = request.args.get('search')
         page = parse_int_arg('page', 1, min_val=1)
         page_size = parse_int_arg('page_size', 20, min_val=1, max_val=100)
-        
+        include_delisted = request.args.get('include_delisted', '').lower() in ('1', 'true')
+
         # 调用服务
         result = StockService.get_stock_list(
             industry=industry,
             area=area,
             search=search,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            include_delisted=include_delisted
         )
         
         return jsonify({

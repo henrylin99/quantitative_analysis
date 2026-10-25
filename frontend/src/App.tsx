@@ -87,7 +87,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/stocks', label: '股票列表', icon: List },
       { to: '/analysis', label: '技术分析', icon: Activity },
       { to: '/screen', label: '选股筛选', icon: Search },
-      { to: '/backtest', label: '策略回测', icon: FlaskConical },
     ],
   },
   {

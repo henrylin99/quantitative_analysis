@@ -63,10 +63,10 @@ class StockService:
     
     @staticmethod
     @cached(expire=1800, key_prefix='stock_basic')
-    def get_stock_list(industry=None, area=None, search=None, page=1, page_size=20):
-        """获取股票列表"""
+    def get_stock_list(industry=None, area=None, search=None, page=1, page_size=20, include_delisted=False):
+        """获取股票列表（默认剔除已退市股票）"""
         try:
-            df = _data_reader.get_stock_basic_list(industry=industry, area=area, search=search)
+            df = _data_reader.get_stock_basic_list(industry=industry, area=area, search=search, include_delisted=include_delisted)
             total = len(df)
             offset = (page - 1) * page_size
             page_df = df.iloc[offset:offset + page_size]

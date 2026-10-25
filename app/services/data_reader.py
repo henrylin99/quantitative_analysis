@@ -306,11 +306,14 @@ class ParquetDataReader:
         industry: Optional[str] = None,
         area: Optional[str] = None,
         search: Optional[str] = None,
+        include_delisted: bool = False,
     ) -> pd.DataFrame:
-        """读取 stock_basic 表，按 industry/area/search 过滤。"""
+        """读取 stock_basic 表，按 industry/area/search 过滤。默认剔除已退市（list_status != L）。"""
         df = self.get_stock_basic()
         if df.empty:
             return df
+        if not include_delisted and "list_status" in df.columns:
+            df = df[df["list_status"] == "L"]
         if industry:
             df = df[df["industry"] == industry]
         if area:
