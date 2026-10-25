@@ -83,7 +83,7 @@ export default function HomePage() {
         <div className="hero-eyebrow"><span className="status-dot" /> MARKET INTELLIGENCE · A 股研究工作台</div>
         <div className="hero-copy">
           <div>
-            <h1>量化分析终端</h1>
+            <h1>量化分析系统</h1>
             <p>从行情浏览、因子研究到策略回测，在一个工作台完成投资决策。</p>
           </div>
           <div className="hero-actions">

@@ -2,7 +2,7 @@ import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect, Component, type ReactNode } from 'react'
 import {
   Activity, AlarmClock, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
-  ExternalLink, Factory, FileText, Flag, Flame, FlaskConical, Globe, HeartPulse, Home,
+   Factory, FileText, Flag, Flame, FlaskConical, Globe, HeartPulse, Home,
   LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon, DollarSign,
   Newspaper, PieChart, Plug, Radar, Radio, Search, Shield, Star, Sun, Timer,
   TrendingUp, Trophy, Wallet, Zap,
@@ -57,6 +57,12 @@ const FundCenterPage = lazy(() => import('./pages/FundCenterPage'))
 const FundsListPage = lazy(() => import('./pages/FundsListPage'))
 const PaperTradingPage = lazy(() => import('./pages/PaperTradingPage'))
 const HkStocksPage = lazy(() => import('./pages/HkStocksPage'))
+const ValuationPage = lazy(() => import('./pages/ValuationPage'))
+const MoneyflowInsightsPage = lazy(() => import('./pages/MoneyflowInsightsPage'))
+const PeerComparePage = lazy(() => import('./pages/PeerComparePage'))
+const CorrelationPage = lazy(() => import('./pages/CorrelationPage'))
+const IntradayStatsPage = lazy(() => import('./pages/IntradayStatsPage'))
+const EventReplayPage = lazy(() => import('./pages/EventReplayPage'))
 const HkStockDetailPage = lazy(() => import('./pages/HkStockDetailPage'))
 const UsStocksPage = lazy(() => import('./pages/UsStocksPage'))
 const UsStockDetailPage = lazy(() => import('./pages/UsStockDetailPage'))
@@ -132,13 +138,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: '数据',
-    items: [
-      { to: '/data-management', label: '数据管理', icon: Database },
-      { to: '/datasources', label: '数据源中心', icon: Compass },
-    ],
-  },
-  {
     label: '试用工具',
     items: [
       { to: '/heatmap', label: '板块热力图', icon: LayoutGrid },
@@ -152,10 +151,28 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: '数据洞察',
+    items: [
+      { to: '/insights/valuation', label: '估值分位', icon: TrendingUp },
+      { to: '/insights/moneyflow', label: '资金流深历史', icon: Coins },
+      { to: '/insights/peer', label: '同业对比', icon: Layers },
+      { to: '/insights/correlation', label: '组合相关性', icon: PieChart },
+      { to: '/insights/intraday', label: '日内统计', icon: Timer },
+      { to: '/insights/events', label: '事件复盘', icon: AlarmClock },
+    ],
+  },
+  {
     label: 'AI 助手',
     items: [
       { to: '/ai-workbench', label: 'AI 工作台', icon: Brain },
       { to: '/text2sql', label: '智能查数', icon: MessageSquare },
+    ],
+  },
+  {
+    label: '数据',
+    items: [
+      { to: '/data-management', label: '数据管理', icon: Database },
+      { to: '/datasources', label: '数据源中心', icon: Compass },
     ],
   },
 ]
@@ -228,8 +245,7 @@ function Shell() {
         <NavLink className="brand" to="/">
           <span className="brand-mark">Q</span>
           <span className="brand-text">
-            量化分析终端
-            <small>REACT EDITION</small>
+            量化分析系统
           </span>
         </NavLink>
         <nav className="side-nav">
@@ -252,12 +268,6 @@ function Shell() {
             <span className="ico">{mode === 'dark' ? <Sun size={15} strokeWidth={1.8} aria-hidden /> : <Moon size={15} strokeWidth={1.8} aria-hidden />}</span>
             {mode === 'dark' ? '浅色模式' : '深色模式'}
           </button>
-          <a className="btn-ghost" href={`${OLD_SITE_BASE}/`}>
-            <span className="ico">
-              <ExternalLink size={14} strokeWidth={1.8} aria-hidden />
-            </span>{' '}
-            旧版
-          </a>
         </div>
       </aside>
       <div className="app-body">
@@ -273,6 +283,12 @@ function Shell() {
             <Route path="/heatmap" element={<LazyRoute><HeatmapPage /></LazyRoute>} />
             <Route path="/pattern-screen" element={<LazyRoute><PatternScreenPage /></LazyRoute>} />
             <Route path="/moneyflow" element={<LazyRoute><MoneyflowPage /></LazyRoute>} />
+            <Route path="/insights/valuation" element={<LazyRoute><ValuationPage /></LazyRoute>} />
+            <Route path="/insights/moneyflow" element={<LazyRoute><MoneyflowInsightsPage /></LazyRoute>} />
+            <Route path="/insights/peer" element={<LazyRoute><PeerComparePage /></LazyRoute>} />
+            <Route path="/insights/correlation" element={<LazyRoute><CorrelationPage /></LazyRoute>} />
+            <Route path="/insights/intraday" element={<LazyRoute><IntradayStatsPage /></LazyRoute>} />
+            <Route path="/insights/events" element={<LazyRoute><EventReplayPage /></LazyRoute>} />
             <Route path="/market-brief" element={<LazyRoute><MarketBriefPage /></LazyRoute>} />
             <Route path="/financial-health" element={<LazyRoute><FinancialHealthPage /></LazyRoute>} />
             <Route path="/stock-radar" element={<LazyRoute><StockRadarPage /></LazyRoute>} />
