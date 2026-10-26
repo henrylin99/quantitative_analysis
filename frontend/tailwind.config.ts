@@ -1,11 +1,11 @@
 import type { Config } from 'tailwindcss'
 
 /**
- * 新版设计体系（参考 开源参考项目 的语义 token 架构，品牌色沿用本项目靛蓝）。
+ * 新版设计体系（语义 token 架构，品牌色沿用本项目靛蓝）。
  *
  * 约定：
  * - preflight 关闭：与既有 Bootstrap 页面共存，旧页面不受影响
- * - 语义色全部映射 HSL CSS 变量（见 src/styles/tsp.css），随 data-theme 自动切换
+ * - 语义色全部映射 HSL CSS 变量（见 src/styles/app.css），随 data-theme 自动切换
  * - 暗色不使用阴影，靠 1px 边框分层
  * - 数字一律 font-mono + tabular-nums（.num 工具类）
  */

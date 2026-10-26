@@ -26,8 +26,8 @@ const fmtVol = (v) =>
   v == null ? "—" : v >= 1e9 ? (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : v >= 1e3 ? (v / 1e3).toFixed(1) + "K" : String(v);
 
 /**
- * Generic lightweight-charts v5 chart (ported from 开源参考项目 CandleChart,
- * stripped of drawing tools / measure / rect / session separators; A股红涨绿跌).
+ * Generic lightweight-charts v5 chart (stripped of drawing tools / measure /
+ * rect / session separators; A股红涨绿跌).
  *
  * - pane 0: main price series (candle/bar/line/area) + volume overlay + price-pane `overlays`
  * - panes 1..N: optional oscillator `panes` (e.g. MACD, KDJ, RSI)

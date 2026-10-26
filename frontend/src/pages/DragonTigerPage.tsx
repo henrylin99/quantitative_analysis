@@ -87,7 +87,7 @@ export default function DragonTigerPage() {
   const auctionItems = auctionQuery.data?.item ?? []
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="龙虎榜与竞价风向标"
         subtitle={

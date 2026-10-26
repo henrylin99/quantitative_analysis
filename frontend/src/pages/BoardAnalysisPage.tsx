@@ -54,7 +54,7 @@ export default function BoardAnalysisPage({ tag, title, subtitle }: BoardAnalysi
   }, [items, keyword])
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title={title}
         subtitle={subtitle}

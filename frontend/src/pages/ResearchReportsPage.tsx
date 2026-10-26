@@ -96,7 +96,7 @@ export default function ResearchReportsPage() {
   }
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="研报中心"
         subtitle={

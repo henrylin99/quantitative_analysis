@@ -247,7 +247,7 @@ export default function FundCenterPage() {
   const anyLoading = profileQuery.isLoading || perfQuery.isLoading
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="基金中心"
         subtitle={

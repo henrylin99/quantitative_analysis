@@ -61,7 +61,7 @@ export default function MarketDashboardPage() {
   const maxDist = Math.max(1, ...(data?.distribution ?? []).map((d) => d.count))
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="市场看板（数据来源--同花顺）"
         subtitle={

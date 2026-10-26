@@ -56,7 +56,7 @@ export default function FundsListPage() {
   const items = searchQuery.data?.items ?? []
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="基金列表"
         subtitle="扶摇同花顺基金检索 · 默认展示 15 只场内 ETF · 点击基金代码或名称进入基金中心"

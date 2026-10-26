@@ -205,7 +205,7 @@ export default function PaperTradingPage() {
   const alignment = alignmentQuery.data
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="模拟盘 Paper Trading"
         subtitle={

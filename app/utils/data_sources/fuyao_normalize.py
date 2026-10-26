@@ -155,7 +155,7 @@ def _finalize_daily(df: pd.DataFrame) -> pd.DataFrame:
     for col in ("open", "high", "low", "close"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # 股 → 手（向下取整，与 开源参考项目 口径一致）；元 → 千元
+    # 股 → 手（向下取整）；元 → 千元
     df["vol"] = np.floor(pd.to_numeric(df["volume"], errors="coerce") / 100.0)
     df["amount"] = pd.to_numeric(df["turnover"], errors="coerce") / 1000.0
 

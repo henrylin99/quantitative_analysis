@@ -1,14 +1,13 @@
 """TickFlow 轻量 REST 客户端（free 档兜底/校验源）。
 
-端点契约参考 开源参考项目 项目（MIT License, Copyright (c) 2026
-开源参考项目 contributors）及其封装的官方 SDK。本项目不引入
+端点契约参考开源参考项目（MIT License）及其封装的官方 SDK。本项目不引入
 ``tickflow[all]`` SDK（依赖过重），这里只封装 free 档用得到的两个 GET 接口。
 
 契约要点：
 - 认证：请求头 ``x-api-key``（注意与扶摇的 X-api-key 大小写不同，
   HTTP 头本身不区分大小写，这里遵循各服务方的惯例拼写）
 - 端点：``https://api.tickflow.org``（免费档 key 也走付费端点，
-  free-api 忽略 key；开源参考项目 的探测逻辑即以此为准）
+  free-api 忽略 key；上游开源实现的探测逻辑即以此为准）
 - 档位：日K 全档可用；除权因子 starter+；分钟K pro+。
   free 档 key 的限速约 5 rpm（单标的日K），
   **不得用于全市场批量任务**——那是 tushare/fuyao job 的职责
@@ -156,7 +155,7 @@ class TickflowClient:
     def detect_tier(self) -> str:
         """探测 key 档位：none（无效/未配置）/ free / starter+。
 
-        判据与 开源参考项目 的探测分水岭一致：
+        判据与上游开源实现的探测分水岭一致：
         有单标的日K = key 有效；有除权因子 = 付费档，否则免费档。
         """
         if not self.api_key:

@@ -1,4 +1,4 @@
-// indicators.js（移植自 开源参考项目）的宽松类型声明：
+// indicators.js 的宽松类型声明：
 // 纯函数集合，输入 bar 数组、输出 {time,value} 序列，这里统一按 any 处理。
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export declare function sma(...args: any[]): any

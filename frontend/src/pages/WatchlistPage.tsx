@@ -148,7 +148,7 @@ export default function WatchlistPage() {
   const rows = codes.map((code) => quotes[code]).filter(Boolean) as QuoteRow[]
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="自选行情"
         subtitle="扶摇实时快照 · 5s 自动刷新 · 分组 / 备注 / 价格提醒保存在服务端"

@@ -412,7 +412,7 @@ export default function LimitUpLadderPage() {
   const activeDate = up?.date ?? down?.date ?? broke?.date
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="连板天梯"
         subtitle={

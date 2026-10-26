@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import { cn } from '../../lib/cn'
 
 /**
- * 无依赖模态原语（参考 开源参考项目 Modal 模式）：
+ * 无依赖模态原语（参考开源 Modal 实现）：
  * ESC 关闭、点击遮罩关闭、焦点陷阱、aria 属性。
  */
 export function Modal({

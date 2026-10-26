@@ -302,7 +302,7 @@ export default function HotStocksPage() {
   const skyrocket = hotQuery.data?.skyrocket ?? []
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="热股榜单"
         subtitle="同花顺热股榜 / 飙升榜 / 历史排行（按市场关注度排序）"

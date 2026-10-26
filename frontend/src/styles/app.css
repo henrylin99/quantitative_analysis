@@ -1,5 +1,5 @@
 /*
- * 新版设计 token（tsp = tick-style panel）。
+ * 新版设计 token（语义色体系，见 tailwind.config.ts 映射）。
  *
  * 只服务于新页面（src/pages/market/* 等 tailwind 语义类页面），
  * 与既有 Bootstrap 体系（theme.css）共存：
@@ -42,23 +42,23 @@
 }
 
 @layer base {
-  /* 新页面挂 .tsp-root，内部细滚动条 + 边框分层；不污染旧页面 */
-  .tsp-root {
+  /* 新页面挂 .app-root，内部细滚动条 + 边框分层；不污染旧页面 */
+  .app-root {
     @apply bg-canvas text-fg-primary font-sans text-base;
   }
 
-  .tsp-root * {
+  .app-root * {
     border-color: hsl(var(--ts-border));
   }
 
-  .tsp-root ::-webkit-scrollbar {
+  .app-root ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  .tsp-root ::-webkit-scrollbar-thumb {
+  .app-root ::-webkit-scrollbar-thumb {
     @apply rounded-full bg-line;
   }
-  .tsp-root ::-webkit-scrollbar-track {
+  .app-root ::-webkit-scrollbar-track {
     background: transparent;
   }
 }

@@ -67,7 +67,7 @@ export default function DataSourceCenterPage() {
   const status = statusQuery.data
 
   return (
-    <div className="tsp-root min-h-full">
+    <div className="app-root min-h-full">
       <PageHeader
         title="数据源中心"
         subtitle="三个数据源的配置状态与健康探测 · 与数据管理页（任务执行）互补"

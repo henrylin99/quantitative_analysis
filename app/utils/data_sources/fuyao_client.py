@@ -1,8 +1,7 @@
 """扶摇（同花顺官方金融数据 API）REST 客户端。
 
-接口契约参考 开源参考项目 项目（MIT License, Copyright (c) 2026
-开源参考项目 contributors）的 backend/app/plugins/fuyao/client.py，
-按本项目技术栈改写为 requests 同步实现。该项目不携带此注释之外的义务。
+接口契约参考开源参考项目（MIT License）的 backend/app/plugins/fuyao/client.py，
+按本项目技术栈改写为 requests 同步实现。
 
 契约要点：
 - 认证：请求头 ``X-api-key``；key 从环境变量 FUYAO_API_KEY 读取
