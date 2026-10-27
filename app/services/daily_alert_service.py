@@ -334,6 +334,16 @@ class DailyAlertScheduler:
                             f"{len(record.get('alerts', []))} 条预警")
             except Exception:
                 logger.error("每日预警扫描失败", exc_info=True)
+            # 策略守护：对登记策略复验三态（健康/观察/退役），状态变化推预警。
+            # 排在扫描后：用当日链路更新过的数据评估；无登记策略时内部直接跳过
+            try:
+                from app.services.strategy_guardian_service import run_daily_guardian
+
+                guardian = run_daily_guardian()
+                if guardian.get("status_changes"):
+                    logger.info(f"策略守护：{len(guardian['status_changes'])} 条状态变化")
+            except Exception:
+                logger.warning("策略守护复验失败", exc_info=True)
             try:
                 from app.services.prediction_archive_service import PredictionArchiveService
 

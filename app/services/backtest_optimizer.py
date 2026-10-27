@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
+from app.services.robust_score import robust_score
 from app.services.single_stock_backtest import SingleStockBacktestEngine
 from app.services.stock_service import StockService
 
@@ -237,6 +238,9 @@ class BacktestOptimizerService:
                                     if oos_rets else None),
                 "is_mean_metric": (round(sum(is_metrics) / len(is_metrics), 4)
                                    if is_metrics else None),
+                # OOS 各窗收益按时间切 4 段的稳健分（0.6×中位+0.4×最差）：
+                # 单窗暴利掩盖其余窗口平庸的参数组合会被压低
+                "oos_robust_score": robust_score(oos_rets, n_segments=4),
             },
             "note": "IS 段选参、紧随 OOS 段验证（步长≥OOS 长度，无重叠）；"
                     "各 OOS 段收益按全仓口径链式承接",

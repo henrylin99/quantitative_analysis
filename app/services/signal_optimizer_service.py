@@ -21,6 +21,7 @@ import pandas as pd
 from loguru import logger
 
 from app.services.data_reader import ParquetDataReader
+from app.services.robust_score import annotate_robust, robust_score, split_segments
 from app.services.signal_defs import (
     SignalThresholds,
     current_thresholds,
@@ -127,14 +128,24 @@ class SignalOptimizerService:
             excess_nav = float((1 + sig).prod() / (1 + bench).prod() - 1.0)
             return excess_nav
 
-        # 全样本网格
+        # 全样本网格 + K 段稳健分：把锚点按时间切成 4 段逐段评估，
+        # robust = 0.6×中位段 + 0.4×最差段——一段大行情撑起来的参数会现形
+        anchor_segments = split_segments(list(anchors), n_segments=4)
         grid_rows = []
         for combo in combos:
             t = replace(base, **combo)
             val = eval_combo(t, anchors)
-            grid_rows.append({"params": combo, "excess": None if val is None else round(val, 5)})
+            seg_excess = []
+            for seg in anchor_segments:
+                sv = eval_combo(t, seg)
+                if sv is not None:
+                    seg_excess.append(round(sv, 5))
+            grid_rows.append({"params": combo, "excess": None if val is None else round(val, 5),
+                              "segment_excess": seg_excess})
         valid = [r for r in grid_rows if r["excess"] is not None]
         valid.sort(key=lambda r: r["excess"], reverse=True)
+        robust_rows = annotate_robust(grid_rows)
+        best_robust = next((r for r in robust_rows if r["robust_score"] is not None), None)
 
         # walk-forward：锚点序列上滚动 IS/OOS
         is_n = max(2, is_days // horizon)
@@ -179,6 +190,7 @@ class SignalOptimizerService:
             "n_anchors": len(anchors),
             "grid_results": grid_rows,
             "best_full_sample": best_full,
+            "best_robust": best_robust,
             "walk_forward": {
                 "is_anchor_days": is_n * horizon,
                 "oos_anchor_days": oos_n * horizon,
@@ -194,11 +206,13 @@ class SignalOptimizerService:
                     "oos_chained_excess": round(chained - 1.0, 5) if oos_vals else None,
                     "oos_hit_rate": round(float(np.mean([v > 0 for v in oos_vals])), 3)
                     if oos_vals else None,
+                    "oos_robust_score": robust_score(oos_vals, n_segments=4),
                 },
             },
             "current_thresholds": {f.name: getattr(base, f.name)
                                    for f in SignalThresholds.__dataclass_fields__.values()},  # type: ignore[attr-defined]
-            "note": ("全样本网格偏乐观（同段数据选参+评估）；可信结论看 walk_forward OOS。"
+            "note": ("全样本网格偏乐观（同段数据选参+评估）；可信结论看 walk_forward OOS；"
+                     "排名看 robust_score（0.6×中位段+0.4×最差段），一段行情撑起来的参数会被压低。"
                      "评估 = H 日非重叠锚点链式超额（vs universe 等权）。"),
         }
 
@@ -339,14 +353,23 @@ class SignalOptimizerService:
                 return None
             return prod_sig / prod_all - 1.0
 
-        # 全样本
+        # 全样本 + K 段稳健分（调仓日按时间切 4 段逐段评估）
+        reb_segments = split_segments(list(reb_dates), n_segments=4)
         grid_rows = []
         for combo in combos:
             val = eval_weights(combo, reb_dates)
+            seg_excess = []
+            for seg in reb_segments:
+                sv = eval_weights(combo, seg)
+                if sv is not None:
+                    seg_excess.append(round(sv, 5))
             grid_rows.append({"params": combo,
-                              "excess": None if val is None else round(val, 5)})
+                              "excess": None if val is None else round(val, 5),
+                              "segment_excess": seg_excess})
         valid = [r for r in grid_rows if r["excess"] is not None]
         valid.sort(key=lambda r: r["excess"], reverse=True)
+        robust_rows = annotate_robust(grid_rows)
+        best_robust = next((r for r in robust_rows if r["robust_score"] is not None), None)
 
         # walk-forward：调仓样本序列上滚动
         windows: List[Dict[str, Any]] = []
@@ -389,6 +412,7 @@ class SignalOptimizerService:
             "n_combos": len(combos),
             "grid_results": grid_rows,
             "best_full_sample": valid[0] if valid else None,
+            "best_robust": best_robust,
             "walk_forward": {
                 "is_windows": is_windows,
                 "oos_windows": oos_windows,
@@ -404,11 +428,12 @@ class SignalOptimizerService:
                     "oos_chained_excess": round(chained - 1.0, 5) if oos_vals else None,
                     "oos_hit_rate": round(float(np.mean([v > 0 for v in oos_vals])), 3)
                     if oos_vals else None,
+                    "oos_robust_score": robust_score(oos_vals, n_segments=4),
                 },
             },
             "current_weights": self.current_rotation_weights(),
             "note": ("超额 = top_n 行业等权净值 / 全行业等权净值 − 1（每调仓段链式承接）；"
-                     "全样本网格偏乐观，可信结论看 walk_forward OOS。"),
+                     "全样本网格偏乐观，可信结论看 walk_forward OOS；排名看 robust_score。"),
         }
         if param_counts:
             stable = {k: max(c, key=c.get) for k, c in param_counts.items()}

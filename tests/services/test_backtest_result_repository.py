@@ -45,6 +45,7 @@ def test_async_task_runs_inline_and_persists(monkeypatch, tmp_path):
     """
     from app.tasks import backtest_tasks
 
+    monkeypatch.setenv("BACKTEST_SUBPROCESS_ENABLED", "0")  # monkeypatch 不跨进程
     repo = _make_repo(tmp_path)
     monkeypatch.setattr(backtest_tasks, "_build_repo", lambda: repo)
     run = repo.create_run(
@@ -79,6 +80,7 @@ def test_async_task_marks_failed_on_engine_error(monkeypatch, tmp_path):
     """引擎抛异常时任务必须把 run 标记为 failed，不能永远停在 running。"""
     from app.tasks import backtest_tasks
 
+    monkeypatch.setenv("BACKTEST_SUBPROCESS_ENABLED", "0")  # monkeypatch 不跨进程
     repo = _make_repo(tmp_path)
     monkeypatch.setattr(backtest_tasks, "_build_repo", lambda: repo)
     run = repo.create_run(

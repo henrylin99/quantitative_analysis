@@ -99,6 +99,7 @@ def create_app(config_name='default'):
     from app.api.hk_stock_api import hk_stock_api
     from app.api.us_stock_api import us_stock_api
     from app.api.insights_api import insights_api
+    from app.api.strategy_guardian_api import strategy_guardian_bp
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(ml_factor_bp)
     app.register_blueprint(text2sql_bp)
@@ -126,6 +127,7 @@ def create_app(config_name='default'):
     app.register_blueprint(hk_stock_api)
     app.register_blueprint(us_stock_api)
     app.register_blueprint(insights_api)
+    app.register_blueprint(strategy_guardian_bp, url_prefix='/api/strategy-guardian')
 
     from app.main import main_bp
     app.register_blueprint(main_bp)
