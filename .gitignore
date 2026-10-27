@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# 前端源码 lib 不属于 Python 构建产物（lib/ 是 Python 模板带来的宽匹配）
+!frontend/src/lib/
 parts/
 sdist/
 var/

@@ -1,0 +1,186 @@
+/* 美股工作台专用样式：全部 scope 在 .us-tv 下，
+   自带深色面板底色——图表配色按深色主题硬编码，浅色主题下不可读。 */
+
+.us-tv {
+  --tv-bg: #0e1116;
+  --tv-bg-panel: #161b22;
+  --tv-bg-elev: #1c232c;
+  --tv-border: #2a313a;
+  --tv-text: #e6edf3;
+  --tv-text-dim: #9aa6b2;
+  --tv-accent: #4f93e7;
+  --tv-up: #26a69a;
+  --tv-down: #ef5350;
+
+  background: var(--tv-bg);
+  color: var(--tv-text);
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 14px;
+  min-height: calc(100vh - 120px);
+}
+.us-tv,
+.us-tv * { box-sizing: border-box; }
+
+.us-tv button {
+  background: var(--tv-bg-elev);
+  color: var(--tv-text);
+  border: 1px solid var(--tv-border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.us-tv button:hover { border-color: var(--tv-accent); }
+.us-tv button.active { background: var(--tv-accent); border-color: var(--tv-accent); color: #fff; }
+.us-tv button:disabled { opacity: 0.4; cursor: default; }
+
+.us-tv input,
+.us-tv select {
+  background: var(--tv-bg);
+  color: var(--tv-text);
+  border: 1px solid var(--tv-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.us-tv .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.us-tv .toolbar .group { display: flex; gap: 4px; }
+.us-tv .toolbar label { color: var(--tv-text-dim); display: flex; align-items: center; gap: 4px; }
+
+.us-tv .chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border: 1px solid var(--tv-border); border-radius: 999px;
+  font-size: 12px; color: var(--tv-text); font-variant-numeric: tabular-nums;
+  /* 覆盖全局 theme.css .chip 的 surface-3 背景：浅色主题下浅灰底会吃掉浅色文字 */
+  background: var(--tv-bg-panel);
+}
+.us-tv .chip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.us-tv .chip button { padding: 0 5px; border: none; background: none; color: var(--tv-text-dim); font-size: 13px; line-height: 1; }
+.us-tv .chip button:hover { color: var(--tv-down); border: none; }
+
+.us-tv .cand {
+  padding: 3px 9px; font-size: 12px; color: var(--tv-text);
+  background: var(--tv-bg); border: 1px solid var(--tv-border); border-radius: 999px;
+  cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.us-tv .cand:hover:not(:disabled) { border-color: var(--tv-accent); color: var(--tv-accent); }
+
+.us-tv .replay-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--tv-bg-panel);
+  border: 1px solid var(--tv-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.us-tv .replay-bar button.primary { background: var(--tv-accent); border-color: var(--tv-accent); color: #fff; min-width: 72px; }
+.us-tv .replay-bar input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--tv-accent); }
+
+.us-tv .params-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: var(--tv-bg-elev);
+  border: 1px solid var(--tv-border);
+  border-radius: 10px;
+}
+.us-tv .params-row label { color: var(--tv-text-dim); display: flex; align-items: center; gap: 4px; }
+.us-tv .params-row input[type="number"] { width: 52px; padding: 4px 6px; }
+
+.us-tv .card {
+  background: var(--tv-bg-panel);
+  border: 1px solid var(--tv-border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.us-tv .card h3 { margin: 0 0 10px; font-size: 14px; color: var(--tv-text-dim); font-weight: 600; }
+
+.us-tv .chart-box { position: relative; }
+
+.us-tv .chart-legend {
+  position: absolute; top: 8px; left: 10px; z-index: 10;
+  background: rgba(14, 17, 22, 0.78); border: 1px solid var(--tv-border);
+  border-radius: 8px; padding: 6px 10px; font-size: 11px; line-height: 1.6;
+  color: var(--tv-text-dim); pointer-events: none; max-width: 72%;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.us-tv .scatter-tip {
+  position: absolute; z-index: 10; pointer-events: none;
+  background: rgba(14, 17, 22, 0.9); border: 1px solid var(--tv-border);
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; white-space: nowrap;
+  color: var(--tv-text);
+}
+.us-tv .chart-legend .cl-title { color: var(--tv-text); font-weight: 600; margin-bottom: 1px; }
+.us-tv .chart-legend .cl-date { color: var(--tv-text-dim); font-weight: 400; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.us-tv .chart-legend .cl-ohlcv b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.us-tv .chart-legend .cl-ohlcv .pos { color: var(--tv-up); }
+.us-tv .chart-legend .cl-ohlcv .neg { color: var(--tv-down); }
+.us-tv .chart-legend .cl-line { display: inline-block; margin-right: 12px; }
+.us-tv .chart-legend .cl-line i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.us-tv .chart-legend .cl-line b { color: var(--tv-text); font-variant-numeric: tabular-nums; }
+
+.us-tv table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+.us-tv table.data th,
+.us-tv table.data td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--tv-border); white-space: nowrap; }
+.us-tv table.data th { color: var(--tv-text-dim); cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--tv-bg-panel); }
+.us-tv table.data th:first-child,
+.us-tv table.data td:first-child { text-align: left; }
+.us-tv table.data tr:hover td { background: var(--tv-bg-elev); cursor: pointer; }
+.us-tv .pos { color: var(--tv-up); }
+.us-tv .neg { color: var(--tv-down); }
+.us-tv .warn { color: #f5a623; }
+
+.us-tv .muted { color: var(--tv-text-dim); }
+.us-tv .scroll { max-height: 320px; overflow: auto; }
+
+.us-tv .spinner { color: var(--tv-text-dim); padding: 30px; text-align: center; }
+
+.us-tv .heat-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  transition: transform 0.08s, z-index 0s;
+  line-height: 1.2;
+}
+.us-tv .heat-tile:hover { transform: scale(1.04); z-index: 5; box-shadow: 0 0 0 2px var(--tv-text) inset; }
+.us-tv .heat-tile .sym { font-weight: 700; font-size: 14px; }
+.us-tv .heat-tile .pct { font-size: 12px; opacity: 0.92; font-variant-numeric: tabular-nums; }
+.us-tv .heat-tile:hover .pct { opacity: 1; }
+
+.us-tv .heatmap-legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; }
+
+.us-tv .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+.us-tv .stat { background: var(--tv-bg-panel); border: 1px solid var(--tv-border); border-radius: 10px; padding: 10px 12px; }
+.us-tv .stat .muted { margin-bottom: 4px; }
+@media (max-width: 900px) { .us-tv .stats { grid-template-columns: repeat(3, 1fr); } }
+
+/* 分析页页头 + tab 栏 */
+.tv-page-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.tv-tabbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tv-tab {
+  padding: 5px 12px; border: 1px solid var(--tv-border); border-radius: 8px;
+  background: var(--tv-bg-panel); color: var(--tv-text-dim); font-size: 12px; cursor: pointer;
+}
+.tv-tab.active { color: var(--tv-text); border-color: #3b82f6; background: rgba(59, 130, 246, 0.12); }

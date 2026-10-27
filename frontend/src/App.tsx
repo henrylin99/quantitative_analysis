@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect, Component, type ReactNode } from 'react'
 import {
-  Activity, AlarmClock, BookOpen, Bot, Brain, Briefcase, Coins, Compass, Crosshair, Database, Dna,
+  Activity, AlarmClock, BookOpen, Bot, Brain, Briefcase, ChartCandlestick, Coins, Compass, Crosshair, Database, Dna,
    Factory, FileText, Flag, Flame, FlaskConical, Globe, HeartPulse, Home,
   LayoutDashboard, LayoutGrid, Layers, Lightbulb, List, Medal, MessageSquare, Moon, DollarSign,
   Newspaper, PieChart, Plug, Radar, Radio, Search, Shield, Star, Sun, Timer,
@@ -66,6 +66,13 @@ const EventReplayPage = lazy(() => import('./pages/EventReplayPage'))
 const HkStockDetailPage = lazy(() => import('./pages/HkStockDetailPage'))
 const UsStocksPage = lazy(() => import('./pages/UsStocksPage'))
 const UsStockDetailPage = lazy(() => import('./pages/UsStockDetailPage'))
+const UsTerminalPage = lazy(() => import('./pages/us/UsTerminalPage'))
+const UsHeatmapPage = lazy(() => import('./pages/us/UsHeatmapPage'))
+const UsPortfolioPage = lazy(() => import('./pages/us/UsPortfolioPage'))
+const UsMarketAnalyticsPage = lazy(() => import('./pages/us/UsMarketAnalyticsPage'))
+const UsRiskAnalyticsPage = lazy(() => import('./pages/us/UsRiskAnalyticsPage'))
+const UsFundAnalyticsPage = lazy(() => import('./pages/us/UsFundAnalyticsPage'))
+const UsScreenerPage = lazy(() => import('./pages/us/UsScreenerPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -131,10 +138,22 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/industries', label: '行业分析', icon: Factory },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: Trophy },
       { to: '/funds', label: '基金列表', icon: Wallet },
-      { to: '/hk', label: '港股行情', icon: Globe },
-      { to: '/us', label: '美股行情', icon: DollarSign },
+      { to: '/hk', label: '港股行情', icon: Globe, end: true },
       { to: '/research', label: '研报中心', icon: Newspaper },
       { to: '/paper-trading', label: '模拟盘', icon: Bot },
+    ],
+  },
+  {
+    label: '美股',
+    items: [
+      { to: '/us', label: '美股行情', icon: DollarSign, end: true },
+      { to: '/us/terminal', label: 'K线终端', icon: ChartCandlestick },
+      { to: '/us/heatmap', label: '市场热力图', icon: LayoutGrid },
+      { to: '/us/portfolio', label: '组合分析', icon: PieChart },
+      { to: '/us/analytics/market', label: '市场统计', icon: TrendingUp },
+      { to: '/us/analytics/risk', label: '个股风险', icon: Shield },
+      { to: '/us/analytics/fund', label: '基本面与事件', icon: Briefcase },
+      { to: '/us/screener', label: '美股扫描器', icon: Search },
     ],
   },
   {
@@ -399,6 +418,13 @@ function Shell() {
                 </LazyRoute>
               }
             />
+            <Route path="/us/terminal" element={<LazyRoute><UsTerminalPage /></LazyRoute>} />
+            <Route path="/us/heatmap" element={<LazyRoute><UsHeatmapPage /></LazyRoute>} />
+            <Route path="/us/portfolio" element={<LazyRoute><UsPortfolioPage /></LazyRoute>} />
+            <Route path="/us/analytics/market" element={<LazyRoute><UsMarketAnalyticsPage /></LazyRoute>} />
+            <Route path="/us/analytics/risk" element={<LazyRoute><UsRiskAnalyticsPage /></LazyRoute>} />
+            <Route path="/us/analytics/fund" element={<LazyRoute><UsFundAnalyticsPage /></LazyRoute>} />
+            <Route path="/us/screener" element={<LazyRoute><UsScreenerPage /></LazyRoute>} />
             <Route
               path="/us/:symbol"
               element={
