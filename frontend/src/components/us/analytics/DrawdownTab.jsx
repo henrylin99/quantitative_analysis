@@ -45,22 +45,27 @@ function Stat({ label, value, tone = "", sub = "" }) {
   );
 }
 
-export default function DrawdownTab() {
+export default function DrawdownTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [symbols, setSymbols] = useState([]);
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [err, setErr] = useState("");
   const [sortKey, setSortKey] = useState("rank");
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
-    riskFetch("/symbols").then((d) => setSymbols(d?.symbols || [])).catch(() => {});
-  }, []);
+    riskFetch("/symbols", undefined, mk).then((d) => setSymbols(d?.symbols || [])).catch(() => {});
+  }, [mk]);
+
+  useEffect(() => {
+    if (symbols.length && !symbols.includes(symbol)) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
+
 
   useEffect(() => {
     let alive = true;
     setData(null); setErr("");
-    riskFetch("/risk/drawdown", { symbol })
+    riskFetch("/risk/drawdown", { symbol }, mk)
       .then((d) => { if (alive) setData(d); })
       .catch((e) => { if (alive) setErr(e.message || String(e)); });
     return () => { alive = false; };

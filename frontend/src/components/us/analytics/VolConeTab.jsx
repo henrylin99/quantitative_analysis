@@ -2,7 +2,7 @@
 // 全窗口锥 + 全市场排名）。口径移植自开源参考实现的 VolConePage：
 // 各回看窗口(10..252日)实现波动率 vs 自身全历史分位带（min/p10/p25/p50/p75/p90/max）。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner } from "./shared.jsx";
 import {
@@ -63,7 +63,7 @@ function ConeBar({ row }) {
   );
 }
 
-export default function VolConeTab() {
+export default function VolConeTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [win, setWin] = useState(20);
@@ -73,7 +73,7 @@ export default function VolConeTab() {
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/volcone")
+    analyticsApiFor(mk).fetch("/market/volcone")
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };

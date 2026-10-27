@@ -82,7 +82,10 @@ export function ChipFilter({ items, counts = {}, activeKey, onToggle, dimZero = 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
       {items.map((it) => {
-        const cnt = counts[it.key] ?? it.count ?? 0;
+        // 因子桶的计数以 group:key 为键（BucketGroups 传入带 group 的 item），
+        // 普通档位 chips 直接用 key；两种键都兼容。
+        const cnt = (it.group != null ? counts[it.group + ":" + it.key] : undefined)
+          ?? counts[it.key] ?? it.count ?? 0;
         const on = activeKey === it.key;
         return (
           <button key={it.key} type="button" data-chip={it.key} data-chip-active={on ? "1" : "0"} data-chip-count={cnt}

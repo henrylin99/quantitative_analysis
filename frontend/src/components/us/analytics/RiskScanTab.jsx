@@ -46,9 +46,9 @@ const cellCls = (key, v) => {
 
 const RISK_SUBS = { high: "风险分≥60 高波动/深回撤", medium: "40–60 正常波动", low: "<40 低波动/平稳" };
 
-export default function RiskScanTab() {
+export default function RiskScanTab({ mk = "us" }) {
   const navigate = useNavigate();
-  const { rows, loaded, error, tradeDate } = useScreenerBase();
+  const { rows, loaded, error, tradeDate } = useScreenerBase(mk);
   const [preset, setPreset] = useState(null);
   const [tierFilter, setTierFilter] = useState(null);
   const [bucketFilter, setBucketFilter] = useState(null);
@@ -191,7 +191,7 @@ export default function RiskScanTab() {
                   {shown.map((r) => {
                     const va = parametricVaR1d95(r.risk_vol_20d, 10000);
                     return (
-                      <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/us/${r.symbol}`)}
+                      <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/${mk}/${r.symbol}`)}
                         title={va ? `1日95% VaR ≈ −${va.varPct.toFixed(1)}%($1万仓 −$${va.varAmt.toFixed(0)})` : undefined}>
                         <td><span style={{ fontWeight: 700 }}>{r.symbol}</span></td>
                         <td className="muted" style={{ textAlign: "left" }}>{r.name}</td>

@@ -1,6 +1,6 @@
 // 个股风险 7 个 Tab 的共享小工具：时间归一化、数字格式化、请求适配与客户端排序。
 // 只做展示层辅助，纯函数为主（请求适配除外）。
-import { fetchUsAnalytics } from '../../api/usAnalytics'
+import { analyticsApiFor } from '../../api/usAnalytics'
 
 export const SQRT252 = Math.sqrt(252)
 
@@ -80,29 +80,9 @@ export const dvol = (v) => {
 
 // ------------------------------------------------------------ 请求适配 ----
 
-// 后端 us-analytics 路由以裸 payload 返回（无 {code,message,data} 信封），
-// 标准信封解包在这种响应上会误判失败。先走标准封装，首次失败后记住裸模式
-// 并直接 GET /api/us-analytics（两种响应形状都兼容）。
-let bareMode = false
-
-export async function riskFetch(path, params) {
-  if (!bareMode) {
-    try {
-      return await fetchUsAnalytics(path, params)
-    } catch (err) {
-      bareMode = true
-    }
-  }
-  const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params || {})) {
-    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
-  }
-  const url = `/api/us-analytics${path}${qs.toString() ? `?${qs.toString()}` : ''}`
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error(`请求失败（HTTP ${resp.status}）`)
-  const json = await resp.json()
-  if (json && typeof json === 'object' && json.code === 200 && 'data' in json) return json.data
-  return json
+// 风险 7 tab 统一请求入口：mk 决定市场前缀（US/HK 同构响应）。
+export async function riskFetch(path, params, mk = "us") {
+  return analyticsApiFor(mk).fetch(path, params)
 }
 
 // ------------------------------------------------------------ 客户端排序 ----

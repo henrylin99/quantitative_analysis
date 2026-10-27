@@ -73,6 +73,9 @@ const UsMarketAnalyticsPage = lazy(() => import('./pages/us/UsMarketAnalyticsPag
 const UsRiskAnalyticsPage = lazy(() => import('./pages/us/UsRiskAnalyticsPage'))
 const UsFundAnalyticsPage = lazy(() => import('./pages/us/UsFundAnalyticsPage'))
 const UsScreenerPage = lazy(() => import('./pages/us/UsScreenerPage'))
+const HkMarketAnalyticsPage = lazy(() => import('./pages/hk/HkMarketAnalyticsPage'))
+const HkRiskAnalyticsPage = lazy(() => import('./pages/hk/HkRiskAnalyticsPage'))
+const HkScreenerPage = lazy(() => import('./pages/hk/HkScreenerPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -138,9 +141,17 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/industries', label: '行业分析', icon: Factory },
       { to: '/market/dragon-tiger', label: '龙虎榜', icon: Trophy },
       { to: '/funds', label: '基金列表', icon: Wallet },
-      { to: '/hk', label: '港股行情', icon: Globe, end: true },
       { to: '/research', label: '研报中心', icon: Newspaper },
       { to: '/paper-trading', label: '模拟盘', icon: Bot },
+    ],
+  },
+  {
+    label: '港股',
+    items: [
+      { to: '/hk', label: '港股行情', icon: Globe, end: true },
+      { to: '/hk/analytics/market', label: '市场统计', icon: TrendingUp },
+      { to: '/hk/analytics/risk', label: '个股风险', icon: Shield },
+      { to: '/hk/screener', label: '港股扫描器', icon: Search },
     ],
   },
   {
@@ -410,6 +421,9 @@ function Shell() {
                 </LazyRoute>
               }
             />
+            <Route path="/hk/analytics/market" element={<LazyRoute><HkMarketAnalyticsPage /></LazyRoute>} />
+            <Route path="/hk/analytics/risk" element={<LazyRoute><HkRiskAnalyticsPage /></LazyRoute>} />
+            <Route path="/hk/screener" element={<LazyRoute><HkScreenerPage /></LazyRoute>} />
             <Route
               path="/us"
               element={

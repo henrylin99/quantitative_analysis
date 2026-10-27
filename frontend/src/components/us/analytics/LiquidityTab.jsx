@@ -65,7 +65,7 @@ function CsTable({ title, tone, rows }) {
   );
 }
 
-export default function LiquidityTab() {
+export default function LiquidityTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
 

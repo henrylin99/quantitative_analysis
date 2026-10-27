@@ -43,23 +43,28 @@ function Stat({ label, value, tone = "", sub = "" }) {
 
 const betaTone = (v) => (num(v) == null ? "" : v >= 1.1 ? "pos" : v < 0.8 ? "neg" : "");
 
-export default function BetaTab() {
+export default function BetaTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [symbols, setSymbols] = useState([]);
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [windowW, setWindowW] = useState(126);
   const [err, setErr] = useState("");
   const [sortKey, setSortKey] = useState("rank");
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
-    riskFetch("/symbols").then((d) => setSymbols(d?.symbols || [])).catch(() => {});
-  }, []);
+    riskFetch("/symbols", undefined, mk).then((d) => setSymbols(d?.symbols || [])).catch(() => {});
+  }, [mk]);
+
+  useEffect(() => {
+    if (symbols.length && !symbols.includes(symbol)) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
+
 
   useEffect(() => {
     let alive = true;
     setData(null); setErr("");
-    riskFetch("/risk/beta", { symbol, window: windowW })
+    riskFetch("/risk/beta", { symbol, window: windowW }, mk)
       .then((d) => { if (alive) setData(d); })
       .catch((e) => { if (alive) setErr(e.message || String(e)); });
     return () => { alive = false; };

@@ -53,9 +53,9 @@ const cellCls = (key, v) => {
 
 const VAL_SUBS = { cheap: "低估值/深度价值", fair: "合理估值", pricey: "高估值/昂贵" };
 
-export default function ValuationScanTab() {
+export default function ValuationScanTab({ mk = "us" }) {
   const navigate = useNavigate();
-  const { rows, loaded, error, tradeDate } = useScreenerBase();
+  const { rows, loaded, error, tradeDate } = useScreenerBase(mk);
   const [preset, setPreset] = useState(null);
   const [tierFilter, setTierFilter] = useState(null);
   const [bucketFilter, setBucketFilter] = useState(null);
@@ -197,7 +197,7 @@ export default function ValuationScanTab() {
                 </thead>
                 <tbody>
                   {shown.map((r) => (
-                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/us/${r.symbol}`)}>
+                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/${mk}/${r.symbol}`)}>
                       <td><span style={{ fontWeight: 700 }}>{r.symbol}</span></td>
                       <td className="muted" style={{ textAlign: "left" }}>{r.name}</td>
                       {COLS.filter((c) => !["symbol", "name"].includes(c.key)).map((c) => (

@@ -48,7 +48,7 @@ function Stat({ label, value, tone = "", sub = "" }) {
 const tTone = (t) => (num(t) == null ? "" : t <= -3.37 ? "pos" : t > -2.86 ? "neg" : "");
 const zTone = (z) => (num(z) == null || Math.abs(z) < 2 ? "" : z > 0 ? "neg" : "pos");
 
-export default function PairsTab() {
+export default function PairsTab({ mk = "us" }) {
   const [scan, setScan] = useState(null);
   const [detail, setDetail] = useState(null);
   const [symbols, setSymbols] = useState([]);
@@ -61,13 +61,13 @@ export default function PairsTab() {
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
-    riskFetch("/symbols").then((d) => setSymbols(d?.symbols || [])).catch(() => {});
+    riskFetch("/symbols", undefined, mk).then((d) => setSymbols(d?.symbols || [])).catch(() => {});
     setDetailLoading(true);
-    riskFetch("/risk/pairs", { top: 12 })
+    riskFetch("/risk/pairs", { top: 12 }, mk)
       .then(setScan)
       .catch((e) => setScanErr(e.message || String(e)))
       .finally(() => setDetailLoading(false));
-  }, []);
+  }, [mk]);
 
   const pair = detail?.pair;
 
@@ -75,7 +75,7 @@ export default function PairsTab() {
   const loadDetail = (aSym, bSym) => {
     if (!aSym || !bSym || aSym === bSym) return;
     setDetailLoading(true); setDetailErr("");
-    riskFetch("/risk/pairs", { symbol_a: aSym, symbol_b: bSym })
+    riskFetch("/risk/pairs", { symbol_a: aSym, symbol_b: bSym }, mk)
       .then(setDetail)
       .catch((e) => setDetailErr(e.message || String(e)))
       .finally(() => setDetailLoading(false));

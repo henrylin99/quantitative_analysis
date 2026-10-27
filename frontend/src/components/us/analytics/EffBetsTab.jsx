@@ -52,7 +52,7 @@ const clTone = (v) => {
   return x < 0.15 ? "neg" : x < 0.3 ? "warn" : "pos";
 };
 
-export default function EffBetsTab() {
+export default function EffBetsTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [window_, setWindow] = useState(60);
   const [err, setErr] = useState("");

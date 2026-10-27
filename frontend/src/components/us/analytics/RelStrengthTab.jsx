@@ -2,7 +2,7 @@
 // 口径移植自开源参考实现的 RelStrengthPage：等权市场指数为基准的相对收益排名。
 // 适配：后端路由未透传 symbol（symbol_info 恒空），个股相对强度线改为「从排名行取汇总卡」。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner } from "./shared.jsx";
 import {
@@ -38,18 +38,18 @@ function regime(stats) {
   return { key: "mixed", label: "分化", tone: "", desc: "涨跌分化，领涨结构无明确单边体制。" };
 }
 
-export default function RelStrengthTab() {
+export default function RelStrengthTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [period, setPeriod] = useState(60);
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [sortKey, setSortKey] = useState("rank");
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/relstrength", { period, ma_trend: 20 })
+    analyticsApiFor(mk).fetch("/market/relstrength", { period, ma_trend: 20 })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };
@@ -57,6 +57,10 @@ export default function RelStrengthTab() {
 
   const reg = useMemo(() => regime(data), [data]);
   const ranking = useMemo(() => data?.ranking || [], [data]);
+  useEffect(() => {
+    if (ranking.length && !ranking.some((r) => r.symbol === symbol)) setSymbol(ranking[0].symbol);
+  }, [ranking, symbol]);
+
   const sorted = useMemo(() => sortRows(ranking, sortKey, sortDir), [ranking, sortKey, sortDir]);
   // 所选标的的汇总（symbol_info 不可用时从排名行取）。
   const symRow = useMemo(() => ranking.find((r) => r.symbol === symbol) || null, [ranking, symbol]);

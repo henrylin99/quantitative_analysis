@@ -2,7 +2,7 @@
 // 口径移植自开源参考实现的 OvernightPage：日收益拆成隔夜(open/前收−1)与日内(close/open−1)，
 // 累积恒等 cum_total == cum_overnight · cum_intraday；方差分解 overnight+intraday+cross == 1。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner, useSymbols, SymbolSelect } from "./shared.jsx";
 import {
@@ -62,18 +62,22 @@ function ShareBar({ label, v, color }) {
   );
 }
 
-export default function OvernightTab() {
+export default function OvernightTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [sortKey, setSortKey] = useState("rank");
   const [sortDir, setSortDir] = useState("asc");
-  const symbols = useSymbols();
+  const symbols = useSymbols(mk);
+  useEffect(() => {
+    if (symbols.length && !symbols.includes(symbol)) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
+
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/overnight", { symbol: symbol || undefined })
+    analyticsApiFor(mk).fetch("/market/overnight", { symbol: symbol || undefined })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };

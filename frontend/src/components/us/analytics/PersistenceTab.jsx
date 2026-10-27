@@ -3,7 +3,7 @@
 // 核心恒等 VR(2) = 1 + ρ(1)（Lo 1988）：>1 趋势 / <1 均值回归 / ≈1 随机游走。
 // 横轴时间戳是后端以 lag 序号生成的示意 unix 秒（非真实交易日），仅作 lag 顺序展示。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner, useSymbols, SymbolSelect } from "./shared.jsx";
 import {
@@ -34,18 +34,22 @@ function regime(stats) {
   return { key: posture.key + "_" + tier.key, label: posture.label + " · " + tier.label, tone: posture.tone, desc };
 }
 
-export default function PersistenceTab() {
+export default function PersistenceTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [sortKey, setSortKey] = useState("abs_rho1");
   const [sortDir, setSortDir] = useState("desc");
-  const symbols = useSymbols();
+  const symbols = useSymbols(mk);
+  useEffect(() => {
+    if (symbols.length && !symbols.includes(symbol)) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
+
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/persistence", { symbol: symbol || undefined })
+    analyticsApiFor(mk).fetch("/market/persistence", { symbol: symbol || undefined })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };

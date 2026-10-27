@@ -50,9 +50,9 @@ const cellCls = (key, v) => {
 
 const MF_SUBS = { inflow: "净吸筹/买盘强", neutral: "买卖平衡", outflow: "净派发/卖压" };
 
-export default function MoneyflowScanTab() {
+export default function MoneyflowScanTab({ mk = "us" }) {
   const navigate = useNavigate();
-  const { rows, loaded, error, tradeDate } = useScreenerBase();
+  const { rows, loaded, error, tradeDate } = useScreenerBase(mk);
   const [preset, setPreset] = useState(null);
   const [tierFilter, setTierFilter] = useState(null);
   const [bucketFilter, setBucketFilter] = useState(null);
@@ -202,7 +202,7 @@ export default function MoneyflowScanTab() {
                 </thead>
                 <tbody>
                   {shown.map((r) => (
-                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/us/${r.symbol}`)}>
+                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/${mk}/${r.symbol}`)}>
                       <td><span style={{ fontWeight: 700 }}>{r.symbol}</span></td>
                       <td className="muted" style={{ textAlign: "left" }}>{r.name}</td>
                       {COLS.filter((c) => !["symbol", "name"].includes(c.key)).map((c) => (

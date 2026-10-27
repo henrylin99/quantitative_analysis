@@ -32,7 +32,7 @@ const shTone = (v) => (num(v) == null ? "" : v >= 1 ? "pos" : v < 0 ? "neg" : ""
 // 回撤字段为负数（-0.56），直接 ×100 显示
 const ddpct = (v) => (num(v) == null ? "—" : (v * 100).toFixed(1) + "%");
 
-export default function SharpeTab() {
+export default function SharpeTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [window_, setWindow] = useState(126);
   const [err, setErr] = useState("");

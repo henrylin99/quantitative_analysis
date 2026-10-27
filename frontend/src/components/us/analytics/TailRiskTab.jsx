@@ -58,7 +58,7 @@ const tailTone = (sk) => (sk == null ? "" : sk < -0.3 ? "neg" : sk > 0.3 ? "pos"
 const kurtTone = (ek) => (ek == null ? "" : ek >= 3 ? "neg" : ek < 1 ? "pos" : "");
 const sortinoTone = (v) => (num(v) == null ? "" : v > 1 ? "pos" : v < 0 ? "neg" : "");
 
-export default function TailRiskTab() {
+export default function TailRiskTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [window_, setWindow] = useState(63);
   const [err, setErr] = useState("");

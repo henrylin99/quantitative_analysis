@@ -51,9 +51,9 @@ const cellCls = (key, v) => {
 
 const CANDLE_SUBS = { bull: "净多形态 ≥2", neutral: "多空均衡", bear: "净多 ≤−1" };
 
-export default function CandleScanTab() {
+export default function CandleScanTab({ mk = "us" }) {
   const navigate = useNavigate();
-  const { rows, loaded, error, tradeDate } = useScreenerBase();
+  const { rows, loaded, error, tradeDate } = useScreenerBase(mk);
   const [preset, setPreset] = useState(null);
   const [tierFilter, setTierFilter] = useState(null);
   const [patternFilter, setPatternFilter] = useState(null);
@@ -214,7 +214,7 @@ export default function CandleScanTab() {
                 </thead>
                 <tbody>
                   {shown.map((r) => (
-                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/us/${r.symbol}`)}>
+                    <tr key={r.symbol} data-row={r.symbol} onClick={() => navigate(`/${mk}/${r.symbol}`)}>
                       <td><span style={{ fontWeight: 700 }}>{r.symbol}</span></td>
                       <td className="muted" style={{ textAlign: "left" }}>{r.name}</td>
                       {COLS.filter((c) => !["symbol", "name"].includes(c.key)).map((c) => (

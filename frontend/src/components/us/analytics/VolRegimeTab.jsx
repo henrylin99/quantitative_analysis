@@ -2,7 +2,7 @@
 // 口径移植自开源参考实现的 VolRegimePage：市场 RMS 波动 / 截面离散度 / 隐含相关系数三视角。
 // 适配：后端路由未透传 symbol（symbol_info 恒空），个股波动时序改为「从排名行取汇总卡」。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner } from "./shared.jsx";
 import {
@@ -38,18 +38,18 @@ function regime(stats) {
   };
 }
 
-export default function VolRegimeTab() {
+export default function VolRegimeTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [win, setWin] = useState(20);
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [sortKey, setSortKey] = useState("rank");
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/volregime", { window: win })
+    analyticsApiFor(mk).fetch("/market/volregime", { window: win })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };
@@ -57,6 +57,10 @@ export default function VolRegimeTab() {
 
   const reg = useMemo(() => regime(data), [data]);
   const ranking = useMemo(() => data?.ranking || [], [data]);
+  useEffect(() => {
+    if (ranking.length && !ranking.some((r) => r.symbol === symbol)) setSymbol(ranking[0].symbol);
+  }, [ranking, symbol]);
+
   const sorted = useMemo(() => sortRows(ranking, sortKey, sortDir), [ranking, sortKey, sortDir]);
   const symRow = useMemo(() => ranking.find((r) => r.symbol === symbol) || null, [ranking, symbol]);
 

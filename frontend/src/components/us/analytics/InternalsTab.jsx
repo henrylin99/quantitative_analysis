@@ -1,7 +1,7 @@
 // 市场宽度时序 tab —— /market/internals（后端固定 ma_short=50 / ma_long=200 / new_high=20）。
 // 展示口径移植自开源参考实现的 InternalsPage：体制横幅 + 指标卡 + 6 图 + Zweig 推力事件表。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner } from "./shared.jsx";
 import {
@@ -39,14 +39,14 @@ function regime(latest) {
     desc: "宽度指标多空交织，无明确方向。" };
 }
 
-export default function InternalsTab() {
+export default function InternalsTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/internals")
+    analyticsApiFor(mk).fetch("/market/internals")
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };

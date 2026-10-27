@@ -2,7 +2,7 @@
 // 口径移植自开源参考实现的 DispersionPage：恒等式 mean(r²) = m² + d² 的二阶矩分解，
 // 回答「这是不是选股环境」（高离散=收益分化，低离散=联动锁步）。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner } from "./shared.jsx";
 import {
@@ -69,7 +69,7 @@ function CsTable({ title, tone, rows }) {
   );
 }
 
-export default function DispersionTab() {
+export default function DispersionTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [win, setWin] = useState(60);
@@ -77,7 +77,7 @@ export default function DispersionTab() {
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/dispersion", { window: win })
+    analyticsApiFor(mk).fetch("/market/dispersion", { window: win })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };

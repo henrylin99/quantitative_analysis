@@ -1,7 +1,7 @@
 // 市场统计 8 个 tab 共用的小 UI 件：指标卡 / 图卡 / 体制横幅 / 标的下拉。
 // 口径与开源参考实现的页面内小组件一致，仅样式挂到 .us-tv 作用域。
 import { useEffect, useState } from "react";
-import { fetchUsAnalyticsSymbols } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 
 export function Stat({ label, value, tone = "", sub = "" }) {
   return (
@@ -35,15 +35,15 @@ export function RegimeBanner({ label, tone = "", desc, children }) {
 }
 
 /** 拉取标的池（/symbols，list[str]），供 symbol 下拉使用。 */
-export function useSymbols() {
+export function useSymbols(mk = "us") {
   const [symbols, setSymbols] = useState([]);
   useEffect(() => {
     let on = true;
-    fetchUsAnalyticsSymbols()
+    analyticsApiFor(mk).symbols()
       .then((d) => { if (on) setSymbols(d.symbols || []); })
       .catch(() => {});
     return () => { on = false; };
-  }, []);
+  }, [mk]);
   return symbols;
 }
 

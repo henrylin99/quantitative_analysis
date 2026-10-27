@@ -2,7 +2,7 @@
 // 口径移植自开源参考实现的 SeasonalityPage：全历史日收益按日历月(1-12)与星期(周一-五)分组，
 // 报告组内日均收益、胜率、t 统计。月度时序横轴为示意月份序（后端以占位时间戳编码）。
 import { useEffect, useMemo, useState } from "react";
-import { fetchUsAnalytics } from "../../../api/usAnalytics";
+import { analyticsApiFor } from "../../../api/usAnalytics";
 import LineChart from "../LineChart.jsx";
 import { Stat, ChartCard, RegimeBanner, useSymbols, SymbolSelect } from "./shared.jsx";
 import {
@@ -42,18 +42,22 @@ function regime(stats) {
   return { key: posture.key, label: posture.label + (tier.label ? " · " + tier.label : ""), tone: posture.tone, desc };
 }
 
-export default function SeasonalityTab() {
+export default function SeasonalityTab({ mk = "us" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState("");
   const [sortKey, setSortKey] = useState("seasonality_strength");
   const [sortDir, setSortDir] = useState("desc");
-  const symbols = useSymbols();
+  const symbols = useSymbols(mk);
+  useEffect(() => {
+    if (symbols.length && !symbols.includes(symbol)) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
+
 
   useEffect(() => {
     let on = true;
     setErr("");
-    fetchUsAnalytics("/market/seasonality", { symbol: symbol || undefined })
+    analyticsApiFor(mk).fetch("/market/seasonality", { symbol: symbol || undefined })
       .then((d) => { if (on) setData(d); })
       .catch((e) => { if (on) setErr(String(e?.message || e)); });
     return () => { on = false; };
