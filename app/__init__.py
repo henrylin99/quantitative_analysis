@@ -98,6 +98,7 @@ def create_app(config_name='default'):
     from app.api.paper_trading_api import paper_trading_bp
     from app.api.hk_stock_api import hk_stock_api
     from app.api.us_stock_api import us_stock_api
+    from app.api.us_analytics_api import us_analytics_api
     from app.api.insights_api import insights_api
     from app.api.strategy_guardian_api import strategy_guardian_bp
     app.register_blueprint(api_bp, url_prefix='/api')
@@ -126,6 +127,7 @@ def create_app(config_name='default'):
     app.register_blueprint(paper_trading_bp, url_prefix='/api/paper-trading')
     app.register_blueprint(hk_stock_api)
     app.register_blueprint(us_stock_api)
+    app.register_blueprint(us_analytics_api)
     app.register_blueprint(insights_api)
     app.register_blueprint(strategy_guardian_bp, url_prefix='/api/strategy-guardian')
 
