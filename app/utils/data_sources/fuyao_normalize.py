@@ -159,6 +159,9 @@ def _finalize_daily(df: pd.DataFrame) -> pd.DataFrame:
     df["vol"] = np.floor(pd.to_numeric(df["volume"], errors="coerce") / 100.0)
     df["amount"] = pd.to_numeric(df["turnover"], errors="coerce") / 1000.0
 
+    # 去重：dump/单标的兜底可能对同一 (ts_code, trade_date) concat 出重复行，
+    # 残留进日期分区会打崩前端 K 线图（lightweight-charts 要求时间严格递增）
+    df = df.drop_duplicates(["ts_code", "trade_date"], keep="last")
     df = df.sort_values(["ts_code", "trade_date"], kind="mergesort")
     df["pre_close"] = df.groupby("ts_code", sort=False)["close"].shift(1)
     df["change"] = (df["close"] - df["pre_close"]).round(3)

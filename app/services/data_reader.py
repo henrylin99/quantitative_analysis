@@ -587,6 +587,14 @@ class ParquetDataReader:
                 format="mixed",
             )
             result = result.dropna(subset=["trade_date"])
+            # 历史日期分区可能残留同 (ts_code, trade_date) 重复行（如扶摇单标的
+            # 兜底写入），去重防止前端 K 线图时间戳重复断言崩溃
+            if "ts_code" in result.columns:
+                result = result.drop_duplicates(
+                    ["ts_code", "trade_date"], keep="last"
+                )
+            else:
+                result = result.drop_duplicates(subset=["trade_date"], keep="last")
             sort_cols = ["trade_date"]
             if "ts_code" in result.columns:
                 sort_cols.append("ts_code")
