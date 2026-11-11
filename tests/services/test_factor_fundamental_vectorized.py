@@ -294,3 +294,44 @@ def test_prepare_quarterly_reports_keeps_missing_report_type():
     # 同一报告期多版本：保留公告日更新的 1 号版本
     q2 = out[out["end_date"] == pd.Timestamp("2026-06-30")]
     assert float(q2["n_income_attr_p"].iloc[0]) == 2.5
+
+
+def test_valuation_percentile_window_independent_of_loaded_range():
+    """回归（#20）：估值分位的窗口按行日期锚定 365 日历日。
+
+    同一行在「单日作业（只加载该日之前的预热窗）」与「区间回填（加载
+    更长的窗）」两条路径下必须得到相同分位——按观测数截断
+    （rolling(252)）时，加载窗边界随请求起点变化，稀疏数据的股票在
+    两条路径下有效样本数不同，结果漂移。"""
+    engine = FactorEngine()
+    rng = np.random.default_rng(11)
+    dates = pd.bdate_range("2024-01-01", periods=700)
+    rows = []
+    for code in ("000001.SZ", "600000.SH"):
+        # 三成日期 PE 缺失，制造稀疏序列——正是旧实现漂移的形态
+        values = np.where(rng.random(len(dates)) < 0.3, np.nan,
+                          10 + rng.normal(0, 3, len(dates)))
+        for d, v in zip(dates, values):
+            rows.append({"ts_code": code, "trade_date": d, "pe_ttm": v,
+                         "pb": v / 5, "ps_ttm": v / 2})
+    full = pd.DataFrame(rows)
+    # 模拟单日路径：只加载末 460 个交易日——覆盖 365 日历日窗口 + 余量，
+    # 与区间路径（700 天全量）对同一行看到相同的窗口
+    tail = full[pd.to_datetime(full["trade_date"]) >= dates[-460]].copy()
+
+    full_result = engine._pe_percentile_factor({"daily_basic": full}, "pe_percentile")
+    tail_result = engine._pe_percentile_factor({"daily_basic": tail}, "pe_percentile")
+    assert not tail_result.empty, "预热窗内数据充足，单日路径必须产出非空结果"
+
+    # 只比对窗口完整落在两条加载路径交集内的行（tail 末 100 个交易日），
+    # tail 开头的行按定义需要更早的数据，不属于可比范围
+    comparable = pd.to_datetime(tail_result["trade_date"]) >= dates[-100]
+    tail_result = tail_result[comparable]
+    merged = tail_result.merge(
+        full_result, on=["ts_code", "trade_date"], suffixes=("_s", "_m")
+    )
+    assert len(merged) == len(tail_result)
+    diff = (merged["factor_value_s"] - merged["factor_value_m"]).abs()
+    assert diff.max() < 1e-12, (
+        f"单日与区间路径结果漂移: max diff={diff.max()}"
+    )

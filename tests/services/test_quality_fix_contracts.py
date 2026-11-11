@@ -313,9 +313,10 @@ def test_custom_factor_expands_preheat_window_for_large_rolling():
 
 @_marker_factor_engine
 def test_get_factor_data_expands_window_for_needs_history_sources():
-    """needs_history=True 的源（daily_basic）必须带一年预热窗读取，
-    否则 pe/pb/ps 的 252 日滚动分位在单日截面下没有观测；codes_only
-    源（income）则只按 ts_codes 全量读取、不带窗口。"""
+    """needs_history=True 的源（daily_basic）必须带足预热窗读取
+    （覆盖估值分位的 365 日历日窗口），否则 pe/pb/ps 的滚动分位在
+    单日截面下没有观测、且与区间回填结果漂移；codes_only 源（income）
+    则只按 ts_codes 全量读取、不带窗口。"""
     captured = {}
 
     class _StubBasicReader:
@@ -331,7 +332,8 @@ def test_get_factor_data_expands_window_for_needs_history_sources():
     engine.data_reader = _StubBasicReader()
 
     engine._get_factor_data("pe_percentile", ["000001.SZ"], "2026-06-01", "2026-06-30")
-    expected_start = (datetime(2026, 6, 1) - timedelta(days=252)).strftime("%Y-%m-%d")
+    preheat = FactorEngine.PREHEAT_DAYS_BY_SOURCE.get("daily_basic", 252)
+    expected_start = (datetime(2026, 6, 1) - timedelta(days=preheat)).strftime("%Y-%m-%d")
     assert captured["daily_basic"] == (expected_start, "2026-06-30")
 
     engine._get_factor_data("revenue_growth", ["000001.SZ"], "2026-06-01", "2026-06-30")

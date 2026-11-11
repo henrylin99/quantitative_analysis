@@ -331,11 +331,9 @@ class FactorEngine:
     CALENDAR_DAYS_PER_TRADING_DAY = 1.6
     PREHEAT_BUFFER_DAYS = 30
 
-    # 数据源 → (reader 方法名, 是否需要一年预热窗, 是否按 ts_codes 全量读取)
+    # 数据源 → (reader 方法名, 是否需要预热窗, 是否按 ts_codes 全量读取)
     DATA_SOURCE_LOADERS = {
         'return_prices': ('get_return_prices', True, False),
-        # daily_basic 供 pe/pb/ps_percentile 做 252 日滚动分位，必须带预热窗，
-        # 否则单日截面下每股只有 1 个观测，因子恒为空
         'daily_basic': ('get_daily_basic', True, False),
         'moneyflow': ('get_moneyflow', True, False),
         'cyq': ('get_cyq_perf', True, False),
@@ -344,6 +342,12 @@ class FactorEngine:
         'income': ('get_income_statement', False, True),
         'balance': ('get_balance_sheet', False, True),
     }
+
+    # 数据源 → 预热日历日数。默认 252 天覆盖滚动观测数 ≤252 的因子；
+    # daily_basic 供 pe/pb/ps_percentile 做按行日期锚定的 365 日历日滚动
+    # 分位，预热窗必须完整覆盖 365 天窗口再加节假日余量，否则同一行
+    # 在「单日作业」与「区间回填」两条路径下看到的窗口不同，结果漂移
+    PREHEAT_DAYS_BY_SOURCE = {'daily_basic': 400}
 
     def _get_factor_data(self, factor_id: str, ts_codes: List[str],
                         start_date: str, end_date: str,
@@ -358,7 +362,6 @@ class FactorEngine:
             logger.warning(f"内置因子未声明数据源: {factor_id}")
             return {}
 
-        extended_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=252)).strftime('%Y-%m-%d')
         data: Dict[str, pd.DataFrame] = {}
 
         for source in sources:
@@ -366,7 +369,10 @@ class FactorEngine:
                 data[source] = data_cache[source]
                 continue
             method_name, needs_history, codes_only = self.DATA_SOURCE_LOADERS[source]
-            window_start = extended_start if needs_history else start_date
+            days = self.PREHEAT_DAYS_BY_SOURCE.get(source, 252)
+            window_start = (
+                datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=days)
+            ).strftime('%Y-%m-%d') if needs_history else start_date
             try:
                 if codes_only:
                     loaded = getattr(self.data_reader, method_name)(ts_codes)
@@ -460,7 +466,11 @@ class FactorEngine:
                                      factor_id: str, value_col: str) -> pd.DataFrame:
         """估值历史分位数因子（PE/PB/PS 共用实现）。
 
-        每只股票至少需要 20 个有效数据点；滚动窗口 252 日、min_periods=20。
+        窗口按行日期锚定为过去 365 日历日（min_periods=20）：每行的分位
+        只取决于「该行日期之前 365 天」的观测，与请求区间的起点无关——
+        按观测数（rolling(252)）截断时，加载窗边界会随单日/区间请求变化，
+        同一行两条路径算出不同分位（区间回填与逐日作业结果漂移）。
+        预热窗由 PREHEAT_DAYS_BY_SOURCE['daily_basic']=400 天保证完整覆盖。
         """
         if 'daily_basic' not in data or data['daily_basic'].empty:
             return pd.DataFrame()
@@ -472,20 +482,15 @@ class FactorEngine:
         if df.empty:
             return pd.DataFrame()
 
-        valid_counts = df.groupby('ts_code')[value_col].transform('size')
-        df = df[valid_counts > 20]
-        if df.empty:
-            return pd.DataFrame()
-
-        df = df.sort_values(['ts_code', 'trade_date'])
+        df = df.sort_values(['ts_code', 'trade_date']).reset_index(drop=True)
         # rolling.rank 与 scipy percentileofscore(kind='rank') 同口径
-        # （窗口内平均名次 / 有效样本数），消除逐窗口 Python 回调——
-        # rolling.apply 回调在全市场 252 日窗口上是该因子的主要耗时
-        df['factor_value'] = df.groupby('ts_code')[value_col].transform(
-            lambda s: s.rolling(252, min_periods=20).rank(
-                method='average', pct=True
-            )
+        # （窗口内平均名次 / 有效样本数）；时间窗按 trade_date 回看 365 天
+        ranked = (
+            df.groupby('ts_code', sort=False)
+            .rolling(window='365D', on='trade_date', min_periods=20)[value_col]
+            .rank(method='average', pct=True)
         )
+        df['factor_value'] = ranked.to_numpy()
         return self._finalize_factor_result(df, 'factor_value', factor_id)
 
     def _pe_percentile_factor(self, data: Dict[str, pd.DataFrame], factor_id: str) -> pd.DataFrame:
