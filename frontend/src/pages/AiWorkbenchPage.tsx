@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
   deleteAiSaved,
+  deleteSavedStrategy,
   fetchAiMessages,
   fetchAiSaved,
   fetchAiSessions,
   fetchAiStatus,
+  fetchSavedStrategies,
   saveAiBoard,
   saveAiQuery,
   streamAiChat,
@@ -15,6 +17,7 @@ import {
   type AiSavedQuery,
   type AiSession,
   type AiStatus,
+  type SavedStrategy,
 } from '../api/ai'
 import { EmptyState } from '../components/StateViews'
 import { formatDateTime } from '../utils/format'
@@ -111,15 +114,17 @@ export default function AiWorkbenchPage() {
   const [errorHint, setErrorHint] = useState<string | null>(null)
   const abortRef = useRef<((reason?: string) => void) | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
-  // 沉淀：看板 + 常用查询
+  // 沉淀：看板 + 常用查询 + 已存策略
   const [boards, setBoards] = useState<AiBoard[]>([])
   const [savedQueries, setSavedQueries] = useState<AiSavedQuery[]>([])
+  const [strategies, setStrategies] = useState<SavedStrategy[]>([])
 
   const refreshSaved = () => {
     fetchAiSaved().then((r) => {
       setBoards(r.boards)
       setSavedQueries(r.queries)
     })
+    fetchSavedStrategies().then(setStrategies)
   }
 
   useEffect(() => {
@@ -285,6 +290,15 @@ export default function AiWorkbenchPage() {
     }
   }
 
+  const removeStrategy = async (name: string) => {
+    try {
+      await deleteSavedStrategy(name)
+      refreshSaved()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '删除失败')
+    }
+  }
+
   const statusChips = useMemo(
     () => [
       { label: `模型 · ${status?.llm.configured ? (status.llm.model ?? '已配置') : '未配置'}`, ok: status?.llm.configured },
@@ -367,6 +381,70 @@ export default function AiWorkbenchPage() {
                 </summary>
                 <div style={{ fontSize: 12.5, maxHeight: 300, overflowY: 'auto' }}>{renderMarkdown(b.content)}</div>
                 <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>{b.created_at}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h6 className="panel-title">
+              <span className="kicker" />
+              已存策略
+              <span className="chip">{strategies.length}</span>
+            </h6>
+          </div>
+          <div className="panel-body d-flex flex-column gap-2" style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {strategies.length === 0 && (
+              <EmptyState icon="🎯" text="对话中说「把这个策略保存为 xx」即可沉淀" />
+            )}
+            {strategies.map((s) => (
+              <details key={s.id} className="p-2 rounded" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <summary style={{ fontSize: 12.5, cursor: 'pointer' }} className="d-flex align-items-center gap-1">
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                  <span className="badge text-bg-secondary" style={{ fontSize: 10 }}>v{s.version}</span>
+                  <button
+                    type="button"
+                    className="btn p-0 border-0 text-faint"
+                    style={{ fontSize: 11 }}
+                    title="删除策略（全部版本）"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (window.confirm(`删除策略「${s.name}」的全部版本？`)) removeStrategy(s.name)
+                    }}
+                  >
+                    ×
+                  </button>
+                </summary>
+                <div style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>
+                  {s.description && <div>{s.description}</div>}
+                  {s.strategy_config?.engine_config?.dsl ? (
+                    <>
+                      <div className="mt-1">
+                        <span className="badge text-bg-info" style={{ fontSize: 10 }}>DSL 规则</span>
+                        {' '}持仓 top {s.strategy_config?.engine_config?.top_n ?? '-'}
+                        {s.run_count != null && <> · 回测 {s.run_count} 次</>}
+                      </div>
+                      <div className="mt-1 font-monospace" style={{ fontSize: 10.5, wordBreak: 'break-all' }}>
+                        {s.strategy_config.engine_config.dsl.filter && <>filter: {s.strategy_config.engine_config.dsl.filter}<br /></>}
+                        order_by: {s.strategy_config.engine_config.dsl.order_by}
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      因子：{s.strategy_config?.engine_config?.factor_list?.join('、') ?? '-'} · 持仓 top {s.strategy_config?.engine_config?.top_n ?? '-'}
+                      {s.run_count != null && <> · 回测 {s.run_count} 次</>}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm mt-1"
+                  style={{ fontSize: 11 }}
+                  onClick={() => setInput(`回测策略「${s.name}」，并把结果与沪深300基准对比`)}
+                >
+                  ▶ 回测此策略
+                </button>
               </details>
             ))}
           </div>

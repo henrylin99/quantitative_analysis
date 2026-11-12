@@ -630,12 +630,18 @@ def _tool_calculate_factors_range(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
+    dsl_texts = _parse_dsl_args(args)
     factor_ids = args.get('factor_ids') or []
     if not isinstance(factor_ids, list):
         raise ToolError('factor_ids 必须是数组')
     factor_ids = [str(f).strip() for f in factor_ids if str(f).strip()]
-    if not factor_ids:
-        raise ToolError('factor_ids 不能为空（如 ["alpha_001"]），可先调用 list_factors 查看可用因子')
+    if not factor_ids and not dsl_texts:
+        raise ToolError(
+            '需要 factor_ids（如 ["alpha_001"]）或 dsl_filter/dsl_order_by 规则，'
+            '可先调用 list_factors 查看可用因子'
+        )
+    if dsl_texts and not dsl_texts['order_by']:
+        raise ToolError('dsl_order_by 不能为空（排序表达式的必要条件）')
 
     start_date = _normalize_trade_date(args.get('start_date'))
     end_date = _normalize_trade_date(args.get('end_date'))
@@ -663,12 +669,22 @@ def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
     if initial_capital <= 0:
         raise ToolError('initial_capital 必须大于 0')
 
-    strategy_config = {
-        'selection_method': 'factor_based',
-        'factor_list': factor_ids,
-        'top_n': top_n,
-        'benchmark_index': benchmark_index,
-    }
+    if dsl_texts and args.get('weights') is not None:
+        raise ToolError('DSL 规则回测不支持 weights')
+    weights = _parse_factor_weights(args.get('weights'), factor_ids) if not dsl_texts else {}
+
+    if dsl_texts:
+        strategy_config = _build_dsl_engine_config(dsl_texts, top_n, benchmark_index)
+        factor_ids = strategy_config['factor_list']  # 覆盖校验复用同一入口
+    else:
+        strategy_config = {
+            'selection_method': 'factor_based',
+            'factor_list': factor_ids,
+            'top_n': top_n,
+            'benchmark_index': benchmark_index,
+        }
+        if weights:
+            strategy_config['weights'] = weights
 
     # 与 /api/ml-factor/backtest/run 异步路径同构：先建 run 记录，
     # 再交后台线程执行，结果落盘 BacktestRepository
@@ -715,7 +731,8 @@ def _tool_run_backtest(args: Dict[str, Any]) -> Dict[str, Any]:
     ).start()
 
     note_parts = [
-        '回测在后台线程执行（分钟级）。可用 get_backtest_status(run_id=..., wait_seconds=300) 阻塞等待结果'
+        '回测在后台线程执行（分钟级）。可用 get_backtest_status(run_id=..., wait_seconds=300) 阻塞等待结果',
+        '本次配置如需沉淀复用，可调 save_strategy 保存为命名策略，之后用 run_strategy 按名重跑或调参对比'
     ]
     coverage_view = None
     if factor_coverage:
@@ -818,6 +835,230 @@ def _tool_get_backtest_status(args: Dict[str, Any]) -> Dict[str, Any]:
     elif status in ('queued', 'running'):
         payload['note'] = '回测仍在进行，可稍后再次查询（可传 wait_seconds 最多等待 300 秒）'
     return payload
+
+
+def _parse_factor_weights(raw: Any, factor_ids: List[str]) -> Dict[str, float]:
+    """解析因子权重：支持 {factor_id: 权重} 或与 factor_ids 对齐的数组。
+
+    负权重 = 反向因子（值越低越好）。返回空 dict 表示等权。
+    """
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        weights = {str(k).strip(): float(v) for k, v in raw.items() if str(k).strip()}
+    elif isinstance(raw, list):
+        if len(raw) != len(factor_ids):
+            raise ToolError(
+                f'weights 数组长度({len(raw)})须与 factor_ids({len(factor_ids)})一致；'
+                '也可用 {因子: 权重} 对象形式'
+            )
+        weights = {fid: float(v) for fid, v in zip(factor_ids, raw)}
+    else:
+        raise ToolError('weights 须是 {因子: 权重} 对象或与 factor_ids 对齐的数组')
+    unknown = [fid for fid in weights if fid not in factor_ids]
+    if unknown:
+        raise ToolError(f'weights 里出现了 factor_ids 之外的因子: {unknown}')
+    if not any(v != 0 for v in weights.values()):
+        raise ToolError('weights 不能全为 0（和为 0 无法归一化）')
+    return weights
+
+
+def _parse_dsl_args(args: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """提取 dsl_filter / dsl_order_by；两者都缺省返回 None（非 DSL 请求）。
+
+    只给 dsl_filter 不给 dsl_order_by 视为非法（order_by 是排序的必要条件）。
+    """
+    dsl_filter = str(args.get('dsl_filter') or '').strip()
+    dsl_order_by = str(args.get('dsl_order_by') or '').strip()
+    if not dsl_filter and not dsl_order_by:
+        return None
+    if dsl_order_by and args.get('factor_ids'):
+        raise ToolError(
+            'factor_ids 与 dsl_filter/dsl_order_by 互斥：'
+            'DSL 规则策略不需要 factor_ids/weights'
+        )
+    return {'filter': dsl_filter, 'order_by': dsl_order_by}
+
+
+def _build_dsl_engine_config(dsl_texts: Dict[str, str], top_n: int,
+                             benchmark_index: str) -> Dict[str, Any]:
+    """按注册表解析 DSL 并组装 dsl_rule 引擎配置；DslError 转 ToolError。"""
+    from app.services.strategy_dsl import DslError, parse_dsl
+
+    available = {f['factor_id'] for f in _get_factor_engine().get_factor_list()}
+    try:
+        program = parse_dsl(
+            dsl_texts['filter'], dsl_texts['order_by'], known_factors=available
+        )
+    except DslError as exc:
+        raise ToolError(f'DSL 非法: {exc}')
+    return {
+        'selection_method': 'dsl_rule',
+        'dsl': {
+            'filter': program.filter_text,
+            'order_by': program.order_text,
+        },
+        'factor_list': sorted(program.referenced_factors),
+        'top_n': top_n,
+        'benchmark_index': benchmark_index,
+    }
+
+
+def _get_strategy_service():
+    from app.services.parquet_state_store import (
+        BacktestRepository,
+        ParquetStateStore,
+        StrategyRepository,
+    )
+    from app.services.strategy_service import StrategyService
+
+    store = ParquetStateStore()
+    return StrategyService(StrategyRepository(store), BacktestRepository(store))
+
+
+def _tool_save_strategy(args: Dict[str, Any]) -> Dict[str, Any]:
+    name = str(args.get('name') or '').strip()
+    if not name:
+        raise ToolError('name 不能为空（策略名将用于后续 run_strategy 按名重跑）')
+
+    dsl_texts = _parse_dsl_args(args)
+    factor_ids = args.get('factor_ids') or []
+    if not isinstance(factor_ids, list):
+        raise ToolError('factor_ids 必须是数组')
+    factor_ids = [str(f).strip() for f in factor_ids if str(f).strip()]
+    if not factor_ids and not dsl_texts:
+        raise ToolError(
+            '需要 factor_ids 或 dsl_filter/dsl_order_by 规则，'
+            '可先调用 list_factors 查看可用因子'
+        )
+    if dsl_texts and not dsl_texts['order_by']:
+        raise ToolError('dsl_order_by 不能为空（排序表达式的必要条件）')
+
+    if not dsl_texts:
+        available = {f['factor_id'] for f in _get_factor_engine().get_factor_list()}
+        unknown = [f for f in factor_ids if f not in available]
+        if unknown:
+            raise ToolError(f'未知因子: {unknown}，可先调用 list_factors 查看全部可用因子')
+
+    if dsl_texts and (args.get('weights') is not None or args.get('factor_directions')):
+        raise ToolError('DSL 策略不支持 weights / factor_directions')
+    weights = {} if dsl_texts else _parse_factor_weights(args.get('weights'), factor_ids)
+    factor_directions = {} if dsl_texts else (args.get('factor_directions') or {})
+    if not isinstance(factor_directions, dict):
+        raise ToolError('factor_directions 须是 {因子: "high"/"low"} 对象')
+    for fid, direction in factor_directions.items():
+        if str(fid) not in factor_ids:
+            raise ToolError(f'factor_directions 里出现了 factor_ids 之外的因子: {fid}')
+        if str(direction) not in ('high', 'low'):
+            raise ToolError(f'factor_directions 取值仅支持 high/low，{fid}={direction}')
+
+    try:
+        top_n = int(50 if args.get('top_n') is None else args.get('top_n'))
+    except (TypeError, ValueError):
+        raise ToolError('top_n 必须是整数')
+
+    start_date = _normalize_trade_date(args.get('start_date')) if args.get('start_date') else ''
+    end_date = _normalize_trade_date(args.get('end_date')) if args.get('end_date') else ''
+
+    from app.services.strategy_service import StrategyError, build_strategy_config
+
+    try:
+        if dsl_texts:
+            config = build_strategy_config(
+                top_n=top_n,
+                benchmark_index=str(args.get('benchmark_index') or '000300.SH'),
+                start_date=start_date,
+                end_date=end_date,
+                rebalance_frequency=str(args.get('rebalance_frequency') or 'monthly'),
+                initial_capital=float(
+                    1000000.0 if args.get('initial_capital') is None else args.get('initial_capital')
+                ),
+                dsl_filter=dsl_texts['filter'],
+                dsl_order_by=dsl_texts['order_by'],
+                known_factors={f['factor_id'] for f in _get_factor_engine().get_factor_list()},
+            )
+        else:
+            config = build_strategy_config(
+                factor_ids=factor_ids,
+                weights=weights or None,
+                top_n=top_n,
+                benchmark_index=str(args.get('benchmark_index') or '000300.SH'),
+                factor_directions=factor_directions,
+                start_date=start_date,
+                end_date=end_date,
+                rebalance_frequency=str(args.get('rebalance_frequency') or 'monthly'),
+                initial_capital=float(
+                    1000000.0 if args.get('initial_capital') is None else args.get('initial_capital')
+                ),
+            )
+        saved = _get_strategy_service().save_strategy(
+            name, config, description=str(args.get('description') or '')
+        )
+    except (StrategyError, ValueError) as exc:
+        raise ToolError(f'策略保存失败: {exc}')
+
+    return {
+        'name': saved['name'],
+        'version': saved['version'],
+        'description': saved['description'],
+        'strategy_config': config,
+        'note': (
+            f"已保存为 v{saved['version']}（同名再保存会升版并保留历史）。"
+            '用 run_strategy(strategy_name=...) 按名回测；'
+            '调参对比可用 overrides 重跑后 compare_backtests'
+        ),
+    }
+
+
+def _tool_run_strategy(args: Dict[str, Any]) -> Dict[str, Any]:
+    name = str(args.get('strategy_name') or args.get('name') or '').strip()
+    if not name:
+        raise ToolError('strategy_name 不能为空')
+
+    overrides: Dict[str, Any] = {}
+    for key in ('start_date', 'end_date', 'top_n', 'rebalance_frequency', 'initial_capital'):
+        if args.get(key) is not None:
+            overrides[key] = args.get(key)
+    if overrides.get('start_date'):
+        overrides['start_date'] = _normalize_trade_date(overrides['start_date'])
+    if overrides.get('end_date'):
+        overrides['end_date'] = _normalize_trade_date(overrides['end_date'])
+
+    strategy = _get_strategy_service().strategy_repo.get_strategy(name)
+    if strategy is None:
+        raise ToolError(f'未找到策略: {name}（可先 save_strategy 保存，或核对名称）')
+    factor_ids = (strategy['strategy_config'].get('engine_config') or {}).get('factor_list') or []
+    if args.get('weights') is not None:
+        overrides['weights'] = _parse_factor_weights(args.get('weights'), factor_ids)
+
+    from app.services.strategy_service import StrategyError
+
+    try:
+        run = _get_strategy_service().run_strategy(name, overrides=overrides)
+    except StrategyError as exc:
+        raise ToolError(str(exc))
+
+    return {
+        **run,
+        'note': (
+            '策略回测在后台线程执行（分钟级）。'
+            '可用 get_backtest_status(run_id=..., wait_seconds=300) 阻塞等待结果，'
+            '再用 compare_backtests 对比多个 run'
+        ),
+    }
+
+
+def _tool_compare_backtests(args: Dict[str, Any]) -> Dict[str, Any]:
+    run_ids = args.get('run_ids') or []
+    if not isinstance(run_ids, list):
+        raise ToolError('run_ids 必须是数组（2~6 个）')
+
+    from app.services.strategy_service import StrategyError
+
+    try:
+        return _get_strategy_service().compare_runs([int(r) for r in run_ids])
+    except (StrategyError, ValueError) as exc:
+        raise ToolError(f'对比失败: {exc}')
 
 
 def _tool_discover_factor_combo(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1374,22 +1615,34 @@ AI_TOOLS: List[AiTool] = [
     ),
     AiTool(
         'run_backtest',
-        '基于因子选股运行组合回测（后台执行，返回 run_id）。策略按 factor_list 中因子打分，'
+        '基于因子选股运行组合回测（后台执行，返回 run_id）。两种方式二选一：'
+        '① factor_ids 打分（可选 weights 加权，负权重=反向因子）；'
+        '② dsl_filter/dsl_order_by 声明式规则（过滤+排序，与 factor_ids 互斥）。'
         '每个调仓期选前 top_n 只股票，支持与基准指数对比（默认沪深300）。'
         '回测区间内因子值必须已落库，缺失时先调 calculate_factors_range 补算。'
         '提交后用 get_backtest_status 查询进度与结果指标。',
         {
             'type': 'object',
             'properties': {
-                'factor_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '选股因子，如 ["alpha_001"]'},
+                'factor_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '选股因子，如 ["alpha_001"]；与 dsl_* 互斥'},
+                'dsl_filter': {'type': 'string', 'description': 'DSL 过滤规则（可选），如 "rank(momentum_20) > 0.8 and pe_percentile < 0.3"'},
+                'dsl_order_by': {'type': 'string', 'description': 'DSL 排序表达式（降序取 top_n），如 "rank(momentum_20) - rank(pe_percentile)"；给出 dsl_* 时必填'},
                 'start_date': {'type': 'string', 'description': '回测起始日期 YYYY-MM-DD 或 YYYYMMDD'},
                 'end_date': {'type': 'string', 'description': '回测结束日期 YYYY-MM-DD 或 YYYYMMDD'},
                 'benchmark_index': {'type': 'string', 'description': '基准指数代码，默认 000300.SH（沪深300）'},
                 'top_n': {'type': 'integer', 'description': '每期持仓股票数，默认 50'},
+                'weights': {
+                    'oneOf': [
+                        {'type': 'object', 'additionalProperties': {'type': 'number'}},
+                        {'type': 'array', 'items': {'type': 'number'}},
+                    ],
+                    'description': '因子权重，{因子: 权重} 或与 factor_ids 对齐的数组；负权重=反向因子（如低 PE 优先）；缺省等权',
+                },
                 'initial_capital': {'type': 'number', 'description': '初始资金，默认 1000000'},
                 'rebalance_frequency': {'type': 'string', 'enum': ['daily', 'weekly', 'monthly'], 'description': '调仓频率，默认 monthly'},
             },
-            'required': ['factor_ids', 'start_date', 'end_date'],
+            'required': ['start_date', 'end_date'],
+            'description': 'factor_ids 与 dsl_filter/dsl_order_by 二选一',
         },
         'action',
         _tool_run_backtest,
@@ -1409,6 +1662,86 @@ AI_TOOLS: List[AiTool] = [
         },
         'read',
         _tool_get_backtest_status,
+    ),
+    AiTool(
+        'save_strategy',
+        '把一组选股因子配置保存为命名策略（可复用、可迭代升版）。保存后用 '
+        'run_strategy 按名回测，或在对话迭代中调参重跑、compare_backtests 对比。'
+        '同名再保存会升版（v1→v2…），历史版本保留。',
+        {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string', 'description': '策略名，如 "动量+低估值50"'},
+                'factor_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '选股因子列表；与 dsl_* 互斥'},
+                'dsl_filter': {'type': 'string', 'description': 'DSL 过滤规则（可选），如 "rank(momentum_20) > 0.8"；保存前会按因子注册表校验'},
+                'dsl_order_by': {'type': 'string', 'description': 'DSL 排序表达式（降序取 top_n），如 "rank(momentum_20) - rank(pe_percentile)"；给出 dsl_* 时必填'},
+                'weights': {
+                    'oneOf': [
+                        {'type': 'object', 'additionalProperties': {'type': 'number'}},
+                        {'type': 'array', 'items': {'type': 'number'}},
+                    ],
+                    'description': '因子权重（负值=反向因子），缺省等权',
+                },
+                'factor_directions': {
+                    'type': 'object',
+                    'additionalProperties': {'type': 'string', 'enum': ['high', 'low']},
+                    'description': '元信息：各因子方向（high=值大好 / low=值小好），供展示与回顾',
+                },
+                'top_n': {'type': 'integer', 'description': '每期持仓股票数，默认 50'},
+                'benchmark_index': {'type': 'string', 'description': '基准指数，默认 000300.SH'},
+                'rebalance_frequency': {'type': 'string', 'enum': ['daily', 'weekly', 'monthly'], 'description': '调仓频率，默认 monthly'},
+                'start_date': {'type': 'string', 'description': '默认回测起始日期（可选，run_strategy 时也可覆盖）'},
+                'end_date': {'type': 'string', 'description': '默认回测结束日期（可选）'},
+                'initial_capital': {'type': 'number', 'description': '初始资金，默认 1000000'},
+                'description': {'type': 'string', 'description': '策略一句话说明（选股逻辑/适用场景）'},
+            },
+            'required': ['name'],
+            'description': 'factor_ids 与 dsl_filter/dsl_order_by 二选一',
+        },
+        'action',
+        _tool_save_strategy,
+    ),
+    AiTool(
+        'run_strategy',
+        '按名运行已保存的策略回测（后台执行，返回 run_id）。overrides 可临时覆盖'
+        '区间（start_date/end_date）、top_n、weights、rebalance_frequency、'
+        'initial_capital 而不改动策略定义——迭代调参的标准做法。',
+        {
+            'type': 'object',
+            'properties': {
+                'strategy_name': {'type': 'string', 'description': 'save_strategy 时的策略名'},
+                'start_date': {'type': 'string', 'description': '覆盖回测起始日期 YYYY-MM-DD 或 YYYYMMDD'},
+                'end_date': {'type': 'string', 'description': '覆盖回测结束日期'},
+                'top_n': {'type': 'integer', 'description': '覆盖每期持仓数'},
+                'weights': {
+                    'oneOf': [
+                        {'type': 'object', 'additionalProperties': {'type': 'number'}},
+                        {'type': 'array', 'items': {'type': 'number'}},
+                    ],
+                    'description': '覆盖因子权重（负值=反向因子）',
+                },
+                'rebalance_frequency': {'type': 'string', 'enum': ['daily', 'weekly', 'monthly']},
+                'initial_capital': {'type': 'number'},
+            },
+            'required': ['strategy_name'],
+        },
+        'action',
+        _tool_run_strategy,
+    ),
+    AiTool(
+        'compare_backtests',
+        '并排对比 2~6 个回测 run 的核心指标（总收益/年化/夏普/最大回撤/胜率/'
+        'alpha/beta 等），用于策略迭代前后的效果比较。区间不一致会给出不可比'
+        '警告——对比请保持相同回测区间。',
+        {
+            'type': 'object',
+            'properties': {
+                'run_ids': {'type': 'array', 'items': {'type': 'integer'}, 'description': '2~6 个回测 run id'},
+            },
+            'required': ['run_ids'],
+        },
+        'read',
+        _tool_compare_backtests,
     ),
     AiTool(
         'query_fund',

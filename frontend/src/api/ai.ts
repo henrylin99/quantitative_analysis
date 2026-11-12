@@ -220,3 +220,42 @@ export const fetchSqlHistory = async (limit = 10) => {
   const r = await rawGet<{ success: boolean; history: Record<string, unknown>[] }>('/text2sql/history', { limit })
   return r.history ?? []
 }
+
+// ================= 已保存策略（AI save_strategy 产物） =================
+
+export interface SavedStrategy {
+  id: number
+  name: string
+  description: string
+  version: number
+  is_latest: boolean
+  created_at: string
+  run_count?: number
+  strategy_config: {
+    engine_config?: {
+      selection_method?: string
+      factor_list?: string[]
+      weights?: Record<string, number>
+      dsl?: { filter?: string; order_by?: string }
+      top_n?: number
+      benchmark_index?: string
+    }
+    params?: {
+      start_date?: string
+      end_date?: string
+      rebalance_frequency?: string
+    }
+  }
+}
+
+export const fetchSavedStrategies = async (): Promise<SavedStrategy[]> => {
+  try {
+    const r = await rawGet<{ success: boolean; strategies: SavedStrategy[] }>('/ml-factor/strategies')
+    return r.strategies ?? []
+  } catch {
+    return []
+  }
+}
+
+export const deleteSavedStrategy = (name: string) =>
+  rawDelete<{ success: boolean; removed_versions: number }>(`/ml-factor/strategies/${encodeURIComponent(name)}`)

@@ -353,10 +353,12 @@ class BacktestEngine:
                 model_ids = strategy_config.get('model_ids', [])
                 if not model_ids:
                     return []
-                
+
                 return self._get_scoring_engine().ml_based_selection(
                     trade_date, model_ids, top_n, 'average'
                 )
+            elif selection_method == 'dsl_rule':
+                return self._dsl_selection(strategy_config, trade_date, top_n)
             else:
                 factor_list = strategy_config.get('factor_list', [])
                 if not factor_list:
@@ -369,9 +371,12 @@ class BacktestEngine:
                 if factor_scores.empty:
                     return []
                 
-                weights_config = strategy_config.get('weights', {})
+                # weights 是 {factor_id: 权重} 字典（负权重=反向因子）；
+                # 只在显式给出时启用加权评分，缺省维持等权，行为与历史 run 一致
+                weights_config = strategy_config.get('weights') or {}
+                scoring_method = 'factor_weight' if weights_config else 'equal_weight'
                 composite_scores = self._get_scoring_engine().calculate_composite_score(
-                    factor_scores, weights_config, 'equal_weight'
+                    factor_scores, weights_config, scoring_method
                 )
                 
                 return self._get_scoring_engine().rank_stocks(composite_scores, top_n)
@@ -379,8 +384,51 @@ class BacktestEngine:
         except Exception as e:
             logger.error(f"获取股票选择结果失败: {e}")
             return []
-    
-    # 截面 z-score → 年化预期收益的线性映射区间（保守量级，
+
+    def _dsl_selection(self, strategy_config: Dict[str, Any],
+                       trade_date: str, top_n: int) -> List[Dict[str, Any]]:
+        """DSL 规则选股：解析 dsl 规则 → 当日截面宽表 → 过滤+排序取 top N。
+
+        输出经 rank_stocks 补充股票基本信息，与 factor_based 路径同构。
+        解析/求值错误记录日志并返回空选股（上层按"没选出股票"跳过该期）；
+        语法在保存/提交时已 fail-fast 校验过，这里异常属边缘情况。
+        """
+        import ast as _ast
+
+        from app.services.strategy_dsl import DslError, parse_dsl
+
+        dsl_config = strategy_config.get('dsl') or {}
+        filter_text = dsl_config.get('filter', '')
+        order_text = dsl_config.get('order_by', '')
+
+        # factor_list 由 build_strategy_config 从 DSL 提取；手工构造的
+        # config 缺失时退化为标识符级校验（仅语法，注册表校验跳过）
+        known = set(strategy_config.get('factor_list') or [])
+        if not known:
+            for text in (filter_text, order_text):
+                for node in _ast.walk(_ast.parse(text, mode='eval')):
+                    if isinstance(node, _ast.Name):
+                        known.add(node.id)
+        try:
+            program = parse_dsl(filter_text, order_text, known_factors=known)
+        except (DslError, SyntaxError) as e:
+            logger.error(f"DSL 解析失败 {trade_date}: {e}")
+            return []
+
+        factor_scores = self._get_scoring_engine().calculate_factor_scores(
+            trade_date, sorted(program.referenced_factors)
+        )
+        if factor_scores.empty:
+            return []
+        try:
+            scores_df = program.select(factor_scores, top_n)
+        except DslError as e:
+            logger.error(f"DSL 求值失败 {trade_date}: {e}")
+            return []
+        if scores_df.empty:
+            return []
+        return self._get_scoring_engine().rank_stocks(scores_df, top_n)
+
     # 与年化协方差匹配；与 API 在线优化共用优化器上的同一区间）
     EXPECTED_RETURN_LOWER = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_LOWER
     EXPECTED_RETURN_UPPER = PortfolioOptimizer.ANNUAL_EXPECTED_RETURN_UPPER

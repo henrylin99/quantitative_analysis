@@ -1451,6 +1451,116 @@ class BacktestRepository:
         return _normalize_json(match.iloc[-1].get("result_json"))
 
 
+class StrategyRepository:
+    """命名策略定义（AI 工作台「保存策略/重跑/迭代对比」的持久化层）。
+
+    与 BacktestRepository 同构的 parquet 表存储。同名保存 = 追加新版本行
+    （version 递增，旧行 is_latest 置 0 保留），策略族整体可按名删除。
+    strategy_config_json 的 schema 见 StrategyService——引擎参数包在
+    engine_config 里，params 存回测区间等运行参数。
+    """
+
+    TABLE = "strategy_definitions"
+
+    def __init__(self, store: ParquetStateStore):
+        self.store = store
+
+    @staticmethod
+    def _row_to_dict(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(_to_python_scalar(row["id"])),
+            "name": str(_to_python_scalar(row["name"])),
+            "description": _to_python_scalar(row.get("description")) or "",
+            "strategy_config": _json_dict(row.get("strategy_config_json")),
+            "version": int(_to_python_scalar(row.get("version")) or 1),
+            "is_latest": bool(row.get("is_latest")),
+            "source_session_id": _to_python_scalar(row.get("source_session_id")),
+            "created_at": _as_iso(row.get("created_at")),
+        }
+
+    def save_strategy(
+        self,
+        name: str,
+        strategy_config: Dict[str, Any],
+        description: str = "",
+        source_session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """保存策略；同名则升版（旧行 is_latest 置 0，保留迭代轨迹）。"""
+        if not name or not str(name).strip():
+            raise ValueError("策略名不能为空")
+        name = str(name).strip()
+        record = {
+            "name": name,
+            "description": str(description or ""),
+            "strategy_config_json": json.dumps(
+                strategy_config or {}, ensure_ascii=False, default=str
+            ),
+            "source_session_id": source_session_id,
+            "created_at": _now_iso(),
+        }
+        with self.store.locked(self.TABLE):
+            df = self.store.read_frame(self.TABLE)
+            if df.empty or "name" not in df.columns:
+                df = pd.DataFrame()
+            if not df.empty:
+                df.loc[df["name"] == name, "is_latest"] = False
+            version = 1
+            if not df.empty:
+                prior = df[df["name"] == name]
+                if not prior.empty:
+                    version = int(
+                        pd.to_numeric(prior["version"], errors="coerce").max()
+                    ) + 1
+            record = {
+                "id": int(self.store.next_integer_id(self.TABLE)),
+                "version": version,
+                "is_latest": True,
+                **record,
+            }
+            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+            self.store.write_frame(self.TABLE, df)
+        row = df[pd.to_numeric(df["id"], errors="coerce") == record["id"]].iloc[-1]
+        return self._row_to_dict(row)
+
+    def get_strategy(self, name: str, version: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        df = self.store.read_frame(self.TABLE)
+        if df.empty or "name" not in df.columns:
+            return None
+        match = df[df["name"] == str(name).strip()]
+        if match.empty:
+            return None
+        if version is not None:
+            match = match[pd.to_numeric(match["version"], errors="coerce") == int(version)]
+            if match.empty:
+                return None
+        else:
+            latest = match[match["is_latest"].astype(bool)]
+            match = latest if not latest.empty else match
+        return self._row_to_dict(match.iloc[-1])
+
+    def list_strategies(self, include_history: bool = False) -> List[Dict[str, Any]]:
+        df = self.store.read_frame(self.TABLE)
+        if df.empty or "name" not in df.columns:
+            return []
+        df = df.sort_values(["name", "version"]).reset_index(drop=True)
+        rows = [self._row_to_dict(row) for _, row in df.iterrows()]
+        if include_history:
+            return rows
+        return [row for row in rows if row["is_latest"]]
+
+    def delete_strategy(self, name: str) -> int:
+        """删除策略族（全部版本），返回删除行数。"""
+        with self.store.locked(self.TABLE):
+            df = self.store.read_frame(self.TABLE)
+            if df.empty or "name" not in df.columns:
+                return 0
+            mask = df["name"] == str(name).strip()
+            removed = int(mask.sum())
+            if removed:
+                self.store.write_frame(self.TABLE, df[~mask].reset_index(drop=True))
+        return removed
+
+
 def _record_to_dict(row: Any, json_columns: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     json_columns = set(json_columns or [])
     if isinstance(row, pd.Series):

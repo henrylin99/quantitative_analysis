@@ -411,6 +411,71 @@ def get_factor_list():
         return jsonify({'error': str(e)}), 500
 
 
+@ml_factor_bp.route('/strategies', methods=['GET'])
+def list_strategies():
+    """已保存命名策略列表（AI 工作台 save_strategy 的产物）。
+
+    include_history=1 时返回全部版本（迭代轨迹），默认只返回 latest。
+    附带每个策略的回测 run 数（strategy_name 溯源字段统计）。
+    """
+    try:
+        include_history = request.args.get('include_history', '0') == '1'
+        from app.services.parquet_state_store import StrategyRepository
+
+        strategies = StrategyRepository(_state_store).list_strategies(
+            include_history=include_history
+        )
+        runs = _backtest_repo.list_runs()
+        run_counts = {}
+        for run in runs:
+            name = (run.get('strategy_config') or {}).get('strategy_name')
+            if name:
+                run_counts[name] = run_counts.get(name, 0) + 1
+        for strategy in strategies:
+            strategy['run_count'] = run_counts.get(strategy['name'], 0)
+        return jsonify({
+            'success': True,
+            'strategies': convert_numpy_types(strategies),
+            'total_count': len(strategies),
+        })
+    except Exception as e:
+        logger.error(f"获取策略列表失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/strategies/<name>', methods=['GET'])
+def get_strategy(name):
+    """单个策略详情（?version=N 看历史版本；默认 latest）。"""
+    try:
+        from app.services.parquet_state_store import StrategyRepository
+
+        version = request.args.get('version')
+        strategy = StrategyRepository(_state_store).get_strategy(
+            name, version=int(version) if version else None
+        )
+        if strategy is None:
+            return jsonify({'error': f'未找到策略: {name}'}), 404
+        return jsonify({'success': True, 'strategy': convert_numpy_types(strategy)})
+    except Exception as e:
+        logger.error(f"获取策略详情失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/strategies/<name>', methods=['DELETE'])
+def delete_strategy(name):
+    """删除策略族（全部版本）。"""
+    try:
+        from app.services.parquet_state_store import StrategyRepository
+
+        removed = StrategyRepository(_state_store).delete_strategy(name)
+        if not removed:
+            return jsonify({'error': f'未找到策略: {name}'}), 404
+        return jsonify({'success': True, 'removed_versions': removed})
+    except Exception as e:
+        logger.error(f"删除策略失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/chip-signals', methods=['GET'])
 def get_chip_signals():
     """筹码信号扫描：挤压蓄势 / 资金×筹码共振 / 量价资金背离。
