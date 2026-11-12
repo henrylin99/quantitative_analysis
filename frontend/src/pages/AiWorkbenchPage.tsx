@@ -438,9 +438,18 @@ export default function AiWorkbenchPage() {
         </div>
       </div>
 
-      {/* 聊天区：sticky 长驻视口——左栏滚动时输入框不跟随页面滚走 */}
-      <div className="col-lg-9" style={{ position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
-        <div className="panel h-100">
+      {/* 聊天区：sticky 长驻视口并撑满屏高——左栏滚动时输入框不跟随页面滚走，且贴近视口底部 */}
+      <div
+        className="col-lg-9"
+        style={{
+          position: 'sticky',
+          top: 12,
+          alignSelf: 'flex-start',
+          height: 'calc(100vh - 24px)',
+          display: 'flex',
+        }}
+      >
+        <div className="panel h-100 w-100 d-flex flex-column">
           <div className="panel-head flex-wrap">
             <div className="d-flex gap-2 flex-wrap">
               {statusChips.map((c) => (
@@ -454,7 +463,7 @@ export default function AiWorkbenchPage() {
               操作模式（允许执行数据任务）
             </label>
           </div>
-          <div className="panel-body d-flex flex-column" style={{ height: 560 }}>
+          <div className="panel-body d-flex flex-column flex-grow-1" style={{ minHeight: 0 }}>
             {errorHint && <div className="alert-note mb-2">⚠️ {errorHint}</div>}
             <div ref={chatScrollRef} onScroll={onChatScroll} className="flex-grow-1" style={{ overflowY: 'auto', paddingRight: 4 }}>
               {items.length === 0 && !streaming && (
