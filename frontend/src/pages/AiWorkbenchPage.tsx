@@ -118,6 +118,9 @@ export default function AiWorkbenchPage() {
   const [errorHint, setErrorHint] = useState<string | null>(null)
   const abortRef = useRef<((reason?: string) => void) | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement | null>(null)
+  // 吸底跟随：用户在底部附近时才自动滚，上翻回看即停止，不再拽滚动条
+  const stickBottomRef = useRef(true)
   // 沉淀：看板 + 常用查询 + 已存策略
   const [boards, setBoards] = useState<AiBoard[]>([])
   const [savedQueries, setSavedQueries] = useState<AiSavedQuery[]>([])
@@ -143,8 +146,17 @@ export default function AiWorkbenchPage() {
   useEffect(refreshMeta, [])
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // 只在用户处于底部附近时跟随滚动；用容器 scrollTo 只滚聊天区，不带动整个页面
+    if (!stickBottomRef.current) return
+    const el = chatScrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [items, streamText])
+
+  const onChatScroll = () => {
+    const el = chatScrollRef.current
+    if (!el) return
+    stickBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+  }
 
   const openSession = async (id: string) => {
     setSessionId(id)
@@ -202,6 +214,7 @@ export default function AiWorkbenchPage() {
   const send = (text?: string) => {
     const message = (text ?? input).trim()
     if (!message || streaming) return
+    stickBottomRef.current = true // 发送新消息时恢复吸底跟随
     setInput('')
     setErrorHint(null)
     setItems((prev) => [...prev, { role: 'user', content: message }])
@@ -443,7 +456,7 @@ export default function AiWorkbenchPage() {
           </div>
           <div className="panel-body d-flex flex-column" style={{ height: 560 }}>
             {errorHint && <div className="alert-note mb-2">⚠️ {errorHint}</div>}
-            <div className="flex-grow-1" style={{ overflowY: 'auto', paddingRight: 4 }}>
+            <div ref={chatScrollRef} onScroll={onChatScroll} className="flex-grow-1" style={{ overflowY: 'auto', paddingRight: 4 }}>
               {items.length === 0 && !streaming && (
                 <>
                   <EmptyState icon="🧠" text="向 AI 助手提问，支持查数据、更新数据、算因子等工具调用" />
