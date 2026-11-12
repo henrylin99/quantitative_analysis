@@ -303,3 +303,67 @@ class TestDslTools:
         assert out["status"] == "queued"
         assert out["strategy_config"]["selection_method"] == "dsl_rule"
         assert out["strategy_config"]["top_n"] == 5
+
+
+class TestSuggestStrategyChanges:
+    def _seed_strategy_with_runs(self, app):
+        from app.services.parquet_state_store import (
+            BacktestRepository,
+            ParquetStateStore,
+        )
+        out = _ok(execute_tool("save_strategy", {
+            "name": "待优化", "factor_ids": ["momentum_20"], "top_n": 30,
+            "start_date": "2026-01-01", "end_date": "2026-06-30",
+        }))
+        repo = BacktestRepository(ParquetStateStore())
+        run_ids = []
+        for _ in range(4):  # 同区间 4 次成功 run → 触发过拟合预警
+            run = repo.create_run(
+                {"selection_method": "factor_based", "factor_list": ["momentum_20"],
+                 "strategy_name": "待优化", "strategy_version": 1},
+                "2026-01-01", "2026-06-30", 1000000.0, "monthly",
+            )
+            repo.update_summary(run["id"], {"status": "succeeded"})
+            repo.save_result(run["id"], {"performance_metrics": {"total_return": 0.1}})
+            run_ids.append(run["id"])
+        assert out["version"] == 1
+        return run_ids
+
+    def test_suggest_packages_context(self, app, factor_engine_stub):
+        self._seed_strategy_with_runs(app)
+        out = _ok(execute_tool(
+            "suggest_strategy_changes", {"strategy_name": "待优化"},
+        ))
+        assert out["latest_version"]["name"] == "待优化"
+        assert out["version_count"] == 1
+        assert out["succeeded_run_count"] == 4
+        assert out["same_range_iterations"] == 4
+        assert "过拟合" in out["overfit_warning"]
+        assert "未经用户确认" in out["note"]
+
+    def test_suggest_no_warning_below_threshold(self, app, factor_engine_stub):
+        from app.services.parquet_state_store import (
+            BacktestRepository,
+            ParquetStateStore,
+        )
+
+        _ok(execute_tool("save_strategy", {
+            "name": "低迭代", "factor_ids": ["momentum_20"], "top_n": 30,
+        }))
+        repo = BacktestRepository(ParquetStateStore())
+        run = repo.create_run(
+            {"strategy_name": "低迭代", "strategy_version": 1},
+            "2026-01-01", "2026-06-30", 1000000.0, "monthly",
+        )
+        repo.update_summary(run["id"], {"status": "succeeded"})
+        out = _ok(execute_tool(
+            "suggest_strategy_changes", {"strategy_name": "低迭代"},
+        ))
+        assert out["same_range_iterations"] == 1
+        assert out["overfit_warning"] is None
+
+    def test_suggest_unknown_strategy(self, app):
+        result = execute_tool(
+            "suggest_strategy_changes", {"strategy_name": "不存在"},
+        )
+        assert result["ok"] is False

@@ -27,6 +27,7 @@ const StockRadarPage = lazy(() => import('./pages/StockRadarPage'))
 const StockPanoramaPage = lazy(() => import('./pages/StockPanoramaPage'))
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage'))
 const MlFactorIndexPage = lazy(() => import('./pages/MlFactorIndexPage'))
+const StrategiesPage = lazy(() => import('./pages/StrategiesPage'))
 const MlModelsPage = lazy(() => import('./pages/MlModelsPage'))
 const MlScoringPage = lazy(() => import('./pages/MlScoringPage'))
 const MlPortfolioPage = lazy(() => import('./pages/MlPortfolioPage'))
@@ -109,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: '多因子模型',
     items: [
       { to: '/ml-factor', label: '因子管理', icon: Dna, end: true },
+      { to: '/ml-factor/strategies', label: '策略管理', icon: Crosshair },
       { to: '/ml-factor/models', label: '模型管理', icon: Bot },
       { to: '/ml-factor/scoring', label: '股票评分', icon: Medal },
       { to: '/ml-factor/portfolio', label: '投资组合', icon: Briefcase },
@@ -464,6 +466,7 @@ function Shell() {
               }
             />
             <Route path="/ml-factor" element={<LazyRoute><MlFactorIndexPage /></LazyRoute>} />
+            <Route path="/ml-factor/strategies" element={<LazyRoute><StrategiesPage /></LazyRoute>} />
             <Route path="/ml-factor/models" element={<LazyRoute><MlModelsPage /></LazyRoute>} />
             <Route path="/ml-factor/scoring" element={<LazyRoute><MlScoringPage /></LazyRoute>} />
             <Route path="/ml-factor/portfolio" element={<LazyRoute><MlPortfolioPage /></LazyRoute>} />

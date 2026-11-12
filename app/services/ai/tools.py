@@ -1061,6 +1061,51 @@ def _tool_compare_backtests(args: Dict[str, Any]) -> Dict[str, Any]:
         raise ToolError(f'对比失败: {exc}')
 
 
+def _tool_suggest_strategy_changes(args: Dict[str, Any]) -> Dict[str, Any]:
+    """AI 优化闭环的只读上下文包：最新版配置 + 版本轨迹 + 最近回测指标 + 迭代计数。"""
+    name = str(args.get('strategy_name') or args.get('name') or '').strip()
+    if not name:
+        raise ToolError('strategy_name 不能为空')
+
+    from app.services.strategy_service import StrategyError
+
+    try:
+        history = _get_strategy_service().strategy_history(name)
+    except StrategyError as exc:
+        raise ToolError(str(exc))
+
+    versions = history.get('versions') or []
+    runs = history.get('runs') or []
+    succeeded = [r for r in runs if r.get('status') == 'succeeded']
+    # 同区间迭代计数：最后一次成功 run 区间内的成功 run 数（过拟合预警口径）
+    same_range_iters = 0
+    if succeeded:
+        rng = (succeeded[0].get('start_date'), succeeded[0].get('end_date'))
+        same_range_iters = sum(
+            1 for r in succeeded
+            if (r.get('start_date'), r.get('end_date')) == rng
+        )
+    return {
+        'strategy_name': name,
+        'latest_version': versions[0] if versions else None,
+        'version_count': len(versions),
+        'recent_runs': runs[:10],
+        'succeeded_run_count': len(succeeded),
+        'same_range_iterations': same_range_iters,
+        'overfit_warning': (
+            f'注意：该策略在区间 {rng} 已做了 {same_range_iters} 次迭代回测，'
+            '继续同区间调参属数据挖掘，过拟合风险高——建议换一段样本外区间验证，'
+            '或仅做少量有明确假设依据的修改'
+        ) if same_range_iters >= 3 else None,
+        'note': (
+            '基于以上真实配置与回测指标提出候选修改（改 weights/top_n/DSL/换因子），'
+            '每个候选附理由；先用 run_strategy(overrides) 同区间重跑验证，'
+            'compare_backtests 对比，结论向用户汇报并等确认后才 save_strategy 升版。'
+            '优化结果不要未经用户确认直接落库'
+        ),
+    }
+
+
 def _tool_discover_factor_combo(args: Dict[str, Any]) -> Dict[str, Any]:
     """因子组合自动发现（5.4）：体检排名 → 贪心去冗余 → 分位回测 → 报告。
 
@@ -1742,6 +1787,21 @@ AI_TOOLS: List[AiTool] = [
         },
         'read',
         _tool_compare_backtests,
+    ),
+    AiTool(
+        'suggest_strategy_changes',
+        'AI 优化策略的第一步（只读）：打包某策略最新版配置、版本轨迹、最近回测指标与同区间迭代计数。'
+        '用户要求「优化/改进某策略」时先调本工具拿真实上下文，再提出候选修改，'
+        '用 run_strategy(overrides) 验证 + compare_backtests 对比，用户确认后才 save_strategy 升版。',
+        {
+            'type': 'object',
+            'properties': {
+                'strategy_name': {'type': 'string', 'description': '策略名（save_strategy 时命名）'},
+            },
+            'required': ['strategy_name'],
+        },
+        'read',
+        _tool_suggest_strategy_changes,
     ),
     AiTool(
         'query_fund',

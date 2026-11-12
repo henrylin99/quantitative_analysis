@@ -130,6 +130,17 @@ def _build_params(start_date, end_date, rebalance_frequency, initial_capital):
     }
 
 
+def _factor_registry_ids() -> set:
+    """真实因子注册表 id 集合（拿不到注册表时返回空集=跳过校验）。"""
+    try:
+        from app.services.factor_engine import FactorEngine
+
+        return {f['factor_id'] for f in FactorEngine().get_factor_list()}
+    except Exception:  # noqa: BLE001 - 注册表不可用不阻断派生保存
+        logger.warning('因子注册表不可用，DSL 新引用因子跳过存在性校验', exc_info=True)
+        return set()
+
+
 def _dsl_identifier_names(filter_text: str, order_by_text: str) -> set:
     """无注册表时提取 DSL 中出现的标识符名，仅做语法级编译校验。"""
     import ast as _ast
@@ -164,6 +175,110 @@ class StrategyService:
         return self.strategy_repo.save_strategy(
             name, strategy_config, description, source_session_id
         )
+
+    # -- 版本历史 / 派生编辑 --------------------------------------
+
+    _HISTORY_RUN_METRICS = (
+        'total_return', 'annualized_return', 'sharpe_ratio',
+        'max_drawdown', 'win_rate', 'total_trades',
+    )
+
+    def strategy_history(self, name: str) -> Dict[str, Any]:
+        """全部版本 + 该策略的回测 run（含核心指标），供前端版本演进面板。"""
+        versions = [
+            s for s in self.strategy_repo.list_strategies(include_history=True)
+            if s['name'] == name
+        ]
+        if not versions:
+            raise StrategyError(f'未找到策略: {name}')
+        versions.sort(key=lambda s: s['version'], reverse=True)
+
+        runs = [
+            r for r in self.backtest_repo.list_runs()
+            if (r.get('strategy_config') or {}).get('strategy_name') == name
+        ]
+        runs.sort(key=lambda r: int(r['id']), reverse=True)
+        run_rows = []
+        for run in runs[:20]:  # 最近 20 条足够覆盖迭代对比
+            metrics = (self.backtest_repo.get_result(int(run['id'])) or {}).get(
+                'performance_metrics'
+            ) or {}
+            cfg = run.get('strategy_config') or {}
+            run_rows.append({
+                'run_id': int(run['id']),
+                'strategy_version': cfg.get('strategy_version'),
+                'start_date': run.get('start_date'),
+                'end_date': run.get('end_date'),
+                'status': (run.get('summary') or {}).get('status'),
+                'created_at': run.get('created_at'),
+                **{m: metrics.get(m) for m in self._HISTORY_RUN_METRICS},
+            })
+        return {'name': name, 'versions': versions, 'runs': run_rows}
+
+    def save_derived(
+        self,
+        name: str,
+        base_version: int,
+        edits: Optional[Dict[str, Any]] = None,
+        description: str = '',
+    ) -> Dict[str, Any]:
+        """以旧版本为底稿派生新版本（前端「编辑」入口，版本不可变原则不变）。
+
+        edits 支持 top_n / weights / factor_directions / dsl_filter /
+        dsl_order_by / start_date / end_date / rebalance_frequency /
+        initial_capital / benchmark_index。DSL 底稿改因子参数会重新走
+        parse_dsl 校验并刷新 factor_list。
+        """
+        base = self.strategy_repo.get_strategy(name, version=int(base_version))
+        if base is None:
+            raise StrategyError(f'未找到策略 {name} v{base_version}')
+        old = base['strategy_config']
+        old_engine = dict(old.get('engine_config') or {})
+        old_params = dict(old.get('params') or {})
+        edits = dict(edits or {})
+
+        for key in ('start_date', 'end_date', 'rebalance_frequency'):
+            if edits.get(key) is not None:
+                old_params[key] = edits[key]
+        if edits.get('initial_capital') is not None:
+            old_params['initial_capital'] = float(edits['initial_capital'])
+        top_n = edits.get('top_n', old_engine.get('top_n', 50))
+        benchmark = edits.get('benchmark_index', old_engine.get('benchmark_index'))
+
+        meta = dict((old.get('meta') or {}))
+        meta['derived_from'] = {'name': name, 'version': int(base_version)}
+
+        if old_engine.get('selection_method') == 'dsl_rule':
+            old_dsl = old_engine.get('dsl') or {}
+            # 底稿原有因子直接放行，新引用因子对注册表校验
+            known = set(old_engine.get('factor_list') or []) | _factor_registry_ids()
+            config = build_strategy_config(
+                top_n=top_n,
+                benchmark_index=benchmark,
+                start_date=str(old_params.get('start_date') or ''),
+                end_date=str(old_params.get('end_date') or ''),
+                rebalance_frequency=str(old_params.get('rebalance_frequency') or 'monthly'),
+                initial_capital=float(old_params.get('initial_capital') or 1000000.0),
+                dsl_filter=str(edits.get('dsl_filter', old_dsl.get('filter', ''))),
+                dsl_order_by=str(edits.get('dsl_order_by', old_dsl.get('order_by', ''))),
+                known_factors=known,
+            )
+        else:
+            config = build_strategy_config(
+                factor_ids=list(old_engine.get('factor_list') or []),
+                weights=edits.get('weights', old_engine.get('weights')),
+                top_n=top_n,
+                benchmark_index=benchmark,
+                factor_directions=edits.get(
+                    'factor_directions', old.get('factor_directions')
+                ),
+                start_date=str(old_params.get('start_date') or ''),
+                end_date=str(old_params.get('end_date') or ''),
+                rebalance_frequency=str(old_params.get('rebalance_frequency') or 'monthly'),
+                initial_capital=float(old_params.get('initial_capital') or 1000000.0),
+            )
+        config['meta'] = meta
+        return self.save_strategy(name, config, description=description)
 
     # -- 按名回测 -------------------------------------------------
 

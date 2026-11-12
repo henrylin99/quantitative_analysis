@@ -245,6 +245,151 @@ export interface SavedStrategy {
       end_date?: string
       rebalance_frequency?: string
     }
+    meta?: { derived_from?: { name: string; version: number } }
+  }
+}
+
+export interface StrategyRunRow {
+  run_id: number
+  strategy_version?: number
+  start_date?: string
+  end_date?: string
+  status?: string
+  created_at?: string
+  total_return?: number
+  annualized_return?: number
+  sharpe_ratio?: number
+  max_drawdown?: number
+  win_rate?: number
+  total_trades?: number
+}
+
+export interface StrategyHistory {
+  name: string
+  versions: SavedStrategy[]
+  runs: StrategyRunRow[]
+}
+
+export interface RunCompareRow {
+  run_id: number
+  strategy_name?: string
+  start_date?: string
+  end_date?: string
+  status?: string
+  total_return?: number
+  annualized_return?: number
+  sharpe_ratio?: number
+  max_drawdown?: number
+  win_rate?: number
+  calmar_ratio?: number
+  total_trades?: number
+  alpha?: number
+  beta?: number
+  information_ratio?: number
+}
+
+export const fetchStrategyHistory = async (name: string): Promise<StrategyHistory | null> => {
+  try {
+    const r = await rawGet<{ success: boolean; versions: SavedStrategy[]; runs: StrategyRunRow[] }>(
+      `/ml-factor/strategies/${encodeURIComponent(name)}/versions`,
+    )
+    return r.success ? { name, versions: r.versions ?? [], runs: r.runs ?? [] } : null
+  } catch {
+    return null
+  }
+}
+
+export const runStrategyByName = (
+  name: string,
+  overrides: Record<string, unknown>,
+): Promise<{ run_id: number; status: string; strategy_version?: number }> =>
+  rawPost(`/ml-factor/strategies/${encodeURIComponent(name)}/run`, { overrides })
+
+export const forkStrategyVersion = (
+  name: string,
+  base_version: number,
+  edits: Record<string, unknown>,
+  description: string,
+): Promise<{ success: boolean; strategy?: SavedStrategy }> =>
+  rawPost(`/ml-factor/strategies/${encodeURIComponent(name)}/fork`, {
+    base_version,
+    edits,
+    description,
+  })
+
+export const compareStrategyRuns = async (
+  run_ids: number[],
+): Promise<{ runs: RunCompareRow[]; range_warning?: string | null } | null> => {
+  try {
+    const r = await rawPost<{ success: boolean; runs: RunCompareRow[]; range_warning?: string }>(
+      '/ml-factor/strategies/compare-runs',
+      { run_ids },
+    )
+    return r.success ? { runs: r.runs ?? [], range_warning: r.range_warning } : null
+  } catch {
+    return null
+  }
+}
+
+// 回测 run 状态轮询（策略调参重跑后跟踪）
+export interface BacktestRunStatus {
+  id: number
+  status?: string
+  error?: string
+  start_date?: string
+  end_date?: string
+  metrics?: Record<string, number>
+}
+
+export const fetchBacktestRunStatus = async (runId: number): Promise<BacktestRunStatus | null> => {
+  try {
+    const r = await rawGet<{ success: boolean; run: Record<string, unknown> }>(
+      `/ml-factor/backtest/runs/${runId}`,
+    )
+    if (!r.success || !r.run) return null
+    const summary = (r.run.summary ?? {}) as Record<string, unknown>
+    const metrics = (summary.metrics ?? {}) as Record<string, number>
+    return {
+      id: Number(r.run.id ?? runId),
+      status: String(summary.status ?? ''),
+      error: summary.error ? String(summary.error) : undefined,
+      start_date: r.run.start_date ? String(r.run.start_date) : undefined,
+      end_date: r.run.end_date ? String(r.run.end_date) : undefined,
+      metrics: Object.keys(metrics).length ? metrics : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+export const fetchBacktestRunMetrics = async (
+  runId: number,
+): Promise<Record<string, number> | null> => {
+  try {
+    const r = await rawGet<{ success: boolean; result?: { performance_metrics?: Record<string, number> } }>(
+      `/ml-factor/backtest/runs/${runId}/result`,
+    )
+    return r.result?.performance_metrics ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface EquityPoint {
+  date: string
+  portfolio?: number
+  benchmark?: number
+  excess?: number
+}
+
+export const fetchRunEquityCurve = async (runId: number): Promise<EquityPoint[]> => {
+  try {
+    const r = await rawGet<{ success: boolean; result?: { equity_curve?: EquityPoint[] } }>(
+      `/ml-factor/backtest/runs/${runId}/result`,
+    )
+    return r.result?.equity_curve ?? []
+  } catch {
+    return []
   }
 }
 

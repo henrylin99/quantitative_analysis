@@ -251,3 +251,67 @@ class TestBuildDslConfig:
         assert run["strategy_config"]["selection_method"] == "dsl_rule"
         thread_args = no_background_thread[0].args
         assert thread_args[0] == run["run_id"]
+
+
+class TestStrategyHistoryAndFork:
+    def test_history_versions_and_runs(self, service, no_background_thread):
+        service.save_strategy("s1", _config())
+        service.save_strategy("s1", _config(top_n=40))
+        service.run_strategy("s1")
+        history = service.strategy_history("s1")
+        assert [v["version"] for v in history["versions"]] == [2, 1]
+        assert history["versions"][0]["is_latest"] is True
+        assert len(history["runs"]) == 1
+        assert history["runs"][0]["strategy_version"] == 2
+        assert history["runs"][0]["status"] == "queued"
+
+    def test_history_unknown_strategy(self, service):
+        with pytest.raises(StrategyError, match="未找到策略"):
+            service.strategy_history("不存在")
+
+    def test_fork_factor_strategy_bumps_version(self, service):
+        v1 = service.save_strategy("s2", _config())
+        v2 = service.save_derived(
+            "s2", v1["version"],
+            edits={"top_n": 20, "weights": {"momentum_20": 0.8, "pe_percentile": -0.2}},
+            description="加大动量",
+        )
+        assert v2["version"] == 2
+        eng = v2["strategy_config"]["engine_config"]
+        assert eng["top_n"] == 20
+        assert eng["weights"]["momentum_20"] == 0.8
+        assert v2["strategy_config"]["meta"]["derived_from"] == {"name": "s2", "version": 1}
+        # 底稿 v1 未被改动
+        v1b = service.strategy_repo.get_strategy("s2", version=1)
+        assert v1b["strategy_config"]["engine_config"]["top_n"] == 30
+
+    def test_fork_dsl_strategy_revalidates(self, service):
+        config = build_strategy_config(
+            dsl_filter="rank(momentum_20) > 0.8",
+            dsl_order_by="rank(momentum_20)",
+            known_factors={"momentum_20"},
+        )
+        v1 = service.save_strategy("s3", config)
+        v2 = service.save_derived(
+            "s3", v1["version"],
+            edits={"dsl_filter": "rank(momentum_20) > 0.5 and rank(pe_percentile) < 0.4",
+                   "dsl_order_by": "rank(momentum_20) - rank(pe_percentile)"},
+        )
+        dsl = v2["strategy_config"]["engine_config"]["dsl"]
+        assert "pe_percentile" in dsl["filter"]
+        assert set(v2["strategy_config"]["engine_config"]["factor_list"]) == {
+            "momentum_20", "pe_percentile",
+        }
+
+    def test_fork_dsl_bad_syntax_rejected(self, service):
+        config = build_strategy_config(
+            dsl_order_by="rank(momentum_20)", known_factors={"momentum_20"},
+        )
+        v1 = service.save_strategy("s4", config)
+        with pytest.raises(StrategyError, match="DSL 非法"):
+            service.save_derived("s4", v1["version"], edits={"dsl_order_by": "momentum_20 >"})
+
+    def test_fork_unknown_base_version(self, service):
+        service.save_strategy("s5", _config())
+        with pytest.raises(StrategyError, match="未找到策略"):
+            service.save_derived("s5", 99, edits={})

@@ -114,6 +114,12 @@ def build_system_prompt(allow_actions: bool = True, model_name: str = '') -> str
      （低估值类因子记得用负权重表达"值小好"）；④ 结果尚可 → save_strategy 命名保存；
      需改进 → 调整因子/权重后同区间重跑，compare_backtests 对比；⑤ 结论里给出
      策略名与版本号。已保存策略的重跑/调参用 run_strategy（overrides 临时覆盖参数）
+   - 用户要求"优化/改进某策略"时的标准闭环：① suggest_strategy_changes 打包策略
+     真实配置与回测表现（含同区间迭代计数）；② 基于指标短板提 1~3 个候选修改
+     （改权重/top_n/DSL 表达式/换因子），每个附明确的假设依据，不要盲扫参数网格；
+     ③ run_strategy(overrides) 同区间重跑 → compare_backtests 对比；④ 结论汇报后
+     等用户确认，满意才 save_strategy 升版（未经确认不落库）；⑤ 同区间迭代 ≥3 次
+     或工具返回 overfit_warning 时，主动提示过拟合风险并建议换样本外区间验证
    - 除因子加权打分外，也可用 DSL 声明式规则选股（run_backtest / save_strategy 传
      dsl_filter + dsl_order_by，与 factor_ids 互斥）。DSL 词表：因子名（list_factors
      可查）+ 算术 + - * / + 比较 > >= < <= == != + and/or/not + 截面函数

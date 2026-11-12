@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   deleteAiSaved,
   deleteSavedStrategy,
@@ -20,6 +21,7 @@ import {
   type SavedStrategy,
 } from '../api/ai'
 import { EmptyState } from '../components/StateViews'
+import StrategyCard from '../components/ai/StrategyCard'
 import { formatDateTime } from '../utils/format'
 
 interface ToolCallView {
@@ -103,6 +105,8 @@ function inline(text: string): React.ReactElement {
 }
 
 export default function AiWorkbenchPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [status, setStatus] = useState<AiStatus | null>(null)
   const [allowActions, setAllowActions] = useState(() => localStorage.getItem('aiAllowActions') === '1')
   const [sessions, setSessions] = useState<AiSession[]>([])
@@ -249,6 +253,15 @@ export default function AiWorkbenchPage() {
     abortRef.current = abort
   }
 
+  // 跨页带入的提问（策略管理页「让AI深入分析此结果」等）：到达后自动发送并清掉 state 防重复
+  const routedPrompt = (location.state as { prompt?: string } | null)?.prompt
+  useEffect(() => {
+    if (!routedPrompt) return
+    navigate('/ai-workbench', { replace: true, state: null }) as void
+    send(routedPrompt)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routedPrompt])
+
   const stop = () => {
     abortRef.current?.('user-stop')
     setStreaming(false)
@@ -394,58 +407,18 @@ export default function AiWorkbenchPage() {
               <span className="chip">{strategies.length}</span>
             </h6>
           </div>
-          <div className="panel-body d-flex flex-column gap-2" style={{ maxHeight: 300, overflowY: 'auto' }}>
+          <div className="panel-body d-flex flex-column gap-2" style={{ maxHeight: 420, overflowY: 'auto' }}>
             {strategies.length === 0 && (
               <EmptyState icon="🎯" text="对话中说「把这个策略保存为 xx」即可沉淀" />
             )}
             {strategies.map((s) => (
-              <details key={s.id} className="p-2 rounded" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                <summary style={{ fontSize: 12.5, cursor: 'pointer' }} className="d-flex align-items-center gap-1">
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                  <span className="badge text-bg-secondary" style={{ fontSize: 10 }}>v{s.version}</span>
-                  <button
-                    type="button"
-                    className="btn p-0 border-0 text-faint"
-                    style={{ fontSize: 11 }}
-                    title="删除策略（全部版本）"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (window.confirm(`删除策略「${s.name}」的全部版本？`)) removeStrategy(s.name)
-                    }}
-                  >
-                    ×
-                  </button>
-                </summary>
-                <div style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>
-                  {s.description && <div>{s.description}</div>}
-                  {s.strategy_config?.engine_config?.dsl ? (
-                    <>
-                      <div className="mt-1">
-                        <span className="badge text-bg-info" style={{ fontSize: 10 }}>DSL 规则</span>
-                        {' '}持仓 top {s.strategy_config?.engine_config?.top_n ?? '-'}
-                        {s.run_count != null && <> · 回测 {s.run_count} 次</>}
-                      </div>
-                      <div className="mt-1 font-monospace" style={{ fontSize: 10.5, wordBreak: 'break-all' }}>
-                        {s.strategy_config.engine_config.dsl.filter && <>filter: {s.strategy_config.engine_config.dsl.filter}<br /></>}
-                        order_by: {s.strategy_config.engine_config.dsl.order_by}
-                      </div>
-                    </>
-                  ) : (
-                    <div>
-                      因子：{s.strategy_config?.engine_config?.factor_list?.join('、') ?? '-'} · 持仓 top {s.strategy_config?.engine_config?.top_n ?? '-'}
-                      {s.run_count != null && <> · 回测 {s.run_count} 次</>}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-outline-primary btn-sm mt-1"
-                  style={{ fontSize: 11 }}
-                  onClick={() => setInput(`回测策略「${s.name}」，并把结果与沪深300基准对比`)}
-                >
-                  ▶ 回测此策略
-                </button>
-              </details>
+              <StrategyCard
+                key={`${s.name}-${s.version}`}
+                strategy={s}
+                onAskAi={(p) => setInput(p)}
+                onChanged={refreshSaved}
+                onDelete={removeStrategy}
+              />
             ))}
           </div>
         </div>

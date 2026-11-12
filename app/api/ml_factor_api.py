@@ -476,6 +476,91 @@ def delete_strategy(name):
         return jsonify({'error': str(e)}), 500
 
 
+def _strategy_service():
+    from app.services.parquet_state_store import StrategyRepository
+    from app.services.strategy_service import StrategyService
+
+    return StrategyService(StrategyRepository(_state_store), _backtest_repo)
+
+
+@ml_factor_bp.route('/strategies/<name>/versions', methods=['GET'])
+def get_strategy_versions(name):
+    """版本演进面板数据：全部版本 + 该策略最近 20 条回测 run（含核心指标）。"""
+    try:
+        history = _strategy_service().strategy_history(name)
+        return jsonify({'success': True, **convert_numpy_types(history)})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        logger.error(f"获取策略版本历史失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/strategies/<name>/run', methods=['POST'])
+def run_strategy_by_name(name):
+    """按名回测（前端「调参重跑」入口）。body: {overrides: {...}}。"""
+    try:
+        from app.services.strategy_service import StrategyError
+
+        data = request.get_json(silent=True) or {}
+        overrides = data.get('overrides') or {}
+        if not isinstance(overrides, dict):
+            return jsonify({'error': 'overrides 必须是对象'}), 400
+        run = _strategy_service().run_strategy(name, overrides=overrides)
+        return jsonify({'success': True, **convert_numpy_types(run)})
+    except StrategyError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"策略回测提交失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/strategies/<name>/fork', methods=['POST'])
+def fork_strategy_version(name):
+    """以旧版本为底稿派生新版本（编辑=升版，版本不可变原则不变）。
+
+    body: {base_version: int, edits: {...}, description: str}
+    """
+    try:
+        from app.services.strategy_service import StrategyError
+
+        data = request.get_json(silent=True) or {}
+        base_version = data.get('base_version')
+        if base_version is None:
+            return jsonify({'error': '缺少 base_version'}), 400
+        saved = _strategy_service().save_derived(
+            name,
+            base_version=int(base_version),
+            edits=data.get('edits') or {},
+            description=str(data.get('description') or ''),
+        )
+        return jsonify({'success': True, 'strategy': convert_numpy_types(saved)})
+    except StrategyError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"策略派生保存失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ml_factor_bp.route('/strategies/compare-runs', methods=['POST'])
+def compare_strategy_runs():
+    """多 run 指标并排对比（前端调参前后对比入口）。body: {run_ids: [...]}"""
+    try:
+        from app.services.strategy_service import StrategyError
+
+        data = request.get_json(silent=True) or {}
+        run_ids = data.get('run_ids') or []
+        if not isinstance(run_ids, list):
+            return jsonify({'error': 'run_ids 必须是数组'}), 400
+        result = _strategy_service().compare_runs([int(r) for r in run_ids])
+        return jsonify({'success': True, **convert_numpy_types(result)})
+    except (StrategyError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"策略 run 对比失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_factor_bp.route('/chip-signals', methods=['GET'])
 def get_chip_signals():
     """筹码信号扫描：挤压蓄势 / 资金×筹码共振 / 量价资金背离。
