@@ -438,8 +438,8 @@ export default function AiWorkbenchPage() {
         </div>
       </div>
 
-      {/* 聊天区 */}
-      <div className="col-lg-9">
+      {/* 聊天区：sticky 长驻视口——左栏滚动时输入框不跟随页面滚走 */}
+      <div className="col-lg-9" style={{ position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
         <div className="panel h-100">
           <div className="panel-head flex-wrap">
             <div className="d-flex gap-2 flex-wrap">
