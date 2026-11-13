@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Activity, Brain, Crosshair, Database, Dna, FlaskConical, HeartPulse, Layers,
-  LayoutGrid, List, Newspaper, Radar, Radio, Search,
+  LayoutGrid, List, Newspaper, Radar, Radio, Search, Settings,
   type LucideIcon,
 } from 'lucide-react'
 import { fetchAreas, fetchIndustries, fetchStocks } from '../api/stocks'
+import { fetchSystemSettings, type SystemSettings } from '../api/settings'
+import { SettingsDialog } from '../components/SettingsDialog'
 
 interface FeatureTile {
   to: string
@@ -44,6 +46,8 @@ export default function HomePage() {
   const [totalStocks, setTotalStocks] = useState<number | null>(null)
   const [industries, setIndustries] = useState<number | null>(null)
   const [areas, setAreas] = useState<number | null>(null)
+  const [settings, setSettings] = useState<SystemSettings | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     fetchStocks({ page_size: 1 })
@@ -55,6 +59,8 @@ export default function HomePage() {
     fetchAreas()
       .then((d) => setAreas(d.length))
       .catch(() => setAreas(null))
+    // 配置状态失败静默（后端未起/无权限时不显示引导横幅）
+    fetchSystemSettings().then(setSettings).catch(() => setSettings(null))
   }, [])
 
   const tileGroup = (title: string, items: FeatureTile[]) => (
@@ -89,6 +95,13 @@ export default function HomePage() {
           <div className="hero-actions">
             <Link className="btn btn-primary" to="/stocks">开始分析 <span aria-hidden>→</span></Link>
             <Link className="btn btn-outline-primary" to="/screen">选股筛选</Link>
+            <button
+              className="btn btn-outline-primary"
+              onClick={() => setSettingsOpen(true)}
+              title="配置 Tushare / 扶摇 / 大模型"
+            >
+              <Settings size={15} aria-hidden /> 系统配置
+            </button>
           </div>
         </div>
         <div className="hero-meta">
@@ -97,6 +110,36 @@ export default function HomePage() {
           <span><strong>24/7</strong> 策略研究</span>
         </div>
       </div>
+
+      {settings && !settings.all_configured && (
+        <div
+          className="panel"
+          style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 18 }}
+          role="alert"
+        >
+          <span style={{ fontSize: 20 }} aria-hidden>⚙️</span>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <strong>系统配置未完成</strong>
+            <div className="text-sm opacity-75" style={{ marginTop: 4 }}>
+              {[
+                settings.tushare.configured ? '✅ Tushare' : '❌ Tushare',
+                settings.fuyao.configured ? '✅ 扶摇' : '❌ 扶摇',
+                settings.llm.configured ? '✅ 大模型' : '❌ 大模型',
+              ].join('　')}
+              　——　配置完成后即可下载数据与使用 AI 工作台
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={() => setSettingsOpen(true)}>
+            立即配置 <span aria-hidden>→</span>
+          </button>
+        </div>
+      )}
+
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={(s) => setSettings(s)}
+      />
 
       <div className="stat-grid">
         <div className="stat">

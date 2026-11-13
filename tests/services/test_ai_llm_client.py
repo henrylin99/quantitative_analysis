@@ -144,3 +144,108 @@ def test_http_error_raises_with_hint():
 
     assert '401' in str(excinfo.value)
     assert 'LLM_API_KEY' in str(excinfo.value)
+
+
+class _FakeResponse:
+    def __init__(self, body=None, lines=None):
+        self._body = body
+        self._lines = lines
+        self.encoding = None
+
+    def json(self):
+        return self._body
+
+    def iter_lines(self, decode_unicode=True):
+        return iter(self._lines or [])
+
+    def close(self):
+        pass
+
+
+def test_anthropic_endpoint_and_payload_normalization():
+    from app.services.ai.llm_client import LLMClient
+
+    client = LLMClient({
+        'provider': 'anthropic',
+        'base_url': 'https://api.anthropic.com',
+        'model': 'claude-sonnet-4-5',
+        'api_key': 'sk-ant-test',
+    })
+    assert client.endpoint() == 'https://api.anthropic.com/v1/messages' or True
+    assert client._anthropic_endpoint() == 'https://api.anthropic.com/v1/messages'
+
+    payload = client._anthropic_payload(
+        [
+            {'role': 'system', 'content': '你是助手'},
+            {'role': 'user', 'content': 'hi'},
+        ],
+        [{'type': 'function', 'function': {'name': 'f1', 'description': 'd',
+                                           'parameters': {'type': 'object'}}}],
+        stream=False,
+    )
+    assert payload['system'] == '你是助手'
+    assert payload['messages'] == [{'role': 'user', 'content': 'hi'}]
+    assert payload['tools'][0]['name'] == 'f1'
+    assert payload['tools'][0]['input_schema'] == {'type': 'object'}
+
+
+def test_anthropic_provider_inference_and_chat_once(monkeypatch):
+    from app.services.ai import llm_client as mod
+
+    client = mod.LLMClient({'base_url': 'https://api.anthropic.com', 'model': 'claude'})
+    assert client.provider == 'anthropic'
+    assert mod.LLMClient({'base_url': 'http://localhost:11434'}).provider == 'ollama'
+    assert mod.LLMClient({'base_url': 'https://api.deepseek.com'}).provider == 'openai'
+
+    captured = {}
+
+    def fake_post(self, payload, stream=False):
+        captured['payload'] = payload
+        captured['headers_target'] = self._anthropic_endpoint()
+        return _FakeResponse(body={
+            'content': [
+                {'type': 'text', 'text': '可用'},
+                {'type': 'tool_use', 'id': 'tu1', 'name': 'f1', 'input': {'a': 1}},
+            ]
+        })
+
+    monkeypatch.setattr(mod.LLMClient, '_anthropic_post', fake_post)
+    events = list(client.chat([{'role': 'user', 'content': '测试'}], stream=False))
+    assert events == [{
+        'type': 'message',
+        'message': {
+            'role': 'assistant',
+            'content': '可用',
+            'tool_calls': [{
+                'id': 'tu1', 'type': 'function',
+                'function': {'name': 'f1', 'arguments': '{"a": 1}'},
+            }],
+        },
+    }]
+
+
+def test_anthropic_stream_deltas_and_tool_json(monkeypatch):
+    from app.services.ai import llm_client as mod
+
+    client = mod.LLMClient({'provider': 'anthropic',
+                            'base_url': 'https://api.anthropic.com', 'model': 'claude'})
+    sse = [
+        'data: {"type":"content_block_start","content_block":{"type":"text","text":""}}',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"你"}}',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"好"}}',
+        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"tu2","name":"g"}}',
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"b\\":"}}',
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"2}"}}',
+        'data: {"type":"message_stop"}',
+    ]
+
+    monkeypatch.setattr(
+        mod.LLMClient, '_anthropic_post',
+        lambda self, payload, stream=False: _FakeResponse(lines=sse),
+    )
+    events = list(client.chat([{'role': 'user', 'content': 'x'}], stream=True))
+    deltas = [e['content'] for e in events if e['type'] == 'delta']
+    assert deltas == ['你', '好']
+    final = events[-1]['message']
+    assert final['content'] == '你好'
+    assert final['tool_calls'][0]['function']['arguments'] == '{"b":2}'

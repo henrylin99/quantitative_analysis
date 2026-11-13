@@ -92,12 +92,14 @@ class Config:
         }
     }
 
-    # AI 智能工作台：统一走 OpenAI 兼容 /v1/chat/completions 协议，
-    # DeepSeek / 通义 / GLM / Kimi / OpenAI / 本地 Ollama 均可直接接入
+    # AI 智能工作台：多协议客户端（openai 兼容 / ollama / anthropic），
+    # DeepSeek / 通义 / GLM / Kimi / OpenAI / 本地 Ollama / Claude 均可接入
     AI_ASSISTANT_CONFIG = {
         'api_key': os.getenv('LLM_API_KEY', ''),
         'base_url': os.getenv('LLM_BASE_URL', 'https://api.deepseek.com'),
         'model': os.getenv('LLM_MODEL', 'deepseek-chat'),
+        # openai | ollama | anthropic；空 = 按 base_url 自动推断
+        'provider': os.getenv('LLM_PROVIDER', ''),
         'timeout': int(os.getenv('LLM_TIMEOUT', '120')),
         'temperature': float(os.getenv('LLM_TEMPERATURE', '0.3')),
         'max_tokens': int(os.getenv('LLM_MAX_TOKENS', '4096')),

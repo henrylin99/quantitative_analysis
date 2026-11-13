@@ -1,14 +1,17 @@
-"""OpenAI 兼容的大模型流式客户端。
+"""大模型流式客户端（多协议）。
 
-统一走 `<base_url>/v1/chat/completions` 协议，因此 DeepSeek、通义/OpenAI 兼容网关、
-GLM、Moonshot、OpenAI 以及本地 Ollama（自带 /v1 兼容层）都可以直接使用，
-只需在 .env 里配置 LLM_BASE_URL / LLM_MODEL / LLM_API_KEY。
+- openai（默认）：OpenAI 兼容 `<base_url>/v1/chat/completions` 协议，
+  DeepSeek、通义/OpenAI 兼容网关、GLM、Moonshot、OpenAI、智谱均可直接使用；
+- ollama：本地 Ollama（自带 /v1 兼容层，协议同 openai，无需 api_key）；
+- anthropic：Claude 原生 `/v1/messages` 协议（x-api-key 头，system 独立字段，
+  工具调用为 tool_use / input_json_delta，内部归一为 OpenAI tool_calls 形态）。
 
-支持流式输出与 function calling（tool_calls 增量按 index 聚合）。
+provider 由 .env 的 LLM_PROVIDER 指定，未指定时按 base_url 自动推断。
 """
 
 import json
 import logging
+import re
 from typing import Any, Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
@@ -29,9 +32,22 @@ class LLMClient:
         self.api_key = str(config.get('api_key') or '').strip()
         self.base_url = str(config.get('base_url') or 'https://api.deepseek.com').strip().rstrip('/')
         self.model = str(config.get('model') or 'deepseek-chat').strip()
+        self.provider = self._resolve_provider(str(config.get('provider') or '').strip().lower())
         self.timeout = int(config.get('timeout') or 120)
         self.temperature = float(config.get('temperature', 0.3))
         self.max_tokens = int(config.get('max_tokens') or 4096)
+
+    def _resolve_provider(self, provider: str) -> str:
+        if provider in ('openai', 'ollama', 'anthropic'):
+            return provider
+        # 未指定时按 base_url 推断：anthropic 域名 → claude；本地地址 → ollama；
+        # 其余一律 openai 兼容（覆盖绝大多数国内外网关）
+        host = (urlparse(self.base_url).hostname or '').lower()
+        if 'anthropic.com' in host:
+            return 'anthropic'
+        if host in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+            return 'ollama'
+        return 'openai'
 
     @property
     def configured(self) -> bool:
@@ -47,10 +63,10 @@ class LLMClient:
         base = self.base_url.rstrip('/')
         if base.endswith('/chat/completions'):
             return base
-        # 路径中已含 v1 段（OpenAI 官方、各类兼容网关）直接拼 chat/completions，
-        # 否则（DeepSeek 裸域名、Ollama 根路径）补 /v1 前缀
+        # 路径中已含版本段（v1/v4 等，OpenAI 官方、智谱、各类兼容网关）直接拼
+        # chat/completions，否则（DeepSeek 裸域名、Ollama 根路径）补 /v1 前缀
         segments = [segment for segment in (urlparse(base).path or '').split('/') if segment]
-        if 'v1' in segments:
+        if any(re.fullmatch(r'v\d+', segment) for segment in segments):
             return f'{base}/chat/completions'
         return f'{base}/v1/chat/completions'
 
@@ -84,6 +100,9 @@ class LLMClient:
     # 非流式（测试与降级路径）
 
     def _chat_once(self, messages, tools) -> Iterator[Dict[str, Any]]:
+        if self.provider == 'anthropic':
+            yield from self._anthropic_chat_once(messages, tools)
+            return
         payload = self._build_payload(messages, tools, stream=False)
         response = self._post(payload)
         try:
@@ -106,6 +125,9 @@ class LLMClient:
     # 流式：SSE 增量解析
 
     def _chat_stream(self, messages, tools) -> Iterator[Dict[str, Any]]:
+        if self.provider == 'anthropic':
+            yield from self._anthropic_chat_stream(messages, tools)
+            return
         payload = self._build_payload(messages, tools, stream=True)
         content_parts: List[str] = []
         tool_calls_acc: Dict[int, Dict[str, str]] = {}
@@ -168,6 +190,158 @@ class LLMClient:
                 if acc['name']
             ]
         yield {'type': 'message', 'message': assembled}
+
+    # ------------------------------------------------------------------
+    # Anthropic Claude 原生协议（/v1/messages）
+    #   请求：system 抽独立字段；tools 转成 {name,description,input_schema}；
+    #   响应：content 块列表（text / tool_use），tool_use 归一为 OpenAI tool_calls。
+
+    _ANTHROPIC_VERSION = '2023-06-01'
+
+    def _anthropic_endpoint(self) -> str:
+        base = self.base_url.rstrip('/')
+        if base.endswith('/messages'):
+            return base
+        segments = [s for s in (urlparse(base).path or '').split('/') if s]
+        if segments and re.fullmatch(r'v\d+', segments[-1]):
+            return f'{base}/messages'
+        return f'{base}/v1/messages'
+
+    def _anthropic_payload(self, messages, tools, stream: bool) -> Dict[str, Any]:
+        system_texts = []
+        normalized = []
+        for message in messages:
+            role = message.get('role')
+            content = message.get('content') or ''
+            if role == 'system':
+                if content:
+                    system_texts.append(str(content))
+            else:
+                normalized.append({'role': role or 'user', 'content': content})
+        payload: Dict[str, Any] = {
+            'model': self.model,
+            'messages': normalized,
+            'max_tokens': self.max_tokens,
+            'stream': stream,
+        }
+        if system_texts:
+            payload['system'] = '\n'.join(system_texts)
+        if tools:
+            payload['tools'] = [
+                {
+                    'name': t['function']['name'],
+                    'description': t['function'].get('description') or '',
+                    'input_schema': t['function'].get('parameters') or {'type': 'object', 'properties': {}},
+                }
+                for t in tools
+                if t.get('type') == 'function' and (t.get('function') or {}).get('name')
+            ]
+            payload['tool_choice'] = {'type': 'auto'}
+        return payload
+
+    def _anthropic_post(self, payload: Dict[str, Any], stream: bool = False) -> requests.Response:
+        headers = {
+            'Content-Type': 'application/json',
+            'anthropic-version': self._ANTHROPIC_VERSION,
+        }
+        if self.api_key:
+            headers['x-api-key'] = self.api_key
+        try:
+            response = requests.post(
+                self._anthropic_endpoint(),
+                headers=headers,
+                json=payload,
+                timeout=(10, self.timeout),
+                stream=stream,
+            )
+        except requests.exceptions.Timeout as exc:
+            raise LLMClientError(f'大模型请求超时（{self.timeout}s），可在 .env 调大 LLM_TIMEOUT') from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise LLMClientError(f'无法连接大模型服务 {self.base_url}: {exc}') from exc
+        except requests.exceptions.RequestException as exc:
+            raise LLMClientError(f'大模型请求失败: {exc}') from exc
+        if response.status_code != 200:
+            excerpt = (response.text or '')[:300]
+            response.close()
+            hint = ''
+            if response.status_code == 401:
+                hint = '（请检查 .env 中的 LLM_API_KEY）'
+            elif response.status_code == 404:
+                hint = '（请检查 LLM_BASE_URL / LLM_MODEL 是否正确）'
+            raise LLMClientError(f'大模型服务返回 {response.status_code}: {excerpt}{hint}')
+        return response
+
+    def _anthropic_chat_once(self, messages, tools) -> Iterator[Dict[str, Any]]:
+        payload = self._anthropic_payload(messages, tools, stream=False)
+        response = self._anthropic_post(payload)
+        try:
+            body = response.json()
+            blocks = body.get('content') or []
+        except ValueError as exc:
+            raise LLMClientError(f'大模型响应格式异常: {exc}') from exc
+        yield {'type': 'message', 'message': self._anthropic_assemble(blocks)}
+
+    def _anthropic_chat_stream(self, messages, tools) -> Iterator[Dict[str, Any]]:
+        payload = self._anthropic_payload(messages, tools, stream=True)
+        response = self._anthropic_post(payload, stream=True)
+        response.encoding = 'utf-8'
+        blocks: List[Dict[str, Any]] = []
+        try:
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if not line.startswith('data:'):
+                    continue
+                data = line[len('data:'):].strip()
+                try:
+                    event = json.loads(data)
+                except ValueError:
+                    logger.warning('忽略无法解析的流式片段: %s', data[:120])
+                    continue
+                etype = event.get('type')
+                if etype == 'content_block_start':
+                    blocks.append(event.get('content_block') or {})
+                elif etype == 'content_block_delta':
+                    delta = event.get('delta') or {}
+                    piece = delta.get('text')
+                    if piece:
+                        text_block = next((b for b in reversed(blocks) if b.get('type') == 'text'), None)
+                        if text_block is not None:
+                            text_block['text'] = (text_block.get('text') or '') + piece
+                        else:
+                            blocks.append({'type': 'text', 'text': piece})
+                        yield {'type': 'delta', 'content': piece}
+                    partial = delta.get('partial_json')
+                    if partial:
+                        tool_block = next((b for b in reversed(blocks) if b.get('type') == 'tool_use'), None)
+                        if tool_block is not None:
+                            tool_block['input_json'] = (tool_block.get('input_json') or '') + partial
+                elif etype == 'message_stop':
+                    break
+        finally:
+            response.close()
+        yield {'type': 'message', 'message': self._anthropic_assemble(blocks)}
+
+    @staticmethod
+    def _anthropic_assemble(blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        texts = [b.get('text') or '' for b in blocks if b.get('type') == 'text']
+        message: Dict[str, Any] = {'role': 'assistant', 'content': ''.join(texts) or None}
+        tool_calls = []
+        for index, block in enumerate(blocks):
+            if block.get('type') != 'tool_use':
+                continue
+            tool_calls.append({
+                'id': block.get('id') or f'call_{index}',
+                'type': 'function',
+                'function': {
+                    'name': block.get('name') or '',
+                    'arguments': block.get('input_json') or json.dumps(block.get('input') or {}),
+                },
+            })
+        if tool_calls:
+            message['tool_calls'] = tool_calls
+        return message
 
     # ------------------------------------------------------------------
     # 内部工具
