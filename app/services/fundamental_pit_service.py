@@ -97,16 +97,33 @@ class FundamentalPitService:
             base = os.path.join(self.data_dir, table)
             try:
                 df = pd.read_parquet(base, columns=columns)
-            except Exception as e:
-                logger.warning(f"[fund_pit] 读取 {table} 失败（相关因子缺失）: {e}")
-                loaded[table] = pd.DataFrame()
-                continue
+            except Exception:
+                # 扶摇源财务表没有 f_ann_date/report_type 列（tushare VIP 专有），
+                # 按实际 schema 降级：f_ann_date 缺失回退 ann_date、report_type
+                # 缺失跳过合并口径过滤（扶摇写入侧已按最新公告去重）
+                try:
+                    import pyarrow.dataset as _ds
+                    names = set(_ds.dataset(base, format="parquet").schema.names)
+                except Exception as e:
+                    logger.warning(f"[fund_pit] 读取 {table} 失败（相关因子缺失）: {e}")
+                    loaded[table] = pd.DataFrame()
+                    continue
+                usable = [c for c in columns if c in names] + [
+                    c for c in ("ann_date", "end_date") if c in names and c not in columns]
+                missing = {"ts_code", "ann_date", "end_date"} - names
+                if missing:
+                    logger.warning(f"[fund_pit] {table} 缺关键列 {sorted(missing)}，跳过")
+                    loaded[table] = pd.DataFrame()
+                    continue
+                df = pd.read_parquet(base, columns=usable)
             if df.empty:
                 loaded[table] = pd.DataFrame()
                 continue
-            df = df[df["report_type"].astype(str) == "1"].copy()
-            df["ann_eff"] = pd.to_datetime(
-                df["f_ann_date"].fillna(df["ann_date"]), errors="coerce", format="mixed")
+            if "report_type" in df.columns:
+                df = df[df["report_type"].astype(str) == "1"].copy()
+            ann_source = (df["f_ann_date"].fillna(df["ann_date"])
+                          if "f_ann_date" in df.columns else df["ann_date"])
+            df["ann_eff"] = pd.to_datetime(ann_source, errors="coerce", format="mixed")
             df["end_date"] = _norm_date_str(df["end_date"])
             df = df.dropna(subset=["ann_eff", "end_date"])
             df["ann_ymd"] = df["ann_eff"].dt.strftime("%Y%m%d")

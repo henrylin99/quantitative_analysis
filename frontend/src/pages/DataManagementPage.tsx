@@ -1017,7 +1017,7 @@ function PipelinePanel() {
       <div className="panel-body tight">
         <div className="hint mb-2" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
           每个交易日收盘后（默认 18:30，DAILY_ALERT_TIME 可调）数据链路自动先于预警扫描执行：交易日历 → 日线 → 指标 →
-          指数 → 资金流 → 大宽表 → 股票分区 → 财务三表 → 因子计算 → 基本面 PIT 因子，链路末尾自动全市场分钟线同步
+          复权因子 → 指数 → 资金流 → 大宽表 → 股票分区 → 财务三表 → 因子计算 → 基本面 PIT 因子，链路末尾自动全市场分钟线同步
           （非交易日自动跳过；DATA_PIPELINE_ENABLED=0 可关闭；技术因子/筹码已停更，存量数据仅供读取）。
           {msg && <span className="ms-2">{msg}</span>}
         </div>

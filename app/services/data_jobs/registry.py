@@ -17,6 +17,7 @@ class JobRegistry:
             "daily_history_by_date",  # 5
             "daily_history_fuyao",    # 5b（扶摇源日线）
             "daily_basic",            # 6
+            "adj_factor",             # 6a（复权因子，独立表；stk_factor 停更后的复权数据源）
             "index_daily",            # 6b（宽基+申万一级指数日线）
             "moneyflow",              # 15
             # stk_factor / cyq_perf 已从页面可见清单摘除（不再自动下载）：
@@ -108,6 +109,18 @@ class JobRegistry:
                 "app/utils/daily_basic.py",
                 display_name="日线基本指标",
                 description="下载换手率、市盈率、市值等日线基本面指标。",
+                recommended_order=6,
+                source_name="tushare",
+                source_mode="incremental",
+                supports_incremental=True,
+            ),
+            "adj_factor": JobDefinition(
+                "adj_factor",
+                "日频行情与基本面",
+                "app/utils/adj_factor.py",
+                display_name="复权因子",
+                description="按交易日下载全市场复权因子（独立表 adj_factor），是因子计算/回测复权链的数据源。",
+                dependencies=["trade_calendar"],
                 recommended_order=6,
                 source_name="tushare",
                 source_mode="incremental",

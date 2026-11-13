@@ -77,6 +77,7 @@ def test_init_chain_runs_all_steps_with_windows(tmp_path, monkeypatch):
     # 计划完整性 + 窗口参数
     submitted = {job: params for job, params in _FakeService.submissions}
     assert "stock_basic" in submitted and "stock_company" in submitted and "factor_compute" in submitted
+    assert "adj_factor" in submitted  # 复权因子独立下载步
     assert submitted["stock_basic"] == {}  # 元数据作业不带窗口
     dh = submitted["daily_history_by_date"]
     assert int(dh["end_date"][:4]) - int(dh["start_date"][:4]) == 2
@@ -193,6 +194,9 @@ def test_init_skips_steps_whose_data_exists(tmp_path, monkeypatch):
     y, m, d = int(win["start_date"][:4]), int(win["start_date"][4:6]), int(win["start_date"][6:])
     _touch(tmp_path / "daily_history" / "daily" / f"year={y}" / f"month={m:02d}" / f"day={d:02d}" / "data.parquet")
     _touch(tmp_path / "daily_history" / "daily" / "year=2026" / "month=11" / "day=13" / "data.parquet")
+    _touch(tmp_path / "adj_factor" / "daily" / f"year={y}" / f"month={m:02d}" / f"day={d:02d}" / "data.parquet")
+    _touch(tmp_path / "adj_factor" / "daily" / "year=2026" / "month=11" / "day=13" / "data.parquet")
+    _touch(tmp_path / "adj_factor" / "daily" / "year=2026" / "month=11" / "day=13" / "data.parquet")
 
     orchestrator = DataInitOrchestrator(data_dir=str(tmp_path))
     assert orchestrator.start()["ok"] is True
@@ -201,7 +205,7 @@ def test_init_skips_steps_whose_data_exists(tmp_path, monkeypatch):
     assert record["ok"] is True
 
     skipped = {s["job_type"] for s in record["steps"].values() if s["status"] == "skipped"}
-    assert {"stock_basic", "stock_company", "trade_calendar", "daily_history_by_date"} <= skipped
+    assert {"stock_basic", "stock_company", "trade_calendar", "daily_history_by_date", "adj_factor"} <= skipped
     for job_type in skipped:
         step = next(s for s in record["steps"].values() if s["job_type"] == job_type)
         assert "已有数据" in step["message"]

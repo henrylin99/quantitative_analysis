@@ -61,6 +61,7 @@ INIT_PLAN: List[Dict[str, Any]] = [
     {"job_type": "trade_calendar", "range": None, "label": "交易日历"},
     {"job_type": "daily_history_by_date", "range": "tushare", "label": "日线行情"},
     {"job_type": "daily_basic", "range": "tushare", "label": "每日基本指标"},
+    {"job_type": "adj_factor", "range": "tushare", "label": "复权因子"},
     {"job_type": "index_daily", "range": None, "label": "指数日线"},
     {"job_type": "moneyflow", "range": "tushare", "label": "资金流向"},
     {"job_type": "wide_table_builder", "range": None, "label": "大宽表构建"},
@@ -205,6 +206,7 @@ class DataInitOrchestrator:
         coverage_jobs = {
             "daily_history_by_date": "daily_history/daily",
             "daily_basic": "daily_basic/daily",
+            "adj_factor": "adj_factor/daily",
             "moneyflow": "moneyflow/daily",
         }
         if job_type in coverage_jobs:

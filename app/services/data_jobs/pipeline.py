@@ -33,6 +33,7 @@ PIPELINE_JOBS = (
     "trade_calendar",
     "daily_history_by_date",
     "daily_basic",
+    "adj_factor",
     "index_daily",
     "moneyflow",
     # stk_factor / cyq_perf 已从自动链路摘除（历史数据与读取链保留，
