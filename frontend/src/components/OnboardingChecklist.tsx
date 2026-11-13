@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, BookOpen, Brain, Check, ChevronRight, CircleDot, Database, Search,
+  Activity, BookOpen, Brain, Check, ChevronRight, CircleDot, Database, RotateCcw, Search,
   Settings, Star, X, type LucideIcon,
 } from 'lucide-react'
 import { fetchInitStatus } from '../api/dataJobs'
 import { fetchAiSessions } from '../api/ai'
 import { fetchWatchlist } from '../api/market'
 import type { SystemSettings } from '../api/settings'
-import { readOnboardingState, setOnboardingDismissed } from '../lib/onboarding'
+import { readOnboardingState, resetOnboarding, setOnboardingDismissed } from '../lib/onboarding'
 
 interface ChecklistTask {
   key: string
@@ -31,6 +31,8 @@ export function OnboardingChecklist({
   onOpenSettings: () => void
 }) {
   const [dismissed, setDismissed] = useState(() => readOnboardingState().dismissed)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [, setResetTick] = useState(0)
   const [initOk, setInitOk] = useState<boolean | null>(null)
   const [watchlistOk, setWatchlistOk] = useState<boolean | null>(null)
   const [aiOk, setAiOk] = useState<boolean | null>(null)
@@ -49,6 +51,13 @@ export function OnboardingChecklist({
       .catch(() => setAiOk(null))
   }, [])
 
+  // 确认态几秒后自动还原，避免一直停在「确认重置」
+  useEffect(() => {
+    if (!confirmReset) return
+    const timer = setTimeout(() => setConfirmReset(false), 4000)
+    return () => clearTimeout(timer)
+  }, [confirmReset])
+
   const state = readOnboardingState()
   const tasks: ChecklistTask[] = [
     { key: 'tutorial', icon: BookOpen, title: '阅读使用教程', desc: '图文快速了解每个页面能做什么', done: Boolean(state.visits['/tutorial']), to: '/tutorial' },
@@ -66,10 +75,19 @@ export function OnboardingChecklist({
   const collapse = () => {
     setOnboardingDismissed(true)
     setDismissed(true)
+    setConfirmReset(false)
   }
   const expand = () => {
     setOnboardingDismissed(false)
     setDismissed(false)
+    setConfirmReset(false)
+  }
+  // visits 存在 localStorage，重置后用 tick 触发重渲染以重算任务状态
+  const resetGuide = () => {
+    resetOnboarding()
+    setConfirmReset(false)
+    setDismissed(false)
+    setResetTick((t) => t + 1)
   }
 
   // 收起后只在首页留一个小入口，不打扰
@@ -115,6 +133,7 @@ export function OnboardingChecklist({
           <div className="alert-note">
             基本功能都已上手 🎉 更进阶的能力（因子研究、数据洞察、模拟盘）随时在左侧菜单探索，
             或到 <Link to="/tutorial">使用教程</Link> 查阅各页面的详细说明。
+            想再练一遍？点下方「重置引导」从头开始。
           </div>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -172,8 +191,28 @@ export function OnboardingChecklist({
                 </li>
               )
             })}
-          </ul>
+            </ul>
         )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 10 }}>
+          {confirmReset ? (
+            <>
+              <span className="text-sm opacity-75">清空教程/浏览/选股的打勾，从头再来一遍？</span>
+              <button className="btn btn-ghost" onClick={() => setConfirmReset(false)}>取消</button>
+              <button className="btn btn-outline-danger btn-sm" onClick={resetGuide}>
+                <RotateCcw size={13} style={{ verticalAlign: -2 }} /> 确认重置
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12.5 }}
+              onClick={() => setConfirmReset(true)}
+              title="清空到访打勾，从第一步重新走一遍（数据源配置、已下载数据不受影响）"
+            >
+              <RotateCcw size={13} style={{ verticalAlign: -2 }} /> 重置引导
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

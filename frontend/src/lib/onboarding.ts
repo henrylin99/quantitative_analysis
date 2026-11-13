@@ -63,3 +63,12 @@ export function setOnboardingDismissed(dismissed: boolean) {
   state.dismissed = dismissed
   writeRaw(state)
 }
+
+/**
+ * 重置引导：清空到访打勾、重新展开清单，从第一步重新走一遍。
+ * 只动 localStorage —— 配置/初始化/自选/AI 等服务端真实状态不受影响，
+ * 重置后这几项仍按实际状态显示，避免误导用户重复配置。
+ */
+export function resetOnboarding() {
+  writeRaw({ v: 1, dismissed: false, visits: {} })
+}
