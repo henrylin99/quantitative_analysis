@@ -152,3 +152,6 @@ venv/
 # IDE 与杂项
 .idea/
 .cursor/
+
+# ZCode 本地会话数据
+.zcode/

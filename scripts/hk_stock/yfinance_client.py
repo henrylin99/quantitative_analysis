@@ -111,6 +111,13 @@ def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _is_rate_limit_error(err: BaseException | None) -> bool:
+    """yfinance 限流错误识别：异常类名或消息含 RateLimit / Too Many Requests。"""
+    if err is None:
+        return False
+    return "RateLimit" in type(err).__name__ or "Too Many Requests" in str(err)
+
+
 def fetch_history_batch(
     symbols: list[str],
     config: FetchConfig | None = None,
@@ -131,18 +138,21 @@ def fetch_history_batch(
     else:
         fetch_cfg = config
 
-    results = {}
-    failed_symbols = []
+    results: dict[str, pd.DataFrame] = {}
+    failed_symbols: list[str] = []
 
     # 分批处理
     for i in range(0, len(symbols), fetch_cfg.batch_size):
         batch = symbols[i:i + fetch_cfg.batch_size]
+        batch_no = i // fetch_cfg.batch_size + 1
+        # pending 只保留本批尚未拿到有效数据的票，重试时不再重下已成功的
+        pending = list(batch)
 
         for attempt in range(fetch_cfg.max_retries + 1):
             try:
                 # 批量下载
                 data = yf.download(
-                    batch,
+                    pending,
                     period=fetch_cfg.history_period,
                     progress=False,
                     timeout=fetch_cfg.request_timeout,
@@ -151,29 +161,54 @@ def fetch_history_batch(
                 # 处理返回数据
                 # yfinance >= 0.2.6x 即使单只票也返回 (Price, Ticker) MultiIndex 列，
                 # 单/多只统一按 Ticker level 拆分
-                if len(batch) == 1 and not isinstance(data.columns, pd.MultiIndex):
+                batch_valid: dict[str, pd.DataFrame] = {}
+                if len(pending) == 1 and not isinstance(data.columns, pd.MultiIndex):
                     # 单只股票且列为扁平 DataFrame（旧版 yfinance）
-                    results[batch[0]] = _normalize_history_df(data)
-                else:
+                    df = _normalize_history_df(data)
+                    if not df.empty:
+                        batch_valid[pending[0]] = df
+                elif not data.empty:
                     ticker_level = "Ticker" if "Ticker" in data.columns.names else 1
                     available_tickers = set(data.columns.get_level_values(ticker_level))
-                    for symbol in batch:
+                    for symbol in pending:
                         if symbol in available_tickers:
-                            symbol_data = data.xs(symbol, axis=1, level=ticker_level)
-                            results[symbol] = _normalize_history_df(symbol_data)
-                        else:
-                            failed_symbols.append(symbol)
+                            symbol_data = _normalize_history_df(
+                                data.xs(symbol, axis=1, level=ticker_level))
+                            # 被限流的票列还在但 0 行全空——只有至少一根
+                            # 有效 K 线才算成功，空结果回炉重试
+                            if not symbol_data.empty:
+                                batch_valid[symbol] = symbol_data
 
-                logger.info(f"Batch {i//fetch_cfg.batch_size + 1}: fetched {len(batch)} symbols")
-                break
+                results.update(batch_valid)
+                pending = [s for s in pending if s not in batch_valid]
+                if not pending:
+                    logger.info(f"Batch {batch_no}: {len(batch_valid)}/{len(batch)} valid")
+                    break
+
+                if attempt < fetch_cfg.max_retries:
+                    delay = fetch_cfg.retry_delay * (2 ** attempt)
+                    logger.warning(
+                        f"Batch {batch_no}: {len(pending)} symbols empty "
+                        f"(likely rate limited), retry {attempt + 1}/"
+                        f"{fetch_cfg.max_retries} in {delay:.0f}s")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Batch {batch_no}: failed after retries: {pending}")
+                    failed_symbols.extend(pending)
 
             except Exception as e:
+                rate_limited = _is_rate_limit_error(e)
                 if attempt < fetch_cfg.max_retries:
-                    logger.warning(f"Retry {attempt + 1}/{fetch_cfg.max_retries} for batch {batch}: {e}")
-                    time.sleep(fetch_cfg.retry_delay)
+                    # 限流退避加重（IP 级限流下 2 秒重试只会继续撞墙）
+                    delay = fetch_cfg.retry_delay * (2 ** attempt) * (4 if rate_limited else 1)
+                    logger.warning(
+                        f"Batch {batch_no} error "
+                        f"({'rate limited' if rate_limited else e}), retry "
+                        f"{attempt + 1}/{fetch_cfg.max_retries} in {delay:.0f}s")
+                    time.sleep(delay)
                 else:
-                    logger.error(f"Failed to fetch batch {batch}: {e}")
-                    failed_symbols.extend(batch)
+                    logger.error(f"Batch {batch_no}: failed after retries: {e}")
+                    failed_symbols.extend(pending)
 
         # 批次间隔
         if i + fetch_cfg.batch_size < len(symbols):
@@ -267,6 +302,13 @@ def fetch_all_data(
     logger.info(f"Fetching history for {len(symbols)} symbols...")
     history_data = fetch_history_batch(symbols, fetch_cfg)
 
+    # 空历史（限流残留列）直接剔除，不给 info/财务阶段浪费请求
+    valid = {s: df for s, df in history_data.items() if not df.empty}
+    dropped = sorted(set(history_data) - set(valid))
+    if dropped:
+        logger.warning(f"Dropping {len(dropped)} symbols with empty history: {dropped}")
+        history_data = valid
+
     if not history_data:
         raise RuntimeError("Failed to fetch any history data")
 
@@ -285,6 +327,8 @@ def fetch_all_data(
             financial_metrics[symbol] = fetch_financial_metrics(symbol)
             time.sleep(fetch_cfg.symbol_delay)
 
+    # 成功数按非空历史计——此前 "N successful" 只数提交数，全批被限流
+    # 时也报 0 failed，误导排障
     success_count = len(history_data)
     failed_count = len(symbols) - success_count
     logger.info(f"Completed: {success_count} successful, {failed_count} failed")
