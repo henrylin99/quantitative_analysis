@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
+import { markRouteVisited } from './lib/onboarding'
 
 // 全部页面按路由 lazy 分割：echarts / lightweight-charts 等重组件随页面 chunk 加载，首屏只拉入口
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -77,6 +78,7 @@ const UsScreenerPage = lazy(() => import('./pages/us/UsScreenerPage'))
 const HkMarketAnalyticsPage = lazy(() => import('./pages/hk/HkMarketAnalyticsPage'))
 const HkRiskAnalyticsPage = lazy(() => import('./pages/hk/HkRiskAnalyticsPage'))
 const HkScreenerPage = lazy(() => import('./pages/hk/HkScreenerPage'))
+const TutorialPage = lazy(() => import('./pages/TutorialPage'))
 
 /** 旧版 Flask 前端地址：开发态 Vite 与 Flask 不同端口，直接指向 5000；构建产物由 Flask 同源托管时为空串 */
 export const OLD_SITE_BASE = import.meta.env.DEV ? 'http://127.0.0.1:5000' : ''
@@ -96,7 +98,10 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: '概览',
-    items: [{ to: '/', label: '首页', icon: Home, end: true }],
+    items: [
+      { to: '/', label: '首页', icon: Home, end: true },
+      { to: '/tutorial', label: '使用教程', icon: BookOpen },
+    ],
   },
   {
     label: '核心分析',
@@ -221,6 +226,15 @@ function ScrollToTop() {
   return null
 }
 
+/** 全局记录页面到访轨迹，供首页新手引导判断「阅读教程/浏览行情/选股」等到达类任务 */
+function RouteVisitRecorder() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    markRouteVisited(pathname)
+  }, [pathname])
+  return null
+}
+
 /** 路由级渲染崩溃兜底：单页异常显示错误卡片，而不是整个应用白屏 */
 class RouteErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null }
@@ -273,6 +287,7 @@ function Shell() {
   return (
     <>
       <ScrollToTop />
+      <RouteVisitRecorder />
       <aside className="app-sidebar">
         <NavLink className="brand" to="/">
           <span className="brand-mark">Q</span>
@@ -307,6 +322,7 @@ function Shell() {
           <RouteErrorBoundary>
             <Routes>
             <Route path="/" element={<LazyRoute><HomePage /></LazyRoute>} />
+            <Route path="/tutorial" element={<LazyRoute><TutorialPage /></LazyRoute>} />
             <Route path="/stocks" element={<LazyRoute><StocksPage /></LazyRoute>} />
             <Route path="/stock/:tsCode" element={<LazyRoute><StockDetailPage /></LazyRoute>} />
             <Route path="/analysis" element={<LazyRoute><AnalysisPage /></LazyRoute>} />

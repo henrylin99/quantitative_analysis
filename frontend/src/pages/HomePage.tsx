@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, Brain, Crosshair, Database, Dna, FlaskConical, HeartPulse, Layers,
+  Activity, BookOpen, Brain, Crosshair, Database, Dna, FlaskConical, HeartPulse, Layers,
   LayoutGrid, List, Newspaper, Radar, Radio, Search, Settings,
   type LucideIcon,
 } from 'lucide-react'
 import { fetchAreas, fetchIndustries, fetchStocks } from '../api/stocks'
 import { fetchSystemSettings, type SystemSettings } from '../api/settings'
+import { OnboardingChecklist } from '../components/OnboardingChecklist'
 import { SettingsDialog } from '../components/SettingsDialog'
 
 interface FeatureTile {
@@ -95,6 +96,9 @@ export default function HomePage() {
           <div className="hero-actions">
             <Link className="btn btn-primary" to="/stocks">开始分析 <span aria-hidden>→</span></Link>
             <Link className="btn btn-outline-primary" to="/screen">选股筛选</Link>
+            <Link className="btn btn-outline-primary" to="/tutorial" title="图文教程：每个页面能做什么、怎么用">
+              <BookOpen size={15} aria-hidden /> 使用教程
+            </Link>
             <button
               className="btn btn-outline-primary"
               onClick={() => setSettingsOpen(true)}
@@ -140,6 +144,8 @@ export default function HomePage() {
         onClose={() => setSettingsOpen(false)}
         onSaved={(s) => setSettings(s)}
       />
+
+      <OnboardingChecklist settings={settings} onOpenSettings={() => setSettingsOpen(true)} />
 
       <div className="stat-grid">
         <div className="stat">

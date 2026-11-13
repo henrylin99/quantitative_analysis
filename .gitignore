@@ -99,6 +99,8 @@ docs/
 *.jpeg
 *.gif
 *.svg
+# 使用教程页面截图（TutorialPage 引用，替换同名文件+重新构建即可更新教程）
+!frontend/src/assets/tutorial/*.png
 
 # Temporary files
 tmp/
