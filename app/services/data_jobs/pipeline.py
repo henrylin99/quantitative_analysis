@@ -6,7 +6,7 @@
 本模块提供两件事：
 
 1. DataPipelineOrchestrator：收盘后按依赖顺序串行跑完整数据链路
-   （交易日历 → 日线 → 基本指标 → 资金流 → 扩展因子 → 筹码 → 大宽表 →
+   （交易日历 → 日线 → 基本指标 → 资金流 → 大宽表 →
    股票分区重建 → 因子计算），每步等上一步成功再提交下一步，一步失败
    即中止链路。由 DailyAlertScheduler 在预警扫描之前触发（可关）。
 2. DataFreshnessService：读各表日期分区的最新日期，对照交易日历给出
@@ -35,8 +35,8 @@ PIPELINE_JOBS = (
     "daily_basic",
     "index_daily",
     "moneyflow",
-    "stk_factor",
-    "cyq_perf",
+    # stk_factor / cyq_perf 已从自动链路摘除（历史数据与读取链保留，
+    # 需要时可在数据管理页手动提交对应作业）
     "wide_table_builder",
     "stock_partition_rebuild",
     "financial_fuyao",

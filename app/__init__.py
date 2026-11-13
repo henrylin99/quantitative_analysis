@@ -43,6 +43,32 @@ def _install_api_token_guard(app: Flask) -> None:
 
 
 
+def _ensure_data_dir_skeleton(app: Flask) -> None:
+    """创建 data/ 下的 parquet 分区骨架目录（存在即跳过）。
+
+    覆盖 ParquetDataReader.TABLE_DIRS 的日频分区目录、index_daily 分区，
+    以及各 ParquetStateStore/EventStore 使用的状态目录；全部 mkdir 幂等。
+    """
+    import os
+    from pathlib import Path
+
+    data_dir = Path(os.getenv("DATA_DIR") or Path(app.root_path).parent / "data")
+    subdirs = [
+        # 日频 hive 分区（TABLE_DIRS 值）；stk_factor/cyq_perf 已摘出同步链路，
+        # 空库不再预建骨架目录（表目录在读到数据时按需创建）
+        "daily_history/daily", "daily_basic/daily",
+        "adj_factor/daily", "moneyflow/daily",
+        "income_statement", "balance_sheet", "cash_flow",
+        "index_daily/stock",
+        # 状态/事件存储目录
+        "data_job_state", "minute_sync", "ml_factor_state", "ml_factor_state/factor_values",
+        "paper_trading", "alerts", "cache", "config",
+    ]
+    for sub in subdirs:
+        (data_dir / sub).mkdir(parents=True, exist_ok=True)
+    app.logger.info("数据目录骨架已就绪: %s", data_dir)
+
+
 def create_app(config_name='default'):
     """应用工厂函数"""
     from config import config as config_map
@@ -102,6 +128,7 @@ def create_app(config_name='default'):
     from app.api.hk_analytics_api import hk_analytics_api
     from app.api.insights_api import insights_api
     from app.api.strategy_guardian_api import strategy_guardian_bp
+    from app.api.settings_api import settings_bp
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(ml_factor_bp)
     app.register_blueprint(text2sql_bp)
@@ -132,12 +159,41 @@ def create_app(config_name='default'):
     app.register_blueprint(hk_analytics_api)
     app.register_blueprint(insights_api)
     app.register_blueprint(strategy_guardian_bp, url_prefix='/api/strategy-guardian')
+    app.register_blueprint(settings_bp)
 
     from app.main import main_bp
     app.register_blueprint(main_bp)
     
     # 注册WebSocket事件处理器
     from app.websocket import websocket_events  # noqa: F401
+
+    # 启动自举（幂等）：建全部 SQLite ORM 表 + data/ 下 parquet 分区骨架目录。
+    # 空库从零启动时避免各 API 首次访问报 no such table；骨架目录让分区扫描
+    # 代码与数据管理页面对"从未下载"状态有稳定目录可查。失败只告警不阻塞启动。
+    with app.app_context():
+        try:
+            # 显式导入全部模型模块（create_all 只处理已 import 的模型；
+            # 正常路径蓝图注册已传递导入，这里兜底保证空库场景全覆盖。
+            # 注意勿用 `import app.models`——会在函数局部把 app 绑定回包模块）
+            import importlib
+
+            importlib.import_module("app.models")
+            for _m in (
+                "app.models.realtime_indicator",
+                "app.models.risk_alert",
+                "app.models.realtime_report",
+                "app.models.portfolio_position",
+                "app.models.trading_signal",
+            ):
+                importlib.import_module(_m)
+            db.create_all()
+        except Exception:
+            app.logger.warning("启动建 SQLite 表失败（不阻塞应用启动）", exc_info=True)
+
+        try:
+            _ensure_data_dir_skeleton(app)
+        except Exception:
+            app.logger.warning("启动创建数据目录骨架失败（不阻塞应用启动）", exc_info=True)
 
     # 启动时按超时口径清理僵尸数据任务：run 超过 DATA_JOB_TIMEOUT 仍停在
     # pending/queued/running 判定为 worker 中断遗留。不用"启动即清空"是因为

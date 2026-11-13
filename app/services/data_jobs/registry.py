@@ -19,8 +19,9 @@ class JobRegistry:
             "daily_basic",            # 6
             "index_daily",            # 6b（宽基+申万一级指数日线）
             "moneyflow",              # 15
-            "stk_factor",             # 17
-            "cyq_perf",               # 18
+            # stk_factor / cyq_perf 已从页面可见清单摘除（不再自动下载）：
+            # 历史数据与筹码/技术因子读取链保留；如需恢复更新，把对应
+            # 作业名加回本集合（作业定义仍在 _jobs 中保留，手动提交可用）。
             "wide_table_builder",     # 20
             "stock_partition_rebuild",  # 21（个股查询提速：日期分区 → 股票分区）
             "factor_compute",         # 因子计算（打分/回测的前置作业）

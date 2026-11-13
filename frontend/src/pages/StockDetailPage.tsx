@@ -5,11 +5,9 @@ import { useLatestEffect } from '../hooks/useLatestEffect'
 import { useTheme } from '../theme/ThemeContext'
 import {
   fetchStockCompany,
-  fetchStockCyq,
   fetchStockFinancials,
   fetchStockFinancialQuality,
   fetchStockMoneyflow,
-  type CyqRow,
   type FinancialQualityResult,
   type FinancialQualityYear,
   type FinancialStatements,
@@ -23,7 +21,6 @@ import { formatNumber, formatPercent, pctClass } from '../utils/format'
 const TABS = [
   { key: 'history', label: '历史数据' },
   { key: 'moneyflow', label: '资金流向' },
-  { key: 'cyq', label: '筹码分布' },
   { key: 'financials', label: '财务数据' },
   { key: 'company', label: '公司信息' },
 ] as const
@@ -141,10 +138,6 @@ export default function StockDetailPage() {
   const [mfLoading, setMfLoading] = useState(false)
   const [mfError, setMfError] = useState<string | null>(null)
 
-  const [cyq, setCyq] = useState<CyqRow[] | null>(null)
-  const [cyqPrices, setCyqPrices] = useState<DailyBar[] | null>(null)
-  const [cyqLoading, setCyqLoading] = useState(false)
-  const [cyqError, setCyqError] = useState<string | null>(null)
 
   const [financials, setFinancials] = useState<FinancialStatements | null>(null)
   const [finQuality, setFinQuality] = useState<FinancialQualityResult | null>(null)
@@ -192,28 +185,6 @@ export default function StockDetailPage() {
       })
   }, [activeTab, tsCode])
 
-  useLatestEffect((isCancelled) => {
-    if (activeTab !== 'cyq') return
-    setCyqLoading(true)
-    setCyqError(null)
-    // 未复权收盘价与筹码成本同口径，叠加在成本分位曲线上看乖离
-    Promise.all([
-      fetchStockCyq(tsCode, 20),
-      fetchStockHistory(tsCode, 60).catch(() => null),
-    ])
-      .then(([d, bars]) => {
-        if (!isCancelled()) {
-          setCyq(d)
-          setCyqPrices(bars)
-        }
-      })
-      .catch((e) => {
-        if (!isCancelled()) setCyqError(e instanceof Error ? e.message : '筹码数据加载失败')
-      })
-      .finally(() => {
-        if (!isCancelled()) setCyqLoading(false)
-      })
-  }, [activeTab, tsCode])
 
   useLatestEffect((isCancelled) => {
     if (activeTab !== 'financials') return
@@ -245,8 +216,6 @@ export default function StockDetailPage() {
         if (!isCancelled()) setComLoading(false)
       })
   }, [activeTab, tsCode])
-
-  const latestClose = history && history.length > 0 ? history[0].close : null
 
   // —— 资金流：最新一日分单买卖对撞 + 净流入趋势 ——
   const mfAsc = useMemo(() => (moneyflow ? sortByDateAsc(moneyflow) : null), [moneyflow])
@@ -313,85 +282,6 @@ export default function StockDetailPage() {
     return { lgPct, elgPct, mainNet }
   }, [mfLatest])
 
-  // —— 筹码：成本分位曲线 + 胜率 ——
-  const cyqAsc = useMemo(() => (cyq ? sortByDateAsc(cyq) : null), [cyq])
-
-  const priceByDate = useMemo(() => {
-    const map = new Map<string, number>()
-    if (cyqPrices) {
-      for (const bar of cyqPrices) {
-        if (bar.close != null) map.set(bar.trade_date.slice(0, 10), bar.close)
-      }
-    }
-    return map
-  }, [cyqPrices])
-
-  const costOption = useMemo(() => {
-    if (!cyqAsc || cyqAsc.length === 0) return null
-    const dates = cyqAsc.map((r) => r.trade_date.slice(0, 10))
-    const mk = (field: keyof CyqRow, name: string, color: string, width = 1, dashed = false) => ({
-      name,
-      type: 'line' as const,
-      showSymbol: false,
-      connectNulls: false,
-      lineStyle: { color, width, type: dashed ? ('dashed' as const) : ('solid' as const) },
-      itemStyle: { color },
-      data: cyqAsc.map((r) => {
-        const v = r[field]
-        return typeof v === 'number' && !Number.isNaN(v) ? v : null
-      }),
-    })
-    return {
-      tooltip: { trigger: 'axis' },
-      legend: { top: 0 },
-      grid: { left: 60, right: 16, top: 34, bottom: 26 },
-      xAxis: { type: 'category', data: dates, boundaryGap: false },
-      yAxis: { type: 'value', scale: true },
-      series: [
-        mk('cost_5pct', '5%分位', palette.down),
-        mk('cost_15pct', '15%分位', '#22d3ee'),
-        mk('cost_50pct', '50%分位', palette.accent, 2),
-        mk('cost_85pct', '85%分位', '#fbbf24'),
-        mk('cost_95pct', '95%分位', palette.up),
-        mk('weight_avg', '加权平均', '#f472b6', 1, true),
-        {
-          name: '收盘价',
-          type: 'line' as const,
-          showSymbol: false,
-          connectNulls: false,
-          lineStyle: { color: '#e5e7eb', width: 2 },
-          itemStyle: { color: '#e5e7eb' },
-          data: dates.map((d) => priceByDate.get(d) ?? null),
-        },
-      ],
-    }
-  }, [cyqAsc, palette, priceByDate])
-
-  const winnerOption = useMemo(() => {
-    if (!cyqAsc || cyqAsc.length === 0) return null
-    return {
-      tooltip: { trigger: 'axis', valueFormatter: (v: number) => `${formatNumber(Number(v), 2)}%` },
-      grid: { left: 56, right: 16, top: 20, bottom: 26 },
-      xAxis: { type: 'category', data: cyqAsc.map((r) => r.trade_date.slice(0, 10)), boundaryGap: false },
-      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } },
-      series: [
-        {
-          name: '胜率',
-          type: 'line',
-          showSymbol: false,
-          lineStyle: { color: palette.teal },
-          areaStyle: { color: palette.teal, opacity: 0.18 },
-          markLine: {
-            silent: true,
-            symbol: 'none',
-            lineStyle: { type: 'dashed', color: palette.amber },
-            data: [{ yAxis: 50, label: { formatter: '50%', color: palette.amber } }],
-          },
-          data: cyqAsc.map((r) => r.winner_rate),
-        },
-      ],
-    }
-  }, [cyqAsc, palette])
 
   // —— 财务质量趋势：ROE 杜邦分解 + 质量分 ——
   const finQualityOption = useMemo(() => {
@@ -426,22 +316,9 @@ export default function StockDetailPage() {
     }
   }, [finQuality, palette])
 
-  const cyqStats = useMemo(() => {
-    const latest = cyqAsc && cyqAsc.length > 0 ? cyqAsc[cyqAsc.length - 1] : null
-    if (!latest) return null
-    const concentration =
-      latest.cost_95pct != null && latest.cost_5pct != null && latest.cost_50pct
-        ? ((latest.cost_95pct - latest.cost_5pct) / latest.cost_50pct) * 100
-        : null
-    const position =
-      latestClose != null && latest.cost_5pct != null && latest.cost_95pct != null && latest.cost_95pct !== latest.cost_5pct
-        ? ((latestClose - latest.cost_5pct) / (latest.cost_95pct - latest.cost_5pct)) * 100
-        : null
-    return { latest, concentration, position }
-  }, [cyqAsc, latestClose])
 
-  const tabBodyLoading = { history: historyLoading, moneyflow: mfLoading, cyq: cyqLoading, financials: finLoading, company: comLoading }[activeTab]
-  const tabBodyError = { history: historyError, moneyflow: mfError, cyq: cyqError, financials: finError, company: comError }[activeTab]
+  const tabBodyLoading = { history: historyLoading, moneyflow: mfLoading, financials: finLoading, company: comLoading }[activeTab]
+  const tabBodyError = { history: historyError, moneyflow: mfError, financials: finError, company: comError }[activeTab]
 
   return (
     <div>
@@ -449,7 +326,7 @@ export default function StockDetailPage() {
         <div>
           <h2>个股详情</h2>
           <p className="desc">
-            <code>{tsCode}</code> · 行情 / 资金 / 筹码 / 财务 / 公司资料
+            <code>{tsCode}</code> · 行情 / 资金 / 财务 / 公司资料
           </p>
         </div>
       </div>
@@ -655,90 +532,6 @@ export default function StockDetailPage() {
         </>
       )}
 
-      {/* 筹码分布 */}
-      {activeTab === 'cyq' && !tabBodyLoading && !tabBodyError && (
-        <>
-          {cyqStats && (
-            <div className="stat-grid">
-              <MetricCard
-                label="胜率（最新）"
-                value={formatNumber(cyqStats.latest.winner_rate, 1) + '%'}
-                valueClass={cyqStats.latest.winner_rate != null && cyqStats.latest.winner_rate >= 50 ? 'text-up' : 'text-down'}
-              />
-              <MetricCard label="筹码集中度" value={formatNumber(cyqStats.concentration, 1) + '%'} hint="(95%分位−5%分位)/50%分位" />
-              <MetricCard label="价格相对位置" value={formatNumber(cyqStats.position, 1) + '%'} hint="最新收盘价在成本区间分位" />
-              <MetricCard label="加权平均成本" value={formatNumber(cyqStats.latest.weight_avg, 2)} />
-            </div>
-          )}
-          <div className="row g-3">
-            <div className="col-lg-7">
-              <div className="panel h-100">
-                <div className="panel-head">
-                  <h6 className="panel-title">
-                    <span className="kicker" />
-                    成本分位曲线
-                  </h6>
-                </div>
-                <div className="panel-body">
-                  {costOption ? <EChart option={costOption} height={320} /> : <EmptyState icon="🎲" text="暂无筹码数据" />}
-                </div>
-              </div>
-            </div>
-            <div className="col-lg-5">
-              <div className="panel h-100">
-                <div className="panel-head">
-                  <h6 className="panel-title">
-                    <span className="kicker" />
-                    胜率变化
-                  </h6>
-                </div>
-                <div className="panel-body">
-                  {winnerOption ? <EChart option={winnerOption} height={320} /> : <EmptyState icon="📉" text="暂无数据" />}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="panel">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                筹码明细
-                <span className="chip">最新 {(cyq ?? []).slice(0, 20).length} 条</span>
-              </h6>
-            </div>
-            <div className="panel-body tight table-container" style={{ maxHeight: 440 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th className="num">5%分位</th>
-                    <th className="num">15%分位</th>
-                    <th className="num">50%分位</th>
-                    <th className="num">85%分位</th>
-                    <th className="num">95%分位</th>
-                    <th className="num">加权平均</th>
-                    <th className="num">胜率%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...(cyq ?? [])].slice(0, 20).map((row) => (
-                    <tr key={row.trade_date}>
-                      <td>{row.trade_date}</td>
-                      <td className="num">{formatNumber(row.cost_5pct, 2)}</td>
-                      <td className="num">{formatNumber(row.cost_15pct, 2)}</td>
-                      <td className="num">{formatNumber(row.cost_50pct, 2)}</td>
-                      <td className="num">{formatNumber(row.cost_85pct, 2)}</td>
-                      <td className="num">{formatNumber(row.cost_95pct, 2)}</td>
-                      <td className="num">{formatNumber(row.weight_avg, 2)}</td>
-                      <td className="num">{formatNumber(row.winner_rate, 1)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
 
       {/* 财务数据 */}
       {activeTab === 'financials' && !tabBodyLoading && !tabBodyError && (

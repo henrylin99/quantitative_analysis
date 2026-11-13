@@ -27,7 +27,8 @@ def test_registry_visible_jobs_follow_whitelist():
     jobs = registry.list_visible_jobs()
     job_types = [job.job_type for job in jobs]
 
-    assert len(job_types) == 18
+    # stk_factor / cyq_perf 已摘出可见清单（不再自动下载；作业定义保留可手动提交）
+    assert len(job_types) == 16
     assert job_types == [
         "trade_calendar",
         "stock_basic",
@@ -38,8 +39,6 @@ def test_registry_visible_jobs_follow_whitelist():
         "daily_basic",
         "index_daily",
         "moneyflow",
-        "stk_factor",
-        "cyq_perf",
         "stock_partition_rebuild",
         "wide_table_builder",
         "financial_fuyao",
