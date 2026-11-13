@@ -284,3 +284,49 @@ export const fetchMinuteMarketSyncStatus = () =>
 
 export const runMinuteMarketSync = (mode: 'incremental' | 'backfill') =>
   rawPost<{ success: boolean; message: string }>('/realtime-analysis/data/market-sync/run', { mode })
+
+// ================= 数据初始化（新项目从零建库） /api/data-jobs/init* =================
+export interface DataInitStep {
+  index: number
+  job_type: string
+  label: string
+  params: Record<string, string>
+  status: string
+  started_at: string | null
+  finished_at: string | null
+  run_id: number | null
+  progress: number
+  message: string | null
+}
+
+export interface DataInitRecord {
+  started_at: string
+  finished_at: string | null
+  tushare_years: number
+  financial_years: number
+  tushare_window: { start_date: string; end_date: string }
+  financial_window: { start_date: string; end_date: string }
+  steps_total: number
+  current_step: number | null
+  steps: Record<string, DataInitStep>
+  ok: boolean
+  message: string | null
+}
+
+export interface DataInitStatus {
+  success: boolean
+  running: boolean
+  record: DataInitRecord | null
+  history: DataInitRecord[]
+}
+
+export const fetchDataInitStatus = () => rawGet<DataInitStatus>('/data-jobs/init/status')
+
+export const startDataInit = (tushareYears: number, financialYears: number) =>
+  rawPost<{ success: boolean; ok?: boolean; message: string; steps_total?: number }>(
+    '/data-jobs/init/run',
+    { tushare_years: tushareYears, financial_years: financialYears },
+    30_000,
+  )
+
+export const cancelDataInit = () => rawPost<{ success: boolean; ok?: boolean; message?: string }>('/data-jobs/init/cancel')

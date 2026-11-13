@@ -32,10 +32,10 @@ import {
   type WideTableStatus,
 } from '../api/dataJobs'
 import { extractApiError } from '../api/client'
+import { DataInitPanel } from '../components/DataInitPanel'
 import { EmptyState, ErrorState } from '../components/StateViews'
 import { formatBytes, formatDateTime, formatNumber, toLocalDate } from '../utils/format'
 
-const RECOMMENDED = ['trade_calendar', 'stock_basic', 'daily_history_by_date', 'daily_basic']
 const PERIODS = ['5min', '15min', '30min', '60min']
 const RUN_BADGE: Record<string, string> = {
   pending: 'text-bg-secondary',
@@ -376,53 +376,22 @@ export default function DataManagementPage() {
       {/* 全市场分钟线同步 */}
       <MarketSyncPanel />
 
-      {/* 推荐初始化顺序 + 当前任务 */}
-      <div className="row g-3">
-        <div className="col-lg-5">
-          <div className="panel h-100">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                推荐初始化顺序
-              </h6>
-            </div>
-            <div className="panel-body">
-              <div className="d-flex gap-2 flex-wrap mb-2">
-                {RECOMMENDED.map((type, i) => {
-                  const def = jobDefs.find((j) => j.job_type === type)
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      className={`seg-item ${jobType === type ? 'active' : ''}`}
-                      onClick={() => setJobType(type)}
-                    >
-                      {i + 1}. {def?.display_name ?? type}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="hint" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-                推荐顺序：交易日历 → 股票基础信息 → 公司信息 → 日线历史 → 财务三表 → 每日指标 → 资金流 → 技术因子 → 筹码 → 大宽表。
-              </div>
-            </div>
-          </div>
+      {/* 一键数据初始化（新项目从零建库，分阶段编排） */}
+      <DataInitPanel />
+
+      {/* 当前任务说明 */}
+      <div className="panel">
+        <div className="panel-head">
+          <h6 className="panel-title">
+            <span className="kicker" />
+            当前任务说明
+          </h6>
         </div>
-        <div className="col-lg-7">
-          <div className="panel h-100">
-            <div className="panel-head">
-              <h6 className="panel-title">
-                <span className="kicker" />
-                当前任务说明
-              </h6>
-            </div>
-            <div className="panel-body d-flex gap-2 flex-wrap align-items-center">
-              <span className="chip">{currentDef?.display_name ?? (jobType || '--')}</span>
-              <span className="chip">分组 · {currentDef?.group ?? '--'}</span>
-              <span className="chip">数据来源 · {currentDef ? `${currentDef.source_name} / ${currentDef.source_mode}` : '--'}</span>
-              {currentDef && <span className="alert-note py-1">{currentDef.description}</span>}
-            </div>
-          </div>
+        <div className="panel-body d-flex gap-2 flex-wrap align-items-center">
+          <span className="chip">{currentDef?.display_name ?? (jobType || '--')}</span>
+          <span className="chip">分组 · {currentDef?.group ?? '--'}</span>
+          <span className="chip">数据来源 · {currentDef ? `${currentDef.source_name} / ${currentDef.source_mode}` : '--'}</span>
+          {currentDef && <span className="alert-note py-1">{currentDef.description}</span>}
         </div>
       </div>
 
@@ -752,15 +721,21 @@ export default function DataManagementPage() {
 // ================= 盘后数据链路 =================
 
 const PIPELINE_STEP_LABELS: Record<string, string> = {
+  stock_basic: '股票基础资料',
+  stock_company: '公司信息',
   trade_calendar: '交易日历',
   daily_history_by_date: '日线行情',
   daily_basic: '日线指标',
+  index_daily: '指数日线',
   moneyflow: '资金流',
-  stk_factor: '技术因子',
-  cyq_perf: '筹码分布',
+  stk_factor: '技术因子（已停更）',
+  cyq_perf: '筹码分布（已停更）',
+  adj_factor: '复权因子',
   wide_table_builder: '大宽表',
   stock_partition_rebuild: '股票分区',
+  financial_fuyao: '财务三表（扶摇）',
   factor_compute: '因子计算',
+  fundamental_pit_compute: '基本面 PIT 因子',
 }
 
 // ================= 存储治理 =================
@@ -1042,7 +1017,8 @@ function PipelinePanel() {
       <div className="panel-body tight">
         <div className="hint mb-2" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
           每个交易日收盘后（默认 18:30，DAILY_ALERT_TIME 可调）数据链路自动先于预警扫描执行：交易日历 → 日线 → 指标 →
-          资金流 → 技术因子 → 筹码 → 大宽表 → 股票分区 → 因子计算（非交易日自动跳过；DATA_PIPELINE_ENABLED=0 可关闭）。
+          指数 → 资金流 → 大宽表 → 股票分区 → 财务三表 → 因子计算 → 基本面 PIT 因子，链路末尾自动全市场分钟线同步
+          （非交易日自动跳过；DATA_PIPELINE_ENABLED=0 可关闭；技术因子/筹码已停更，存量数据仅供读取）。
           {msg && <span className="ms-2">{msg}</span>}
         </div>
         <div className="row g-3">

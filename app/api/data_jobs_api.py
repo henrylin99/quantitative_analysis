@@ -216,3 +216,55 @@ def build_wide_table():
     except Exception:
         logger.exception("提交大宽表构建任务失败")
         return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
+
+
+# ----------------------------------------------------------------------
+# 数据初始化（新项目从零建库）：分阶段串行下载 + 进度轮询
+# ----------------------------------------------------------------------
+@data_jobs_bp.route("/init/run", methods=["POST"])
+def init_data_run():
+    """启动数据初始化链（tushare 行情类默认 1 年、fuyao 财务默认 10 年，均可传参覆盖）。
+
+    Body: {"tushare_years": 1, "financial_years": 10}（均可省略取默认）
+    """
+    try:
+        from app.services.data_jobs.init_orchestrator import (
+            DEFAULT_FINANCIAL_YEARS,
+            DEFAULT_TUSHARE_YEARS,
+            DataInitOrchestrator,
+        )
+
+        payload = request.get_json(silent=True) or {}
+        result = DataInitOrchestrator().start(
+            tushare_years=payload.get("tushare_years", DEFAULT_TUSHARE_YEARS),
+            financial_years=payload.get("financial_years", DEFAULT_FINANCIAL_YEARS),
+        )
+        status = 200 if result.get("ok") else 409
+        return jsonify({"success": result.get("ok", False), **result}), status
+    except Exception:
+        logger.exception("启动数据初始化失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
+
+
+@data_jobs_bp.route("/init/status", methods=["GET"])
+def init_data_status():
+    """初始化进度：running + 当前步骤 + 各步 run_id/status/progress/message + 历史。"""
+    try:
+        from app.services.data_jobs.init_orchestrator import DataInitOrchestrator
+
+        return jsonify({"success": True, **DataInitOrchestrator().status()})
+    except Exception:
+        logger.exception("读取数据初始化状态失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
+
+
+@data_jobs_bp.route("/init/cancel", methods=["POST"])
+def init_data_cancel():
+    """中断初始化：当前步骤跑完后停止（子作业不硬杀，防写坏 parquet 分区）。"""
+    try:
+        from app.services.data_jobs.init_orchestrator import DataInitOrchestrator
+
+        return jsonify({"success": True, **DataInitOrchestrator().cancel()})
+    except Exception:
+        logger.exception("中断数据初始化失败")
+        return jsonify({"success": False, "error": "服务器内部错误，请查看服务日志"}), 500
