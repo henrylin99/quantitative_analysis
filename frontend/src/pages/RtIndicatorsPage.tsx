@@ -163,6 +163,10 @@ export default function RtIndicatorsPage() {
         </div>
       </div>
 
+      <div className="alert-note" style={{ marginBottom: 16 }}>
+        ⚠️ 通达信分钟线接口已停止服务，分钟数据暂无法更新，本页结果基于历史存量数据。后续如有好用的免费接口会给大家接入。
+      </div>
+
       {tab === 'calc' && (
         <>
           <div className="panel">
