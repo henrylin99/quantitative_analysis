@@ -19,6 +19,7 @@
   3 派生：wide_table_builder → stock_partition_rebuild
   4 fuyao 财务三表（默认 10 年窗口）：financial_fuyao
   5 因子：factor_compute → fundamental_pit_compute
+  6 预置：seed_strategies（常用策略，缺哪个补哪个，不走 DataJobService）
 """
 
 from __future__ import annotations
@@ -69,6 +70,7 @@ INIT_PLAN: List[Dict[str, Any]] = [
     {"job_type": "financial_fuyao", "range": "financial", "label": "财务三表（扶摇）"},
     {"job_type": "factor_compute", "range": None, "label": "因子计算"},
     {"job_type": "fundamental_pit_compute", "range": None, "label": "基本面 PIT 因子"},
+    {"job_type": "seed_strategies", "range": None, "label": "常用策略预置"},
 ]
 
 
@@ -262,6 +264,14 @@ class DataInitOrchestrator:
             ok, evidence = self._pit_factors_present(root)
             return (True, evidence) if ok else (False, "")
 
+        # 常用策略预置：清单里的策略名都已存在则跳过
+        if job_type == "seed_strategies":
+            names = _seeded_strategy_names()
+            existing = _existing_strategy_names(root)
+            if names and names <= existing:
+                return True, f"{len(names)} 个预置策略已存在"
+            return False, ""
+
         return False, ""
 
     @staticmethod
@@ -330,6 +340,35 @@ class DataInitOrchestrator:
                 step["finished_at"] = _now()
                 logger.info(f"数据初始化 {job_type}: skipped（{evidence}）")
                 self._write_state(record, running=True)
+                continue
+
+            # 常用策略预置：轻量内存操作，不走 DataJobService 子作业
+            if job_type == "seed_strategies":
+                try:
+                    from app.services.strategy_seeds import seed_default_strategies
+                    result = seed_default_strategies()
+                    created, skipped = result["created"], result["skipped"]
+                    if result["failed"]:
+                        step["status"] = "error"
+                        step["message"] = f"部分预置失败: {result['failed']}"
+                        ok = False
+                        message = step["message"]
+                    else:
+                        step["status"] = "success"
+                        step["message"] = (
+                            f"新建 {created}；已有跳过 {skipped}" if created
+                            else "预置策略均已存在"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    step["status"] = "error"
+                    step["message"] = f"策略预置失败: {exc}"
+                    ok = False
+                    message = step["message"]
+                step["finished_at"] = _now()
+                logger.info(f"数据初始化 {job_type}: {step['status']}")
+                self._write_state(record, running=True)
+                if not ok:
+                    break
                 continue
 
             try:
@@ -521,6 +560,36 @@ def _year_partitions(root: Path) -> List[int]:
             except ValueError:
                 continue
     return years
+
+
+def _seeded_strategy_names() -> set:
+    """预置策略名集合（清单加载失败返回空集 = 跳过判定失败，会重跑预置）。"""
+    try:
+        from app.services.strategy_seeds import _seed_definitions
+
+        return {s["name"] for s in _seed_definitions()}
+    except Exception:
+        logger.warning("预置策略清单加载失败", exc_info=True)
+        return set()
+
+
+def _existing_strategy_names(root: Path) -> set:
+    """策略库中已存在的策略名（表缺失/读失败返回空集）。"""
+    try:
+        import pandas as pd
+
+        path = root / "ml_factor_state" / "strategy_definitions.parquet"
+        if not path.is_file():
+            # 兜底：状态库 base_dir 被环境变量挪走时的根目录同名文件
+            alt = root / "strategy_definitions.parquet"
+            path = alt if alt.is_file() else path
+        if not path.is_file():
+            return set()
+        df = pd.read_parquet(path, columns=["name"])
+        return set(df["name"].astype(str).unique())
+    except Exception:
+        logger.debug("策略定义表读取失败", exc_info=True)
+        return set()
 
 
 def _latest_date_partition_dir(root: Path) -> Optional[Path]:
